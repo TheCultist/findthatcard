@@ -229,8 +229,7 @@ export async function POST(request: NextRequest) {
           const invalidTagList = stillInvalidTags
             .map(({ type, tag }) => `${type}:${tag}`)
             .join(', ');
-          tagValidationError = `The generated query contains invalid Tagger tags that do not exist: ${invalidTagList}. Please try rephrasing your query or use different terms.`;
-          // Don't throw yet - we want to return the query with the error
+          tagValidationError = `The generated query still includes invalid Tagger tags: ${invalidTagList}. Continuing with best-effort search.`;
         }
       }
     } catch (conversionError) {
@@ -239,12 +238,8 @@ export async function POST(request: NextRequest) {
       throw conversionError;
     }
     
-    // If tag validation failed after regeneration, return error with query
-    if (tagValidationError && scryfallQuery) {
-      return NextResponse.json<ErrorResponse>(
-        { error: tagValidationError, scryfallQuery },
-        { status: 400 }
-      );
+    if (tagValidationError) {
+      console.warn(`[Search] ${tagValidationError}`);
     }
 
     // Execute Scryfall search
@@ -261,11 +256,23 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json<SearchResponse>(response);
     } catch (scryfallError) {
-      // If Scryfall search fails, return error but include the generated query
+      // If Scryfall search fails, attempt a best-effort response
       console.error("Scryfall search error:", scryfallError);
       const errorMessage = formatErrorMessage(scryfallError);
+
+      if (errorMessage.includes("didn’t match any cards") && scryfallQuery) {
+        const emptyResponse: SearchResponse = {
+          scryfallQuery,
+          total: 0,
+          has_more: false,
+          page,
+          per_page: CARDS_PER_PAGE,
+          cards: [],
+        };
+        return NextResponse.json<SearchResponse>(emptyResponse);
+      }
+
       const status = errorMessage.includes("Scryfall") ? 502 : 500;
-      
       return NextResponse.json<ErrorResponse>(
         { error: errorMessage, scryfallQuery },
         { status }

@@ -16,6 +16,7 @@ Core requirements:
   - Function/oracle tags: function:, otag:, or oracletag:
 - If the user asks for “art with X” or “illustration shows X”, use art: (or atag:/arttag:). Multi-word tags must be quoted (e.g., art:"black cat").
 - If the user asks for “cards that do X” (removal, ramp, board wipe, tutor, card draw, protection, token-making, etc.), prefer function:/otag:/oracletag: rather than only oracle text.
+- For Magic keywords (e.g., flying, trample, vigilance, lifelink, haste, deathtouch), use oracle text (o:<keyword>) instead of function/oracle tags.
 - If the user asks for “X synergies” or “X package”, expand into multiple related Tagger tags when appropriate (use OR and parentheses).
 - Combine tags with normal Scryfall filters (color identity, type, mv, legality/format, etc.) when requested.
 
@@ -93,6 +94,9 @@ Assistant: id:wb function:board-wipe
 
 User: Instants that draw cards and show books in the art
 Assistant: t:instant function:card-advantage art:book
+
+User: Cards with vigilance and lifelink
+Assistant: o:vigilance o:lifelink
 
 User: Zombie tribal but exclude humans
 Assistant: t:zombie -t:human
