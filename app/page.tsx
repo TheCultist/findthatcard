@@ -35,7 +35,6 @@ export default function Home() {
       setTimeout(() => {
         const isBlocked =
           testAd.offsetHeight === 0 ||
-          testAd.offsetLeft === 0 ||
           testAd.style.display === "none" ||
           testAd.style.visibility === "hidden";
         
