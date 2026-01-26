@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { validateNaturalQuery, transformScryfallResponse, formatErrorMessage } from "@/lib/utils";
+import {
+  validateNaturalQuery,
+  transformScryfallResponse,
+  formatErrorMessage,
+  validateTaggerTags,
+  getTaggerTagContext,
+  TaggerTagContext
+} from "@/lib/utils";
 import { SearchRequest, SearchResponse, ErrorResponse, ScryfallSearchResponse, ScryfallError } from "@/types/scryfall";
-import { SCRYFALL_QUERY_CONVERTER_SYSTEM_PROMPT, getUserPrompt } from "@/lib/prompts";
+import { SCRYFALL_QUERY_CONVERTER_SYSTEM_PROMPT, getUserPrompt, getRegenerationPrompt } from "@/lib/prompts";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -14,23 +21,54 @@ const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 
 /**
  * Checks if a query looks like a Scryfall query (contains operators like :, t:, c:, art:, etc.)
+ * Only matches actual Scryfall operators, not just any word followed by a colon
  */
 function isScryfallQuery(query: string): boolean {
-  // Scryfall queries typically contain operators with colons (t:, c:, art:, function:, etc.)
-  const scryfallPattern = /[a-z]+:/i;
-  return scryfallPattern.test(query.trim());
+  const trimmed = query.trim();
+  
+  // List of known Scryfall operators (common ones)
+  // These must be complete words immediately followed by a colon
+  // This ensures "function tag:" doesn't match, but "function:" does
+  const scryfallOperators = [
+    't:', 'type:', 'c:', 'color:', 'cmc:', 'mana:', 'm:',
+    'power:', 'p:', 'toughness:', 'loyalty:', 'oracle:', 'o:',
+    'art:', 'atag:', 'arttag:', 'function:', 'otag:', 'oracletag:',
+    'set:', 's:', 'rarity:', 'r:', 'is:', 'in:', 'not:', 'format:',
+    'game:', 'border:', 'frame:', 'lang:', 'foil:', 'promo:',
+    'date:', 'year:', 'artist:', 'watermark:', 'banned:', 'legal:',
+    'id:', 'name:', 'number:', 'block:', 'set-type:'
+  ];
+  
+  // Check if the query contains any Scryfall operator
+  // Pattern: word boundary + operator word + colon (colon must immediately follow the word)
+  // This ensures "function tag:" doesn't match because there's a space before "tag:"
+  for (const operator of scryfallOperators) {
+    // Escape special regex characters in the operator
+    const escapedOperator = operator.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Match: word boundary + operator (colon must immediately follow, no space)
+    const pattern = new RegExp(`\\b${escapedOperator}`, 'i');
+    if (pattern.test(trimmed)) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 /**
  * Converts natural language query to Scryfall query string using OpenAI
  */
-async function convertToScryfallQuery(naturalQuery: string): Promise<string> {
+async function convertToScryfallQuery(
+  naturalQuery: string,
+  regenerationPrompt?: string,
+  tagContext?: TaggerTagContext
+): Promise<string> {
   // If it's already a Scryfall query, return it as-is
   if (isScryfallQuery(naturalQuery)) {
     return naturalQuery.trim();
   }
 
-  const userPrompt = getUserPrompt(naturalQuery);
+  const userPrompt = regenerationPrompt || getUserPrompt(naturalQuery, tagContext);
 
   try {
     const completion = await openai.chat.completions.create({
@@ -160,21 +198,79 @@ export async function POST(request: NextRequest) {
     const page = Math.max(1, body.page || 1);
 
     // Convert natural language to Scryfall query
-    const scryfallQuery = await convertToScryfallQuery(body.naturalQuery);
-    console.log(`[Search] Natural query: "${body.naturalQuery}" -> Scryfall query: "${scryfallQuery}" (page ${page})`);
+    let scryfallQuery: string | undefined;
+    let tagValidationError: string | undefined;
+    let tagContext: TaggerTagContext | undefined;
+    
+    // Check if the user entered a direct Scryfall query
+    const isDirectScryfallQuery = isScryfallQuery(body.naturalQuery);
+    
+    try {
+      tagContext = isDirectScryfallQuery ? undefined : await getTaggerTagContext(body.naturalQuery);
+      scryfallQuery = await convertToScryfallQuery(body.naturalQuery, undefined, tagContext);
+      console.log(`[Search] Natural query: "${body.naturalQuery}" -> Scryfall query: "${scryfallQuery}" (page ${page})`);
+      
+      // Only validate Tagger tags for AI-generated queries, not direct Scryfall queries
+      // If user entered a Scryfall query directly (like "oracletag:reanimate"), trust their syntax
+      const invalidTags = isDirectScryfallQuery ? [] : await validateTaggerTags(scryfallQuery);
+      
+      if (invalidTags.length > 0) {
+        console.log(`[Search] Found ${invalidTags.length} invalid tag(s), regenerating query...`);
+        
+        // Regenerate query without invalid tags
+        const regenerationPrompt = getRegenerationPrompt(body.naturalQuery, invalidTags, tagContext);
+        scryfallQuery = await convertToScryfallQuery(body.naturalQuery, regenerationPrompt, tagContext);
+        console.log(`[Search] Regenerated query: "${scryfallQuery}"`);
+        
+        // Validate again (only once to avoid infinite loops)
+        const stillInvalidTags = await validateTaggerTags(scryfallQuery);
+        
+        if (stillInvalidTags.length > 0) {
+          const invalidTagList = stillInvalidTags
+            .map(({ type, tag }) => `${type}:${tag}`)
+            .join(', ');
+          tagValidationError = `The generated query contains invalid Tagger tags that do not exist: ${invalidTagList}. Please try rephrasing your query or use different terms.`;
+          // Don't throw yet - we want to return the query with the error
+        }
+      }
+    } catch (conversionError) {
+      // If conversion fails, we can't include the query
+      console.error("Query conversion error:", conversionError);
+      throw conversionError;
+    }
+    
+    // If tag validation failed after regeneration, return error with query
+    if (tagValidationError && scryfallQuery) {
+      return NextResponse.json<ErrorResponse>(
+        { error: tagValidationError, scryfallQuery },
+        { status: 400 }
+      );
+    }
 
     // Execute Scryfall search
-    const { response: scryfallResponse, offset } = await searchScryfall(scryfallQuery, page);
+    try {
+      const { response: scryfallResponse, offset } = await searchScryfall(scryfallQuery, page);
 
-    // Transform response
-    const response: SearchResponse = transformScryfallResponse(
-      scryfallQuery,
-      page,
-      offset,
-      scryfallResponse
-    );
+      // Transform response
+      const response: SearchResponse = transformScryfallResponse(
+        scryfallQuery,
+        page,
+        offset,
+        scryfallResponse
+      );
 
-    return NextResponse.json<SearchResponse>(response);
+      return NextResponse.json<SearchResponse>(response);
+    } catch (scryfallError) {
+      // If Scryfall search fails, return error but include the generated query
+      console.error("Scryfall search error:", scryfallError);
+      const errorMessage = formatErrorMessage(scryfallError);
+      const status = errorMessage.includes("Scryfall") ? 502 : 500;
+      
+      return NextResponse.json<ErrorResponse>(
+        { error: errorMessage, scryfallQuery },
+        { status }
+      );
+    }
   } catch (error) {
     console.error("Search API error:", error);
     

@@ -12,10 +12,39 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [exampleQueries, setExampleQueries] = useState<string[]>([]);
+  const [adBlockDetected, setAdBlockDetected] = useState(false);
 
   // Load random examples on mount
   useEffect(() => {
     setExampleQueries(getRandomExamples(5));
+  }, []);
+
+  // Detect adblocker
+  useEffect(() => {
+    const checkAdBlock = () => {
+      // Create a test element that adblockers typically hide
+      const testAd = document.createElement("div");
+      testAd.innerHTML = "&nbsp;";
+      testAd.className = "adsbox";
+      testAd.style.position = "absolute";
+      testAd.style.left = "-9999px";
+      testAd.style.height = "1px";
+      document.body.appendChild(testAd);
+
+      // Check if the element was hidden by adblocker
+      setTimeout(() => {
+        const isBlocked =
+          testAd.offsetHeight === 0 ||
+          testAd.offsetLeft === 0 ||
+          testAd.style.display === "none" ||
+          testAd.style.visibility === "hidden";
+        
+        setAdBlockDetected(isBlocked);
+        document.body.removeChild(testAd);
+      }, 100);
+    };
+
+    checkAdBlock();
   }, []);
 
   const handleSearch = async (searchQuery: string, page: number = 1) => {
@@ -27,6 +56,7 @@ export default function Home() {
     setError(null);
     if (page === 1) {
       setResults(null);
+      setEditableQuery(""); // Clear query on new search, will be set from response
     }
 
     try {
@@ -43,6 +73,10 @@ export default function Home() {
       if (!response.ok) {
         const errorData = data as ErrorResponse;
         setError(errorData.error || "An error occurred");
+        // Update editable query with the generated Scryfall query if available (even on error)
+        if (errorData.scryfallQuery && page === 1) {
+          setEditableQuery(errorData.scryfallQuery);
+        }
         return;
       }
 
@@ -145,15 +179,28 @@ export default function Home() {
           </div>
         )}
 
-        {/* Ad Placeholder */}
+        {/* Ad Space / Adblock Message */}
         <div className="mb-8 flex justify-center">
-          <div className="flex h-24 w-full max-w-2xl items-center justify-center rounded-lg border border-dashed border-gray-800 bg-gray-900/50 text-sm text-gray-600">
-            Ad space
-          </div>
+          {adBlockDetected ? (
+            <div className="w-full max-w-2xl rounded-lg border border-gray-700 bg-gray-900/50 p-4 text-center">
+              <p className="text-sm text-gray-400">
+                <span className="font-medium text-gray-300">Find That Card is supported by ads.</span>
+                <br />
+                <span className="text-xs text-gray-500">
+                  A single, non-intrusive ad helps keep this site free. Please consider whitelisting{" "}
+                  <span className="font-medium text-gray-400">findthat.card</span> in your ad blocker.
+                </span>
+              </p>
+            </div>
+          ) : (
+            <div className="flex h-24 w-full max-w-2xl items-center justify-center rounded-lg border border-dashed border-gray-800 bg-gray-900/50 text-sm text-gray-600">
+              Ad space
+            </div>
+          )}
         </div>
 
         {/* Query Display - Editable */}
-        {results && (
+        {editableQuery && (
           <div className="mb-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
@@ -182,7 +229,7 @@ export default function Home() {
                   Search
                 </button>
                 <a
-                  href={`https://scryfall.com/search?q=${encodeURIComponent(editableQuery || results.scryfallQuery)}`}
+                  href={`https://scryfall.com/search?q=${encodeURIComponent(editableQuery)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-700"

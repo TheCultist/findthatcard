@@ -63,4 +63,5 @@ export interface CardResult {
 export interface ErrorResponse {
   error: string;
   details?: string;
+  scryfallQuery?: string; // Include the generated query even on error
 }
