@@ -8,6 +8,14 @@ export interface ScryfallImageUris {
   border_crop?: string;
 }
 
+export interface ScryfallCardFace {
+  name: string;
+  mana_cost?: string;
+  type_line?: string;
+  oracle_text?: string;
+  image_uris?: ScryfallImageUris;
+}
+
 export interface ScryfallCard {
   id: string;
   name: string;
@@ -15,6 +23,7 @@ export interface ScryfallCard {
   type_line: string;
   oracle_text?: string;
   image_uris?: ScryfallImageUris;
+  card_faces?: ScryfallCardFace[];
   scryfall_uri: string;
 }
 

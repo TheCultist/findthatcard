@@ -328,18 +328,31 @@ export function transformScryfallResponse(
   // Slice the data starting from the offset, taking up to 60 cards
   const slicedData = scryfallResponse.data.slice(offset, offset + CARDS_PER_PAGE);
   
-  const cards: CardResult[] = slicedData.map((card) => ({
-    id: card.id,
-    name: card.name,
-    mana_cost: card.mana_cost || null,
-    type_line: card.type_line,
-    oracle_text: card.oracle_text || null,
-    image_uris: {
-      normal: card.image_uris?.normal || card.image_uris?.large || null,
-      small: card.image_uris?.small || null, // Fallback
-    },
-    scryfall_uri: card.scryfall_uri,
-  }));
+  const getImageUris = (card: ScryfallCard) => {
+    if (card.image_uris) {
+      return card.image_uris;
+    }
+
+    const firstFaceWithImage = card.card_faces?.find((face) => face.image_uris);
+    return firstFaceWithImage?.image_uris;
+  };
+
+  const cards: CardResult[] = slicedData.map((card) => {
+    const imageUris = getImageUris(card);
+
+    return {
+      id: card.id,
+      name: card.name,
+      mana_cost: card.mana_cost || null,
+      type_line: card.type_line,
+      oracle_text: card.oracle_text || null,
+      image_uris: {
+        normal: imageUris?.normal || imageUris?.large || null,
+        small: imageUris?.small || null, // Fallback
+      },
+      scryfall_uri: card.scryfall_uri,
+    };
+  });
 
   // Determine if there are more pages
   // Calculate how many cards we've shown so far (including this page)
