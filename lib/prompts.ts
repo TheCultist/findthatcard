@@ -18,6 +18,7 @@ Tag usage:
 - Magic keywords (flying, trample, vigilance, lifelink, haste, deathtouch, etc.) -> kw:<keyword> or o:<keyword>.
 - "X synergies / X package" -> small OR list of related Tagger tags.
 - IMPORTANT: Before using o:"add mana" or similar function descriptions, check if function tags like "ramp", "mana producer", "mana dork", etc. are available. Use function tags when available.
+- CRITICAL: When multiple function tags represent the same concept (e.g., multiple lifegain-related tags like "lifegain", "lifegain-matters", "repeatable-lifegain"), combine them with OR inside parentheses: (function:lifegain or function:lifegain-matters or function:repeatable-lifegain). Do NOT use spaces (AND logic) - cards cannot match all tags simultaneously.
 
 Colors and Color Identity:
 - Colors: c:/color: (w, u, b, r, g, c=colorless, m=multicolor).
@@ -169,6 +170,8 @@ Exact Names:
 OR and Nesting:
 - Use OR/or between terms: t:fish or t:bird.
 - Nest with parentheses: t:legendary (t:goblin or t:elf).
+- When multiple function/art tags represent alternatives for the same concept, use OR: (function:lifegain or function:lifegain-matters or function:repeatable-lifegain).
+- Multiple tags of the same type (function:, art:) that are alternatives MUST use OR, not spaces. Spaces mean AND (all must match), which is usually wrong for alternative tags.
 
 Quality bar:
 - Avoid overly broad queries; choose most likely interpretation; use safe fallback (o: or art:) if vague.
@@ -180,6 +183,7 @@ Examples:
 - Cards that draw two cards -> o:"draw two cards"
 - Boros cards with fantasy creatures in the art -> id:rw t:creature (art:dragon or art:angel or art:demon or art:elf or art:griffin)
 - Rakdos sacrifice synergies for Commander -> f:commander id:br (oracletag:"sacrifice outlet" or oracletag:"free sac outlet" or oracletag:"sacrifice payoff" or oracletag:"sacrifice fodder")
+- Lifegain cards for Commander -> f:commander (function:lifegain or function:lifegain-matters or function:repeatable-lifegain) NOT f:commander function:lifegain function:lifegain-matters function:repeatable-lifegain
 - Blue cards with mana value 5 -> c:u mv=5
 - Cards with 8 or more power -> pow>=8
 - Split cards -> is:split
