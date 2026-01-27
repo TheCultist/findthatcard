@@ -4,6 +4,11 @@ import { useState, FormEvent, useEffect } from "react";
 import { SearchResponse, ErrorResponse, CardResult } from "@/types/scryfall";
 import { getRandomExamples } from "@/lib/example-queries";
 
+// Cache for mana symbol SVG URIs
+const symbolCache = new Map<string, string>();
+let symbolDataLoaded = false;
+const symbolLoadCallbacks: Set<() => void> = new Set();
+
 export default function Home() {
   const [query, setQuery] = useState("");
   const [editableQuery, setEditableQuery] = useState("");
@@ -17,6 +22,11 @@ export default function Home() {
   // Load random examples on mount
   useEffect(() => {
     setExampleQueries(getRandomExamples(5));
+  }, []);
+
+  // Fetch symbol data once on mount
+  useEffect(() => {
+    fetchSymbolData();
   }, []);
 
   // Detect adblocker
@@ -337,6 +347,161 @@ export default function Home() {
   );
 }
 
+/**
+ * Fetches symbol data from Scryfall API and caches SVG URIs
+ */
+async function fetchSymbolData(): Promise<void> {
+  if (symbolDataLoaded) {
+    return; // Already loaded
+  }
+
+  try {
+    const response = await fetch("https://api.scryfall.com/symbology");
+    if (!response.ok) {
+      console.error("Failed to fetch symbol data from Scryfall");
+      return;
+    }
+
+    const data = await response.json();
+    if (data.data && Array.isArray(data.data)) {
+      data.data.forEach((symbol: { symbol: string; svg_uri: string | null }) => {
+        if (symbol.svg_uri) {
+          symbolCache.set(symbol.symbol, symbol.svg_uri);
+        }
+      });
+      symbolDataLoaded = true;
+      // Notify all waiting components
+      symbolLoadCallbacks.forEach(callback => callback());
+      symbolLoadCallbacks.clear();
+    }
+  } catch (error) {
+    console.error("Error fetching symbol data:", error);
+  }
+}
+
+/**
+ * Renders mana cost symbols from a mana cost string (e.g., "{1}{R}{G}" or "{1}{R} / {2}{G}" for split cards)
+ */
+function ManaCost({ manaCost }: { manaCost: string }) {
+  const [, forceUpdate] = useState(0);
+  
+  useEffect(() => {
+    if (!symbolDataLoaded) {
+      // Register callback to re-render when symbols are loaded
+      const callback = () => forceUpdate(prev => prev + 1);
+      symbolLoadCallbacks.add(callback);
+      return () => {
+        symbolLoadCallbacks.delete(callback);
+      };
+    }
+  }, []);
+
+  // Check if this is a split card mana cost (contains " / ")
+  const isSplitCost = manaCost.includes(" / ");
+  
+  if (isSplitCost) {
+    // Split the mana cost by " / " and render each side separately
+    const costs = manaCost.split(" / ");
+    
+    return (
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {costs.map((cost, costIndex) => {
+          const symbols = cost.match(/\{[^}]+\}/g) || [];
+          
+          return (
+            <div key={costIndex} className="flex items-center gap-0.5">
+              {symbols.length > 0 ? (
+                symbols.map((symbol, symbolIndex) => {
+                  const svgUri = symbolCache.get(symbol);
+                  
+                  if (!svgUri) {
+                    return (
+                      <span key={`${symbol}-${symbolIndex}`} className="text-xs text-gray-400 whitespace-nowrap">
+                        {symbol}
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <img
+                      key={`${symbol}-${symbolIndex}`}
+                      src={svgUri}
+                      alt={symbol}
+                      className="h-4 w-4 inline-block flex-shrink-0"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = "none";
+                        const textSpan = document.createElement("span");
+                        textSpan.textContent = symbol;
+                        textSpan.className = "text-xs text-gray-400 whitespace-nowrap";
+                        target.parentElement?.appendChild(textSpan);
+                      }}
+                    />
+                  );
+                })
+              ) : (
+                <span className="text-xs text-gray-400 whitespace-nowrap">
+                  {cost}
+                </span>
+              )}
+              {costIndex < costs.length - 1 && (
+                <span className="text-xs text-gray-500 mx-0.5">/</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Regular single mana cost
+  const symbols = manaCost.match(/\{[^}]+\}/g) || [];
+
+  // If no symbols found, show the raw mana cost as fallback
+  if (symbols.length === 0) {
+    return (
+      <span className="text-xs text-gray-400 whitespace-nowrap">
+        {manaCost}
+      </span>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-0.5 flex-shrink-0">
+      {symbols.map((symbol, index) => {
+        const svgUri = symbolCache.get(symbol);
+        
+        if (!svgUri) {
+          // Fallback: show text if symbol not found in cache yet
+          return (
+            <span key={`${symbol}-${index}`} className="text-xs text-gray-400 whitespace-nowrap">
+              {symbol}
+            </span>
+          );
+        }
+
+        return (
+          <img
+            key={`${symbol}-${index}`}
+            src={svgUri}
+            alt={symbol}
+            className="h-4 w-4 inline-block flex-shrink-0"
+            onError={(e) => {
+              // Fallback: show text if image fails to load
+              const target = e.target as HTMLImageElement;
+              target.style.display = "none";
+              const textSpan = document.createElement("span");
+              textSpan.textContent = symbol;
+              textSpan.className = "text-xs text-gray-400 whitespace-nowrap";
+              target.parentElement?.appendChild(textSpan);
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function CardCard({ card }: { card: CardResult }) {
   const handleClick = () => {
     window.open(card.scryfall_uri, "_blank", "noopener,noreferrer");
@@ -373,26 +538,23 @@ function CardCard({ card }: { card: CardResult }) {
       )}
 
       {/* Card Name & Mana Cost */}
-      <div className="mb-2 flex items-start justify-between gap-2">
-        <h3 className="font-semibold text-gray-100 group-hover:text-blue-400">
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <h3 className="flex-1 min-w-0 font-semibold text-gray-100 group-hover:text-blue-400 line-clamp-2 pr-2">
           {card.name}
         </h3>
-        {card.mana_cost && (
-          <span className="whitespace-nowrap text-sm text-gray-400">
-            {card.mana_cost}
-          </span>
-        )}
+        <div className="flex-shrink-0 mt-0.5 min-w-[60px] flex items-center justify-end">
+          {card.mana_cost ? (
+            <ManaCost manaCost={card.mana_cost} />
+          ) : (
+            <span className="text-xs text-gray-500">—</span>
+          )}
+        </div>
       </div>
 
-      {/* Type Line */}
-      <p className="mb-2 text-xs text-gray-400">{card.type_line}</p>
-
-      {/* Oracle Text */}
-      {card.oracle_text && (
-        <p className="line-clamp-3 text-xs leading-relaxed text-gray-500">
-          {card.oracle_text}
-        </p>
-      )}
+      {/* Cardmarket Affiliate Link Placeholder */}
+      <div className="rounded border border-dashed border-gray-700 bg-gray-800/50 p-3 text-center text-xs text-gray-500">
+        Cardmarket affiliate link placeholder
+      </div>
     </div>
   );
 }

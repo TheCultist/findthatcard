@@ -18,6 +18,25 @@ const openai = new OpenAI({
 const SCRYFALL_BASE_URL = "https://api.scryfall.com";
 const SCRYFALL_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthat.card)";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+const MAX_SCRYFALL_QUERY_LENGTH = 400;
+
+/**
+ * Truncates a Scryfall query to the maximum allowed length, trying to preserve word boundaries
+ */
+function truncateScryfallQuery(query: string): string {
+  if (query.length <= MAX_SCRYFALL_QUERY_LENGTH) {
+    return query;
+  }
+  
+  let truncated = query.substring(0, MAX_SCRYFALL_QUERY_LENGTH).trim();
+  // Try to truncate at a word boundary if possible (within 90% of max length)
+  const lastSpace = truncated.lastIndexOf(' ');
+  if (lastSpace > MAX_SCRYFALL_QUERY_LENGTH * 0.9) {
+    truncated = truncated.substring(0, lastSpace).trim();
+  }
+  
+  return truncated;
+}
 
 /**
  * Checks if a query looks like a Scryfall query (contains operators like :, t:, c:, art:, etc.)
@@ -63,9 +82,13 @@ async function convertToScryfallQuery(
   regenerationPrompt?: string,
   tagContext?: TaggerTagContext
 ): Promise<string> {
-  // If it's already a Scryfall query, return it as-is
+  // If it's already a Scryfall query, validate length and return it
   if (isScryfallQuery(naturalQuery)) {
-    return naturalQuery.trim();
+    const trimmed = naturalQuery.trim();
+    if (trimmed.length > MAX_SCRYFALL_QUERY_LENGTH) {
+      throw new Error(`Scryfall query exceeds maximum length of ${MAX_SCRYFALL_QUERY_LENGTH} characters. Please shorten your query.`);
+    }
+    return trimmed;
   }
 
   const userPrompt = regenerationPrompt || getUserPrompt(naturalQuery, tagContext);
@@ -91,6 +114,12 @@ async function convertToScryfallQuery(
 
     if (!cleanedQuery) {
       throw new Error("Failed to generate Scryfall query");
+    }
+
+    // Validate length - truncate if necessary
+    if (cleanedQuery.length > MAX_SCRYFALL_QUERY_LENGTH) {
+      console.warn(`[OpenAI] Generated query exceeds ${MAX_SCRYFALL_QUERY_LENGTH} characters (${cleanedQuery.length}), truncating...`);
+      return truncateScryfallQuery(cleanedQuery);
     }
 
     return cleanedQuery;
@@ -208,6 +237,13 @@ export async function POST(request: NextRequest) {
     try {
       tagContext = isDirectScryfallQuery ? undefined : await getTaggerTagContext(body.naturalQuery);
       scryfallQuery = await convertToScryfallQuery(body.naturalQuery, undefined, tagContext);
+      
+      // Validate and truncate Scryfall query length
+      if (scryfallQuery.length > MAX_SCRYFALL_QUERY_LENGTH) {
+        console.warn(`[Search] Scryfall query exceeds ${MAX_SCRYFALL_QUERY_LENGTH} characters (${scryfallQuery.length}), truncating...`);
+        scryfallQuery = truncateScryfallQuery(scryfallQuery);
+      }
+      
       console.log(`[Search] Natural query: "${body.naturalQuery}" -> Scryfall query: "${scryfallQuery}" (page ${page})`);
       
       // Only validate Tagger tags for AI-generated queries, not direct Scryfall queries
@@ -220,6 +256,13 @@ export async function POST(request: NextRequest) {
         // Regenerate query without invalid tags
         const regenerationPrompt = getRegenerationPrompt(body.naturalQuery, invalidTags, tagContext);
         scryfallQuery = await convertToScryfallQuery(body.naturalQuery, regenerationPrompt, tagContext);
+        
+        // Validate and truncate regenerated query length
+        if (scryfallQuery.length > MAX_SCRYFALL_QUERY_LENGTH) {
+          console.warn(`[Search] Regenerated Scryfall query exceeds ${MAX_SCRYFALL_QUERY_LENGTH} characters (${scryfallQuery.length}), truncating...`);
+          scryfallQuery = truncateScryfallQuery(scryfallQuery);
+        }
+        
         console.log(`[Search] Regenerated query: "${scryfallQuery}"`);
         
         // Validate again (only once to avoid infinite loops)

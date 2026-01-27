@@ -339,11 +339,25 @@ export function transformScryfallResponse(
 
   const cards: CardResult[] = slicedData.map((card) => {
     const imageUris = getImageUris(card);
+    
+    // For split cards and other multi-faced cards, prioritize card_faces mana costs
+    let manaCost = card.mana_cost;
+    if (card.card_faces && card.card_faces.length > 0) {
+      // Get mana cost from all faces, separated by slash for split cards
+      const faceManaCosts = card.card_faces
+        .map(face => face.mana_cost)
+        .filter((cost): cost is string => !!cost);
+      if (faceManaCosts.length > 0) {
+        // Join with " / " to separate the costs visually
+        // This ensures split cards show separate costs instead of combined
+        manaCost = faceManaCosts.join(" / ");
+      }
+    }
 
     return {
       id: card.id,
       name: card.name,
-      mana_cost: card.mana_cost || null,
+      mana_cost: manaCost || null,
       type_line: card.type_line,
       oracle_text: card.oracle_text || null,
       image_uris: {
