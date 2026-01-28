@@ -1,0 +1,120 @@
+import { ensureTaggerTagCache, getTaggerTagCache } from "./cache";
+
+/**
+ * Extracts Tagger tags from a Scryfall query
+ * Returns an array of { type: 'art' | 'function', tag: string, fullMatch: string }
+ */
+export function extractTaggerTags(
+  query: string
+): Array<{ type: "art" | "function"; tag: string; fullMatch: string }> {
+  const tags: Array<{ type: "art" | "function"; tag: string; fullMatch: string }> =
+    [];
+
+  // Patterns for art tags: art:, atag:, arttag:
+  const artPattern = /(?:^|\s)(?:art|atag|arttag):([^\s"()]+|"[^"]+")/gi;
+  // Patterns for function tags: function:, otag:, oracletag:
+  const functionPattern = /(?:^|\s)(?:function|otag|oracletag):([^\s"()]+|"[^"]+")/gi;
+
+  // Also handle negated tags (-art:, -function:, etc.)
+  const negatedArtPattern = /(?:^|\s)-(?:art|atag|arttag):([^\s"()]+|"[^"]+")/gi;
+  const negatedFunctionPattern =
+    /(?:^|\s)-(?:function|otag|oracletag):([^\s"()]+|"[^"]+")/gi;
+
+  // Extract art tags
+  let match;
+  while ((match = artPattern.exec(query)) !== null) {
+    const tag = match[1].replace(/^"|"$/g, ""); // Remove quotes
+    tags.push({ type: "art", tag, fullMatch: match[0].trim() });
+  }
+
+  // Extract function tags
+  while ((match = functionPattern.exec(query)) !== null) {
+    const tag = match[1].replace(/^"|"$/g, ""); // Remove quotes
+    tags.push({ type: "function", tag, fullMatch: match[0].trim() });
+  }
+
+  // Extract negated art tags (we still want to validate them)
+  while ((match = negatedArtPattern.exec(query)) !== null) {
+    const tag = match[1].replace(/^"|"$/g, "");
+    tags.push({ type: "art", tag, fullMatch: match[0].trim() });
+  }
+
+  // Extract negated function tags
+  while ((match = negatedFunctionPattern.exec(query)) !== null) {
+    const tag = match[1].replace(/^"|"$/g, "");
+    tags.push({ type: "function", tag, fullMatch: match[0].trim() });
+  }
+
+  return tags;
+}
+
+/**
+ * Validates if a Tagger tag exists by checking the cached tag list
+ * Returns true if the tag exists, false if the tag doesn't exist
+ */
+export async function validateTaggerTag(
+  type: "art" | "function",
+  tag: string
+): Promise<boolean> {
+  try {
+    // Ensure cache is initialized
+    await ensureTaggerTagCache();
+
+    const taggerTagCache = getTaggerTagCache();
+    if (taggerTagCache === null) {
+      // Cache initialization failed - assume tag exists to avoid false positives
+      console.warn("[Tagger Cache] Cache not available, assuming tag exists");
+      return true;
+    }
+
+    const tagSet = taggerTagCache.get(type);
+    if (!tagSet) {
+      console.warn(`[Tagger Cache] No tags found for type: ${type}`);
+      return true; // Assume exists to avoid false positives
+    }
+
+    // Check if tag exists in cache (case-insensitive comparison)
+    const normalizedTag = tag.toLowerCase().trim();
+    for (const cachedTag of tagSet) {
+      if (cachedTag.toLowerCase() === normalizedTag) {
+        return true;
+      }
+    }
+
+    // Debug: log when a tag is not found (helps diagnose cache issues)
+    console.log(
+      `[Tagger Cache] Tag "${tag}" (normalized: "${normalizedTag}") not found in ${type} tags cache. Cache size: ${tagSet.size}`
+    );
+
+    return false;
+  } catch (error) {
+    // On cache errors, assume tag exists to avoid false positives
+    // We only want to regenerate if we're confident the tag doesn't exist
+    console.error(`Error validating tag ${type}:${tag}:`, error);
+    return true;
+  }
+}
+
+/**
+ * Validates all Tagger tags in a query and returns invalid ones
+ */
+export async function validateTaggerTags(
+  query: string
+): Promise<Array<{ type: "art" | "function"; tag: string }>> {
+  const tags = extractTaggerTags(query);
+  if (tags.length === 0) {
+    return [];
+  }
+
+  const invalidTags: Array<{ type: "art" | "function"; tag: string }> = [];
+
+  // Validate tags using cache (no delays needed since we're not making API calls)
+  for (const { type, tag } of tags) {
+    const isValid = await validateTaggerTag(type, tag);
+    if (!isValid) {
+      invalidTags.push({ type, tag });
+    }
+  }
+
+  return invalidTags;
+}
