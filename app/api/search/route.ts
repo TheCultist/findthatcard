@@ -19,19 +19,21 @@ const SCRYFALL_BASE_URL = "https://api.scryfall.com";
 const SCRYFALL_USER_AGENT = process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthat.card)";
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const MAX_SCRYFALL_QUERY_LENGTH = 400;
+const PREFER_BEST_PREFIX = "prefer:best "; // 12 characters
+const EFFECTIVE_MAX_QUERY_LENGTH = MAX_SCRYFALL_QUERY_LENGTH - PREFER_BEST_PREFIX.length; // 388 characters
 
 /**
  * Truncates a Scryfall query to the maximum allowed length, trying to preserve word boundaries
  */
-function truncateScryfallQuery(query: string): string {
-  if (query.length <= MAX_SCRYFALL_QUERY_LENGTH) {
+function truncateScryfallQuery(query: string, maxLength: number = MAX_SCRYFALL_QUERY_LENGTH): string {
+  if (query.length <= maxLength) {
     return query;
   }
   
-  let truncated = query.substring(0, MAX_SCRYFALL_QUERY_LENGTH).trim();
+  let truncated = query.substring(0, maxLength).trim();
   // Try to truncate at a word boundary if possible (within 90% of max length)
   const lastSpace = truncated.lastIndexOf(' ');
-  if (lastSpace > MAX_SCRYFALL_QUERY_LENGTH * 0.9) {
+  if (lastSpace > maxLength * 0.9) {
     truncated = truncated.substring(0, lastSpace).trim();
   }
   
@@ -80,13 +82,15 @@ function isScryfallQuery(query: string): boolean {
 async function convertToScryfallQuery(
   naturalQuery: string,
   regenerationPrompt?: string,
-  tagContext?: TaggerTagContext
+  tagContext?: TaggerTagContext,
+  isRetry: boolean = false
 ): Promise<string> {
   // If it's already a Scryfall query, validate length and return it
+  // Account for "prefer:best " prefix (12 characters)
   if (isScryfallQuery(naturalQuery)) {
     const trimmed = naturalQuery.trim();
-    if (trimmed.length > MAX_SCRYFALL_QUERY_LENGTH) {
-      throw new Error(`Scryfall query exceeds maximum length of ${MAX_SCRYFALL_QUERY_LENGTH} characters. Please shorten your query.`);
+    if (trimmed.length > EFFECTIVE_MAX_QUERY_LENGTH) {
+      throw new Error(`Scryfall query exceeds maximum length of ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${MAX_SCRYFALL_QUERY_LENGTH} total including "prefer:best " prefix). Please shorten your query.`);
     }
     return trimmed;
   }
@@ -116,17 +120,46 @@ async function convertToScryfallQuery(
       throw new Error("Failed to generate Scryfall query");
     }
 
-    // Validate length - truncate if necessary
-    if (cleanedQuery.length > MAX_SCRYFALL_QUERY_LENGTH) {
-      console.warn(`[OpenAI] Generated query exceeds ${MAX_SCRYFALL_QUERY_LENGTH} characters (${cleanedQuery.length}), truncating...`);
-      return truncateScryfallQuery(cleanedQuery);
+    // Validate parentheses are balanced
+    const openParens = (cleanedQuery.match(/\(/g) || []).length;
+    const closeParens = (cleanedQuery.match(/\)/g) || []).length;
+    if (openParens !== closeParens) {
+      console.warn(`[OpenAI] Generated query has unbalanced parentheses (${openParens} open, ${closeParens} close): "${cleanedQuery}"`);
+      // Try to fix by adding missing closing parentheses
+      const fixedQuery = cleanedQuery + ')'.repeat(openParens - closeParens);
+      console.warn(`[OpenAI] Attempting to fix by adding closing parentheses: "${fixedQuery}"`);
+      // Only use fixed query if it's still under the limit (accounting for prefer:best prefix)
+      if (fixedQuery.length <= EFFECTIVE_MAX_QUERY_LENGTH) {
+        return fixedQuery;
+      }
+      // If fixed query is too long, throw error to trigger regeneration
+      throw new Error("Generated query has unbalanced parentheses and cannot be automatically fixed");
     }
 
-    return cleanedQuery;
-  } catch (error) {
-    console.error("OpenAI API error:", error);
-    throw new Error("Failed to convert query. Please try again.");
-  }
+      // Validate length - truncate if necessary (accounting for prefer:best prefix)
+      if (cleanedQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
+        console.warn(`[OpenAI] Generated query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${cleanedQuery.length}), truncating...`);
+        return truncateScryfallQuery(cleanedQuery, EFFECTIVE_MAX_QUERY_LENGTH);
+      }
+
+      return cleanedQuery;
+    } catch (error) {
+      // If it's a validation error (unbalanced parentheses) and we haven't retried yet, try regenerating once
+      if (!isRetry && error instanceof Error && error.message.includes("unbalanced parentheses")) {
+        console.warn("[OpenAI] Query had unbalanced parentheses, attempting regeneration...");
+        try {
+          const retryPrompt = regenerationPrompt || getUserPrompt(naturalQuery, tagContext);
+          const retryPromptWithFix = `${retryPrompt}\n\nIMPORTANT: The previous attempt had unbalanced parentheses. Please ensure all parentheses are properly closed and use the simplest possible query.`;
+          return await convertToScryfallQuery(naturalQuery, retryPromptWithFix, tagContext, true);
+        } catch (retryError) {
+          console.error("[OpenAI] Retry also failed:", retryError);
+          throw error; // Throw original error
+        }
+      }
+      
+      console.error("OpenAI API error:", error);
+      throw new Error("Failed to convert query. Please try again.");
+    }
 }
 
 const CARDS_PER_PAGE = 60;
@@ -149,16 +182,20 @@ function calculateScryfallPage(ourPage: number): { scryfallPage: number; offset:
 
 /**
  * Executes Scryfall search
+ * May fetch multiple Scryfall pages if needed to get 60 cards
  */
 async function searchScryfall(query: string, page: number = 1): Promise<{ response: ScryfallSearchResponse; offset: number }> {
   const { scryfallPage, offset } = calculateScryfallPage(page);
   
+  // Add prefer:best to the query (12 characters: "prefer:best ")
+  const queryWithPrefer = `prefer:best ${query}`;
+  
   const url = new URL(`${SCRYFALL_BASE_URL}/cards/search`);
-  url.searchParams.set("q", query);
+  url.searchParams.set("q", queryWithPrefer);
   url.searchParams.set("unique", "cards");
   url.searchParams.set("page", scryfallPage.toString());
 
-  console.log(`[Scryfall] Executing search with query: "${query}" (our page ${page} -> Scryfall page ${scryfallPage}, offset ${offset})`);
+  console.log(`[Scryfall] Executing search with query: "${queryWithPrefer}" (our page ${page} -> Scryfall page ${scryfallPage}, offset ${offset})`);
 
   try {
     const response = await fetch(url.toString(), {
@@ -182,6 +219,34 @@ async function searchScryfall(query: string, page: number = 1): Promise<{ respon
     }
 
     const data: ScryfallSearchResponse = await response.json();
+    
+    // Check if we need to fetch more cards from the next Scryfall page
+    const cardsAvailable = data.data.length - offset;
+    if (cardsAvailable < CARDS_PER_PAGE && data.has_more) {
+      // Fetch the next Scryfall page to get remaining cards
+      const nextPageUrl = new URL(`${SCRYFALL_BASE_URL}/cards/search`);
+      nextPageUrl.searchParams.set("q", queryWithPrefer);
+      nextPageUrl.searchParams.set("unique", "cards");
+      nextPageUrl.searchParams.set("page", (scryfallPage + 1).toString());
+      
+      const nextResponse = await fetch(nextPageUrl.toString(), {
+        headers: {
+          "User-Agent": SCRYFALL_USER_AGENT,
+          Accept: "application/json",
+        },
+      });
+      
+      if (nextResponse.ok) {
+        const nextData: ScryfallSearchResponse = await nextResponse.json();
+        // Combine cards from both pages
+        const combinedData: ScryfallSearchResponse = {
+          ...data,
+          data: [...data.data, ...nextData.data],
+        };
+        return { response: combinedData, offset };
+      }
+    }
+    
     return { response: data, offset };
   } catch (error) {
     if (error instanceof Error) {
@@ -238,10 +303,10 @@ export async function POST(request: NextRequest) {
       tagContext = isDirectScryfallQuery ? undefined : await getTaggerTagContext(body.naturalQuery);
       scryfallQuery = await convertToScryfallQuery(body.naturalQuery, undefined, tagContext);
       
-      // Validate and truncate Scryfall query length
-      if (scryfallQuery.length > MAX_SCRYFALL_QUERY_LENGTH) {
-        console.warn(`[Search] Scryfall query exceeds ${MAX_SCRYFALL_QUERY_LENGTH} characters (${scryfallQuery.length}), truncating...`);
-        scryfallQuery = truncateScryfallQuery(scryfallQuery);
+      // Validate and truncate Scryfall query length (accounting for prefer:best prefix)
+      if (scryfallQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
+        console.warn(`[Search] Scryfall query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${scryfallQuery.length}), truncating...`);
+        scryfallQuery = truncateScryfallQuery(scryfallQuery, EFFECTIVE_MAX_QUERY_LENGTH);
       }
       
       console.log(`[Search] Natural query: "${body.naturalQuery}" -> Scryfall query: "${scryfallQuery}" (page ${page})`);
@@ -257,10 +322,10 @@ export async function POST(request: NextRequest) {
         const regenerationPrompt = getRegenerationPrompt(body.naturalQuery, invalidTags, tagContext);
         scryfallQuery = await convertToScryfallQuery(body.naturalQuery, regenerationPrompt, tagContext);
         
-        // Validate and truncate regenerated query length
-        if (scryfallQuery.length > MAX_SCRYFALL_QUERY_LENGTH) {
-          console.warn(`[Search] Regenerated Scryfall query exceeds ${MAX_SCRYFALL_QUERY_LENGTH} characters (${scryfallQuery.length}), truncating...`);
-          scryfallQuery = truncateScryfallQuery(scryfallQuery);
+        // Validate and truncate regenerated query length (accounting for prefer:best prefix)
+        if (scryfallQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
+          console.warn(`[Search] Regenerated Scryfall query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${scryfallQuery.length}), truncating...`);
+          scryfallQuery = truncateScryfallQuery(scryfallQuery, EFFECTIVE_MAX_QUERY_LENGTH);
         }
         
         console.log(`[Search] Regenerated query: "${scryfallQuery}"`);
@@ -290,7 +355,7 @@ export async function POST(request: NextRequest) {
       const { response: scryfallResponse, offset } = await searchScryfall(scryfallQuery, page);
 
       // Transform response
-      const response: SearchResponse = transformScryfallResponse(
+      const response: SearchResponse = await transformScryfallResponse(
         scryfallQuery,
         page,
         offset,

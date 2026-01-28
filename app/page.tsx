@@ -1,13 +1,133 @@
 "use client";
 
 import { useState, FormEvent, useEffect } from "react";
+import Link from "next/link";
 import { SearchResponse, ErrorResponse, CardResult } from "@/types/scryfall";
 import { getRandomExamples } from "@/lib/example-queries";
+import CookieBanner from "./components/CookieBanner";
 
 // Cache for mana symbol SVG URIs
 const symbolCache = new Map<string, string>();
 let symbolDataLoaded = false;
 const symbolLoadCallbacks: Set<() => void> = new Set();
+
+/**
+ * Formats a string for use in CardTrader URLs: lowercase, replace spaces with hyphens
+ * Also removes leading articles (A, An, The) as CardTrader URLs don't include them
+ * Apostrophes are replaced with hyphens
+ */
+function formatForUrl(text: string): string {
+  // Remove leading articles (A, An, The) for CardTrader URL compatibility
+  let cleaned = text.trim();
+  const articleMatch = cleaned.match(/^(a|an|the)\s+(.+)$/i);
+  if (articleMatch) {
+    cleaned = articleMatch[2]; // Use the part after the article
+  }
+  
+  return cleaned
+    .toLowerCase()
+    .replace(/'/g, "-") // Replace apostrophes with hyphens
+    .replace(/[":,]/g, "") // Remove quotes, colons, commas
+    .replace(/\s+/g, "-") // Replace spaces with hyphens
+    .replace(/[^\w-]/g, "-") // Replace any remaining non-word chars with hyphens
+    .replace(/-+/g, "-") // Collapse multiple hyphens
+    .replace(/^-|-$/g, ""); // Remove leading/trailing hyphens
+}
+
+/**
+ * Mapping dictionary for set names that differ between Scryfall and CardTrader
+ * Key: Scryfall set name (case-insensitive, will be normalized for lookup)
+ * Value: CardTrader set name (should be the exact name to use in CardTrader URLs)
+ * 
+ * Example:
+ * - Scryfall: "Commander: Warhammer 40,000"
+ * - CardTrader: "universes-beyond-warhammer-40-000"
+ */
+const SET_NAME_MAPPING: Record<string, string> = {
+  "commander: warhammer 40,000": "universes-beyond-warhammer-40-000",
+  "commander-warhammer-40000": "universes-beyond-warhammer-40-000",
+  "doctor-who": "universes-beyond-doctor-who",
+  "fallout": "universes-beyond-fallout"
+  // Add more mappings here as needed
+  // Format: "Scryfall Set Name": "cardtrader-set-name"
+};
+
+/**
+ * Gets the CardTrader set name for a given Scryfall set name
+ * Returns the mapped name if it exists, otherwise returns null
+ */
+function getCardTraderSetName(scryfallSetName: string | null): string | null {
+  if (!scryfallSetName) {
+    return null;
+  }
+  
+  // Normalize the Scryfall set name for lookup (lowercase)
+  const normalized = scryfallSetName.toLowerCase().trim();
+  
+  // Check exact match first
+  if (SET_NAME_MAPPING[normalized]) {
+    return SET_NAME_MAPPING[normalized];
+  }
+  
+  // Also check formatted version (with hyphens, etc.)
+  const formatted = formatForUrl(scryfallSetName);
+  if (SET_NAME_MAPPING[formatted]) {
+    return SET_NAME_MAPPING[formatted];
+  }
+  
+  // No mapping found, return null to use the original formatted name
+  return null;
+}
+
+/**
+ * Generates a CardTrader affiliate link
+ * Tries to construct a card-specific URL using set code and collector number if available
+ * Falls back to card name + set name format, then homepage
+ * 
+ * Based on CardTrader URL patterns:
+ * - Magic cards: /cards/[card-name]-[set-name]
+ * - Pokémon cards: /cards/[card-name]-[collector-number]-[set-code]
+ * 
+ * For Magic, we'll try: /cards/[card-name]-[set-name]?share_code=[code]
+ */
+function getCardTraderLink(
+  cardName: string,
+  setName: string | null,
+  setCode: string | null,
+  collectorNumber: string | null
+): string {
+  const shareCode = process.env.NEXT_PUBLIC_CARDTRADER_SHARE_CODE || "thecultist";
+  
+  // Try to construct card-specific URL if we have set name and card name
+  if (setName && cardName) {
+    const formattedCardName = formatForUrl(cardName);
+    
+    // Check if there's a CardTrader-specific mapping for this set name
+    const cardtraderSetName = getCardTraderSetName(setName);
+    
+      // Format set name: use mapped name if available, otherwise format the original
+      let formattedSetName: string;
+      if (cardtraderSetName) {
+        // Use the mapped name directly (it should already be formatted)
+        formattedSetName = cardtraderSetName;
+      } else {
+        // Format set name: lowercase, replace spaces with hyphens
+        formattedSetName = formatForUrl(setName);
+        
+        // Handle commander products: move "commander" before expansion name only if it's the last word
+        if (formattedSetName.endsWith("-commander")) {
+          formattedSetName = formattedSetName.replace(/-commander$/, "");
+          formattedSetName = `commander-${formattedSetName}`;
+        }
+      }
+    
+    // Construct URL: /cards/[card-name]-[set-name]?share_code=[code]
+    return `https://www.cardtrader.com/en/cards/${formattedCardName}-${formattedSetName}?share_code=${shareCode}`;
+  }
+  
+  // Fallback to homepage
+  return `https://www.cardtrader.com/en?share_code=${shareCode}`;
+}
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -118,10 +238,30 @@ export default function Home() {
     const searchQuery = editableQuery || query;
     if (searchQuery) {
       handleSearch(searchQuery, newPage);
-      // Scroll to top of results
-      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
+
+  // Scroll to query section when results change (after loading completes)
+  useEffect(() => {
+    if (results && !loading) {
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        // Scroll to the query display section if it exists
+        const queryElement = document.getElementById("query-display");
+        if (queryElement) {
+          queryElement.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else {
+          // Fallback: scroll to results section or top
+          const resultsElement = document.getElementById("results-section");
+          if (resultsElement) {
+            resultsElement.scrollIntoView({ behavior: "smooth", block: "start" });
+          } else {
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }
+        }
+      }, 100);
+    }
+  }, [results?.page, loading]);
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -210,7 +350,7 @@ export default function Home() {
 
         {/* Query Display - Editable */}
         {editableQuery && (
-          <div className="mb-6">
+          <div id="query-display" className="mb-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
                 <span className="text-xs text-gray-500 whitespace-nowrap">Query:</span>
@@ -267,7 +407,7 @@ export default function Home() {
 
         {/* Results */}
         {results && (
-          <div className="mb-8">
+          <div id="results-section" className="mb-8">
             <div className="mb-4 flex items-center justify-between text-sm text-gray-400">
               <div>
                 Found {results.total.toLocaleString()} card{results.total !== 1 ? "s" : ""}
@@ -286,9 +426,39 @@ export default function Home() {
             ) : (
               <>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {results.cards.map((card) => (
-                    <CardCard key={card.id} card={card} />
-                  ))}
+                  {(() => {
+                    const items: React.ReactNode[] = [];
+                    const cardCount = results.cards.length;
+                    
+                    results.cards.forEach((card, index) => {
+                      // Add the card
+                      items.push(<CardCard key={card.id} card={card} />);
+                      
+                      // Insert ad banner after 20th card if we have 30+ results
+                      if (cardCount >= 30 && index === 19) {
+                        items.push(
+                          <div key={`ad-20`} className="col-span-full my-4">
+                            <div className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed border-gray-800 bg-gray-900/50 text-sm text-gray-600">
+                              Ad banner
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      // Insert ad banner after 40th card if we have 50+ results
+                      if (cardCount >= 50 && index === 39) {
+                        items.push(
+                          <div key={`ad-40`} className="col-span-full my-4">
+                            <div className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed border-gray-800 bg-gray-900/50 text-sm text-gray-600">
+                              Ad banner
+                            </div>
+                          </div>
+                        );
+                      }
+                    });
+                    
+                    return items;
+                  })()}
                 </div>
 
                 {/* Pagination Controls */}
@@ -319,7 +489,7 @@ export default function Home() {
         )}
 
         {/* Footer */}
-        <footer className="mt-16 border-t border-gray-800 pt-8 text-center text-xs text-gray-500">
+        <footer className="mt-16 border-t border-gray-800 pt-8 pb-24 text-center text-xs text-gray-500">
           <p>
             Unofficial fan content. Card data and images from{" "}
             <a
@@ -341,8 +511,19 @@ export default function Home() {
             </a>
             . Not endorsed by Wizards of the Coast or Scryfall.
           </p>
+          <p className="mt-2">
+            <Link
+              href="/privacy"
+              className="text-blue-400 hover:underline"
+            >
+              Privacy Policy
+            </Link>
+          </p>
         </footer>
       </div>
+
+      {/* Cookie Consent Banner */}
+      <CookieBanner />
     </main>
   );
 }
@@ -551,10 +732,16 @@ function CardCard({ card }: { card: CardResult }) {
         </div>
       </div>
 
-      {/* Cardmarket Affiliate Link Placeholder */}
-      <div className="rounded border border-dashed border-gray-700 bg-gray-800/50 p-3 text-center text-xs text-gray-500">
-        Cardmarket affiliate link placeholder
-      </div>
+      {/* CardTrader Affiliate Link */}
+      <a
+        href={getCardTraderLink(card.name, card.set_name, card.set_code, card.collector_number)}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="block rounded border border-gray-700 bg-gray-800/50 p-3 text-center text-xs text-gray-400 transition-colors hover:border-blue-600 hover:bg-gray-800 hover:text-blue-400"
+      >
+        Buy on CardTrader
+      </a>
     </div>
   );
 }

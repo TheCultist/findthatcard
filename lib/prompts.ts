@@ -8,7 +8,7 @@ Output rules (strict):
 - No markdown, no surrounding quotes, no explanations.
 - Use spaces between tokens; quote multi-word phrases/tags.
 - Use OR inside parentheses for alternatives.
-- Maximum query length: 400 characters. If the query would exceed this limit, prioritize the most important search criteria and omit less critical parts.
+- Maximum query length: 388 characters (400 total including "prefer:best " prefix). If the query would exceed this limit, prioritize the most important search criteria and omit less critical parts.
 
 Tag usage:
 - Prefer Tagger tags for function/art intent: art:/atag:/arttag: and function:/otag:/oracletag:.
@@ -19,6 +19,8 @@ Tag usage:
 - "X synergies / X package" -> small OR list of related Tagger tags.
 - IMPORTANT: Before using o:"add mana" or similar function descriptions, check if function tags like "ramp", "mana producer", "mana dork", etc. are available. Use function tags when available.
 - CRITICAL: When multiple function tags represent the same concept (e.g., multiple lifegain-related tags like "lifegain", "lifegain-matters", "repeatable-lifegain"), combine them with OR inside parentheses: (function:lifegain or function:lifegain-matters or function:repeatable-lifegain). Do NOT use spaces (AND logic) - cards cannot match all tags simultaneously.
+- SIMPLICITY FIRST: If a simple, direct tag exists that matches the user's intent (e.g., "zombie" for "cards with zombie art"), use that single tag directly (art:zombie). Do NOT create long OR lists of specific tags unless the user explicitly asks for multiple specific things. Prefer the simplest query that matches the intent.
+- PARENTHESES: Always ensure parentheses are properly closed. Count opening and closing parentheses to verify balance. If using OR inside parentheses, ensure the closing parenthesis is present.
 
 Colors and Color Identity:
 - Colors: c:/color: (w, u, b, r, g, c=colorless, m=multicolor).
@@ -83,6 +85,8 @@ Sets/Blocks:
 - Set types: st:core, st:expansion, st:masters, st:commander, st:promo, etc.
 - Ever in set: in:lea (cards that appeared in Alpha).
 - Product types: is:booster, is:planeswalker_deck, is:league, is:prerelease, etc.
+- CRITICAL: When user asks for cards from a specific set (e.g., "cards from Fallout set", "cards from Lorwyn Eclipsed"), ALWAYS use set: parameter with the set code (e.g., set:pip, set:ecl). Do NOT use set name matching or other methods - use the exact set code. Common set codes: pip (Fallout), ecc (Lorwyn Eclipsed Commander), war (War of the Spark), etc.
+- "Any X set" queries: When user asks for "cards from any [Block/Set Name] set" (e.g., "any Lorwyn set"), list ALL relevant set codes with OR (e.g., "set:lrw or set:mor" for Lorwyn and Morningtide). NEVER use block: parameter unless the user specifically asks for a "block". NEVER repeat the same set code multiple times. Each set code should appear only once in the query.
 
 Format Legality:
 - Formats: f:/format: (standard, modern, legacy, commander, pauper, etc.).
@@ -150,6 +154,8 @@ Heuristics:
 - Artist intent -> artist:/a: (not art:).
 - "Starts with", "includes", "contains" requests -> use regex with o:/pattern/ or name:/pattern/ (e.g., "cards whose text starts with draw" -> o:/^draw/).
 - "Whole word", "not as part of another word", "standalone word" -> use word boundaries \\b (e.g., "hero but not Heroism" -> name:/\\bhero\\b/).
+- SET REQUESTS: When user asks for cards from a specific set (e.g., "cards from [Set Name] set", "cards from [Set Name] commander set"), ALWAYS use set: parameter with the set code. Examples: "Fallout" -> set:pip, "Lorwyn Eclipsed" -> set:ecl, "War of the Spark" -> set:war. Use set codes, not set names.
+- "ANY X SET" REQUESTS: When user asks for "cards from any [Block/Set Name] set", list ALL relevant set codes with OR (e.g., "any Lorwyn set" -> "set:lrw or set:mor"). NEVER use block: parameter unless the user specifically asks for a "block". NEVER repeat the same set code - each set code must appear only once. Include all sets that match the requested block/set name.
 
 Negation:
 - "no/not/without/exclude/avoid" -> leading dash on the correct field (e.g., -t:human, -function:board-wipe, -art:angel).
@@ -176,11 +182,15 @@ OR and Nesting:
 Quality bar:
 - Avoid overly broad queries; choose most likely interpretation; use safe fallback (o: or art:) if vague.
 - Keep queries concise and under 400 characters. If needed, prioritize essential criteria and simplify or remove less important conditions.
+- SIMPLICITY: Always prefer the simplest query that matches the user's intent. If a single tag works (e.g., art:zombie for "cards with zombie art"), use that instead of creating complex OR lists.
+- VALIDATION: Before outputting, verify parentheses are balanced and the query is syntactically correct.
+- NO REPETITION: Never repeat the same parameter or set code multiple times in a query. Each set code, tag, or parameter should appear only once. If you find yourself repeating something, use a block parameter or simplify the query.
 
 Examples:
 - Dimir removal spells for Commander -> f:commander id:ub function:removal
 - Cards with vigilance and lifelink -> kw:vigilance kw:lifelink
 - Cards that draw two cards -> o:"draw two cards"
+- Cards with zombie art -> art:zombie (NOT a long OR list of specific zombie-related tags)
 - Boros cards with fantasy creatures in the art -> id:rw t:creature (art:dragon or art:angel or art:demon or art:elf or art:griffin)
 - Rakdos sacrifice synergies for Commander -> f:commander id:br (oracletag:"sacrifice outlet" or oracletag:"free sac outlet" or oracletag:"sacrifice payoff" or oracletag:"sacrifice fodder")
 - Lifegain cards for Commander -> f:commander (function:lifegain or function:lifegain-matters or function:repeatable-lifegain) NOT f:commander function:lifegain function:lifegain-matters function:repeatable-lifegain
@@ -188,7 +198,11 @@ Examples:
 - Cards with 8 or more power -> pow>=8
 - Split cards -> is:split
 - Reserved List cards -> is:reserved
-- Cards from War of the Spark -> e:war
+- Cards from War of the Spark -> set:war (ALWAYS use set: with set code, not set name)
+- Cards from Fallout set -> set:pip (ALWAYS use set: with set code)
+- Cards from Lorwyn Eclipsed commander set -> set:ecc (ALWAYS use set: with set code for commander sets too)
+- Cards from any Lorwyn set -> set:lrw or set:mor or set:ecc or set:ecl (list ALL sets with OR, do NOT use block:)
+- Cards from Innistrad block -> block:isd (ONLY use block: when user specifically says "block")
 - Cards banned in Legacy -> banned:legacy
 - Cards whose text starts with "draw" -> o:/^draw/
 - Cards whose text includes "damage" -> o:/damage/
@@ -213,7 +227,10 @@ function formatTagContext(tagContext?: TaggerTagContext): string {
   const artList = tagContext.art.length > 0 ? tagContext.art.join(', ') : 'none';
   const functionList = tagContext.function.length > 0 ? tagContext.function.join(', ') : 'none';
 
-  return `\n\nAvailable Tagger tags for this query (use ONLY these for art:/function:/otag:/oracletag:):\nArt tags: ${artList}\nFunction tags: ${functionList}\n\nIMPORTANT: If a function tag exists that matches the user's intent (e.g., "ramp", "mana producer", "card draw"), you MUST use function:/otag:/oracletag: instead of oracle text (o:). Only use o: when no matching function tag exists or when exact wording is required.`;
+  return `\n\nAvailable Tagger tags for this query (use ONLY these for art:/function:/otag:/oracletag:):\nArt tags: ${artList}\nFunction tags: ${functionList}\n\nIMPORTANT: 
+- If a function tag exists that matches the user's intent (e.g., "ramp", "mana producer", "card draw"), you MUST use function:/otag:/oracletag: instead of oracle text (o:). Only use o: when no matching function tag exists or when exact wording is required.
+- SIMPLICITY: If a single, direct tag matches the user's intent (e.g., "zombie" for "cards with zombie art"), use that single tag (art:zombie). Do NOT create long OR lists unless the user explicitly asks for multiple specific things.
+- Always ensure parentheses are properly closed if using OR lists.`;
 }
 
 export function getUserPrompt(naturalQuery: string, tagContext?: TaggerTagContext): string {
