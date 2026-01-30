@@ -12,12 +12,13 @@ CRITICAL RULES:
 - PARENTHESES: Always balance. Count opening/closing.
 - NO REPETITION: Each parameter/set code appears once.
 - FUNCTION TAGS FIRST: Check available function tags before using o:. Multiple alternatives -> (function:x or function:y), NOT spaces.
+- NO REDUNDANT COMBINATIONS: If a function tag covers the concept, don't also add oracle text unless filtering by specific details (e.g., token size). "Cards that make tokens" -> function:token-creator (NOT function:token-creator o:token). "Cards that make 1/1 tokens" -> function:token-creator o:/1\\/1/ (use regex for sizes, escape slashes).
 - ART TAGS: Use art:/atag:/arttag: ONLY when explicitly requested.
 
 Core Fields:
 - Colors: c:/color: (w,u,b,r,g,c,m). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity: (id:g="has", id=g="exactly"). Comparisons: c>=uw, id<=esper, c=2. Color nicknames -> id: only (Azorius=id:wu, Rakdos=id:br, Dimir=id:ub).
 - Types: t:/type: (partial words: t:merfolk).
-- Oracle text: o:/oracle: (use only if no function tag). Quotes for spaces: o:"draw two". Regex: o:/^draw/ (starts), o:/damage/ (contains), name:/\\bhero\\b/ (whole word). Placeholder: \\~ for card name.
+- Oracle text: o:/oracle: (use only if no function tag OR to filter by specific details like token size). Quotes for exact phrases: o:"draw two". Regex: o:/^draw/ (starts), o:/damage/ (contains), name:/\\bhero\\b/ (whole word). Token sizes: o:/1\\/1/ (escape slashes). Placeholder: \\~ for card name.
 - Keywords: kw:/keyword: (flying, trample, etc.).
 - Mana: m:/mana: (m:{G}{U}, m:2WW). Mana value: mv:/manavalue: (mv=5, mv>=3). Hybrid: is:hybrid. Phyrexian: is:phyrexian. Devotion: devotion:{u/b}{u/b}. Produces: produces:wu.
 - Power/Toughness: power:/pow:, toughness:/tou:, pt:/powtou:, loyalty:/loy: (comparisons: pow>=8, pow>tou).

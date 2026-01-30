@@ -5,6 +5,13 @@ export type TaggerTagContext = {
   function: string[];
 };
 
+/**
+ * Function tags that should be blacklisted (e.g., tags used by very few cards)
+ */
+const BLACKLISTED_FUNCTION_TAGS = new Set([
+  "create-multiple-tokens", // Only used by one card
+]);
+
 function extractTaggerKeywords(naturalQuery: string): string[] {
   const stopwords = new Set([
     "a",
@@ -127,6 +134,13 @@ export async function getTaggerTagContext(
     }
 
     const scored = Array.from(tagSet)
+      .filter((tag) => {
+        // Filter out blacklisted function tags
+        if (type === "function" && BLACKLISTED_FUNCTION_TAGS.has(tag.toLowerCase())) {
+          return false;
+        }
+        return true;
+      })
       .map((tag) => ({ tag, score: scoreTagMatch(tag, keywords) }))
       .filter((entry) => entry.score > 0)
       .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))

@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 import {
-  SCRYFALL_QUERY_CONVERTER_SYSTEM_PROMPT,
   getUserPrompt,
 } from "@/lib/prompts";
+import { buildSystemPrompt, selectPacks } from "@/lib/prompts/promptModules";
 import { TaggerTagContext } from "@/lib/tagger/context";
 
 const openai = new OpenAI({
@@ -131,12 +131,20 @@ export async function convertToScryfallQuery(
   }
 
   const userPrompt = regenerationPrompt || getUserPrompt(naturalQuery, tagContext);
+  const systemPrompt = buildSystemPrompt(naturalQuery);
+
+  // Log selected packs and prompt length in dev
+  if (process.env.NODE_ENV === "development") {
+    const selectedPacks = selectPacks(naturalQuery);
+    console.log(`[OpenAI] Selected packs: ${selectedPacks.join(", ")}`);
+    console.log(`[OpenAI] System prompt length: ${systemPrompt.length} chars`);
+  }
 
   try {
     const completion = await openai.chat.completions.create({
       model: OPENAI_MODEL,
       messages: [
-        { role: "system", content: SCRYFALL_QUERY_CONVERTER_SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
       temperature: 0.3,

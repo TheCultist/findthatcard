@@ -36,6 +36,8 @@ export const SET_NAME_MAPPING: Record<string, string> = {
   "doctor-who": "universes-beyond-doctor-who",
   "fallout": "universes-beyond-fallout",
   "assassin-s-creed": "universes-beyond-assassin-s-creed",
+  "strixhaven-mystical-archive": "mystical-archive",
+  "neon-dynasty-commander": "commander-kamigawa-neon-dynasty",
   // Add more mappings here as needed
   // Format: "Scryfall Set Name": "cardtrader-set-name"
 };
