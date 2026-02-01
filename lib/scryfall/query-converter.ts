@@ -3,7 +3,9 @@ import {
   getUserPrompt,
 } from "@/lib/prompts";
 import { buildSystemPrompt, selectPacks } from "@/lib/prompts/promptModules";
+import { buildValidationPrompt } from "@/lib/prompts/validation";
 import { TaggerTagContext } from "@/lib/tagger/context";
+import { validateTaggerTags } from "@/lib/tagger/validation";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -110,6 +112,150 @@ export function isScryfallQuery(query: string): boolean {
 }
 
 /**
+ * Validates and corrects a generated Scryfall query by comparing it to the original user intent
+ */
+async function validateAndCorrectQuery(
+  naturalQuery: string,
+  generatedQuery: string,
+  invalidTags?: Array<{ type: "art" | "function"; tag: string }>
+): Promise<string> {
+  const isGpt5 = OPENAI_MODEL.startsWith("gpt-5");
+  
+  const validationPrompt = buildValidationPrompt(naturalQuery, generatedQuery, invalidTags);
+
+  try {
+    let correctedQuery = "";
+    
+    if (isGpt5) {
+      // Use Responses API for reasoning models (gpt-5-mini, gpt-5, etc.)
+      // Use "low" effort for economical token usage on this simple validation task
+      const validation = await openai.responses.create({
+        model: OPENAI_MODEL,
+        reasoning: {
+          effort: "low", // Low effort for cost efficiency on simple validation
+        },
+        input: [
+          {
+            role: "system",
+            content: "You validate Scryfall queries. Output ONLY the query string - the original if correct, or corrected if wrong. No explanations, no markdown, no quotes. Just the query.",
+          },
+          {
+            role: "user",
+            content: validationPrompt,
+          },
+        ],
+        max_output_tokens: 2000, // Reasonable limit for validation (query + corrections)
+      });
+
+      // Log response structure in dev for debugging
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[OpenAI] Validation response structure (Responses API):`, {
+          status: validation.status,
+          outputLength: validation.output?.length,
+          outputText: validation.output_text,
+          usage: validation.usage,
+        });
+      }
+
+      // Handle incomplete responses
+      if (validation.status === "incomplete") {
+        const reason = validation.incomplete_details?.reason;
+        console.warn(
+          `[OpenAI] Validation response incomplete (reason: ${reason}), using original query`
+        );
+        if (validation.output_text && validation.output_text.length > 0) {
+          correctedQuery = validation.output_text.trim();
+        } else {
+          return generatedQuery;
+        }
+      } else {
+        correctedQuery = validation.output_text?.trim() || "";
+      }
+    } else {
+      // Use Chat Completions API for non-reasoning models
+      const validation = await openai.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: "You validate Scryfall queries. Output ONLY the query string - the original if correct, or corrected if wrong. No explanations, no markdown, no quotes. Just the query.",
+          },
+          {
+            role: "user",
+            content: validationPrompt,
+          },
+        ],
+        temperature: 0.3,
+        stream: false,
+        max_tokens: 1500,
+      });
+
+      // Log response structure in dev for debugging
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[OpenAI] Validation response structure (Chat Completions):`, {
+          choicesLength: validation.choices?.length,
+          firstChoice: validation.choices?.[0],
+          finishReason: validation.choices?.[0]?.finish_reason,
+          rawContent: validation.choices?.[0]?.message?.content,
+        });
+      }
+
+      correctedQuery = validation.choices[0]?.message?.content?.trim() || "";
+    }
+
+    // Clean up any markdown code blocks
+    const cleanedCorrectedQuery = correctedQuery
+      .replace(/^```[\w]*\n?/g, "")
+      .replace(/```$/g, "")
+      .trim();
+
+    if (!cleanedCorrectedQuery) {
+      // If validation fails, return original query
+      console.warn(
+        `[OpenAI] Validation returned empty response, using original query`
+      );
+      if (process.env.NODE_ENV === "development") {
+        console.warn(`[OpenAI] Validation prompt length: ${validationPrompt.length} chars`);
+        console.warn(`[OpenAI] Raw validation response: "${correctedQuery}"`);
+      }
+      return generatedQuery;
+    }
+
+    // Validate length
+    if (cleanedCorrectedQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
+      console.warn(
+        `[OpenAI] Corrected query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters, using original`
+      );
+      return generatedQuery;
+    }
+
+    // Validate parentheses are balanced
+    const openParens = (cleanedCorrectedQuery.match(/\(/g) || []).length;
+    const closeParens = (cleanedCorrectedQuery.match(/\)/g) || []).length;
+    if (openParens !== closeParens) {
+      console.warn(
+        `[OpenAI] Corrected query has unbalanced parentheses, using original`
+      );
+      return generatedQuery;
+    }
+
+    if (process.env.NODE_ENV === "development") {
+      if (cleanedCorrectedQuery !== generatedQuery) {
+        console.log(
+          `[OpenAI] Query corrected: "${generatedQuery}" -> "${cleanedCorrectedQuery}"`
+        );
+      }
+    }
+
+    return cleanedCorrectedQuery;
+  } catch (error) {
+    // If validation fails, return original query
+    console.warn("[OpenAI] Validation failed, using original query:", error);
+    return generatedQuery;
+  }
+}
+
+/**
  * Converts natural language query to Scryfall query string using OpenAI
  */
 export async function convertToScryfallQuery(
@@ -141,23 +287,95 @@ export async function convertToScryfallQuery(
   }
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: OPENAI_MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 200,
-    });
+    const isGpt5 = OPENAI_MODEL.startsWith("gpt-5");
+    let query = "";
 
-    const query = completion.choices[0]?.message?.content?.trim() || "";
+    if (isGpt5) {
+      // Use Responses API for reasoning models (gpt-5-mini, gpt-5, etc.)
+      // Use "low" effort for economical token usage - this is a relatively simple conversion task
+      const completion = await openai.responses.create({
+        model: OPENAI_MODEL,
+        reasoning: {
+          effort: "low", // Low effort balances speed and cost efficiency for query conversion
+        },
+        input: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        max_output_tokens: 3000, // Reasonable limit: 388 char query + reasoning overhead
+      });
+
+      // Log response structure in dev for debugging
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[OpenAI] Response structure (Responses API):`, {
+          status: completion.status,
+          outputLength: completion.output?.length,
+          outputText: completion.output_text,
+          usage: completion.usage,
+          reasoningTokens: completion.usage?.output_tokens_details?.reasoning_tokens,
+        });
+      }
+
+      // Handle incomplete responses
+      if (completion.status === "incomplete") {
+        const reason = completion.incomplete_details?.reason;
+        if (reason === "max_output_tokens") {
+          if (completion.output_text && completion.output_text.length > 0) {
+            // Partial output available, use it
+            query = completion.output_text.trim();
+            console.warn(
+              `[OpenAI] Response incomplete due to max_output_tokens, using partial output`
+            );
+          } else {
+            // Ran out of tokens during reasoning, no output
+            throw new Error(
+              `Failed to generate Scryfall query: ran out of tokens during reasoning. Consider increasing max_output_tokens or simplifying the query.`
+            );
+          }
+        } else {
+          throw new Error(
+            `Failed to generate Scryfall query: incomplete response (reason: ${reason})`
+          );
+        }
+      } else {
+        query = completion.output_text?.trim() || "";
+      }
+    } else {
+      // Use Chat Completions API for non-reasoning models
+      const completion = await openai.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.3,
+        stream: false,
+        max_tokens: 1500,
+      });
+
+      // Log response structure in dev for debugging
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[OpenAI] Response structure (Chat Completions):`, {
+          choicesLength: completion.choices?.length,
+          firstChoice: completion.choices?.[0],
+          finishReason: completion.choices?.[0]?.finish_reason,
+        });
+      }
+
+      query = completion.choices[0]?.message?.content?.trim() || "";
+    }
 
     // Clean up any markdown code blocks if the model adds them
     const cleanedQuery = query.replace(/^```[\w]*\n?/g, "").replace(/```$/g, "").trim();
 
     if (!cleanedQuery) {
-      throw new Error("Failed to generate Scryfall query");
+      const errorMsg = "Failed to generate Scryfall query (empty response)";
+      console.error(`[OpenAI] ${errorMsg}`, {
+        model: OPENAI_MODEL,
+        isGpt5,
+        rawQuery: query,
+      });
+      throw new Error(errorMsg);
     }
 
     // Validate parentheses are balanced
@@ -190,8 +408,44 @@ export async function convertToScryfallQuery(
       return truncateScryfallQuery(cleanedQuery, EFFECTIVE_MAX_QUERY_LENGTH);
     }
 
+    // Validate and correct the query by comparing it to the original user intent
+    // Skip validation on retries to avoid infinite loops
+    if (!isRetry) {
+      try {
+        // First, check for invalid tags
+        const invalidTags = await validateTaggerTags(cleanedQuery);
+        
+        const validatedQuery = await validateAndCorrectQuery(
+          naturalQuery,
+          cleanedQuery,
+          invalidTags
+        );
+        return validatedQuery;
+      } catch (validationError) {
+        // If validation fails, use the original query
+        console.warn(
+          "[OpenAI] Query validation failed, using original query:",
+          validationError
+        );
+        return cleanedQuery;
+      }
+    }
+
     return cleanedQuery;
   } catch (error) {
+    // Log detailed error information
+    if (process.env.NODE_ENV === "development") {
+      console.error("[OpenAI] API call error details:", {
+        model: OPENAI_MODEL,
+        isGpt5: OPENAI_MODEL.startsWith("gpt-5"),
+        error: error instanceof Error ? {
+          message: error.message,
+          name: error.name,
+          stack: error.stack,
+        } : error,
+      });
+    }
+
     // If it's a validation error (unbalanced parentheses) and we haven't retried yet, try regenerating once
     if (!isRetry && error instanceof Error && error.message.includes("unbalanced parentheses")) {
       console.warn("[OpenAI] Query had unbalanced parentheses, attempting regeneration...");
@@ -208,6 +462,12 @@ export async function convertToScryfallQuery(
         console.error("[OpenAI] Retry also failed:", retryError);
         throw error; // Throw original error
       }
+    }
+
+    // Re-throw API errors with more context
+    if (error instanceof Error) {
+      console.error("OpenAI API error:", error.message);
+      throw error;
     }
 
     console.error("OpenAI API error:", error);

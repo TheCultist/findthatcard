@@ -24,6 +24,7 @@ const BASE: PackDefinition = {
   rules: `Output: ONLY the query string. No markdown, quotes, or explanations. Max 388 chars (400 with "prefer:best " prefix).
 
 CRITICAL RULES:
+- COLOR ACCURACY: Match colors exactly. Blue=u, Red=r, Green=g, White=w, Black=b. "Mono blue" = c=u or id=u (NOT c=g or id=g). Double-check color mappings before outputting.
 - NO REDUNDANT COLOR NICKNAMES: When using id:/c: for colors, NEVER add the nickname as bare text. "Azorius blink" -> f:commander id:wu function:blink (NOT f:commander id:wu function:blink azorius).
 - NO STRAY WORDS: Use fielded tokens (id:, c:, t:, o:, art:) only. No bare words unless name text.
 - SIMPLICITY: Prefer single tags (art:zombie) over long OR lists unless explicitly requested.
@@ -32,6 +33,9 @@ CRITICAL RULES:
 - FUNCTION TAGS FIRST: Check available function tags before using o:. Multiple alternatives -> (function:x or function:y), NOT spaces.
 - NO REDUNDANT COMBINATIONS: If a function tag covers the concept, don't also add oracle text unless filtering by specific details (e.g., token size). "Cards that make tokens" -> function:token-creator (NOT function:token-creator o:token). "Cards that make 1/1 tokens" -> function:token-creator o:/1\\/1/ (use regex for sizes, escape slashes).
 - ART TAGS: Use art:/atag:/arttag: ONLY when explicitly requested.
+- TYPE VS TARGETING: Use t: only when the user wants the cards themselves to be that type. If the user wants cards that affect a creature type (e.g., "discount elementals", "destroy dragons"), use o:"elemental"/o:"dragon" and DO NOT add t: unless explicitly requested.
+- COST REDUCTION: For "discount"/"reduce cost", use oracle text with a mana-cost wildcard, e.g. o:/cost \\{[0-9X]+\\} less/ (NOT o:"cost reduction").
+- QUOTES: Any multiword search term must be quoted (e.g., a:"Kev Walker", o:"any target", name:"Lightning Bolt").
 - OR/Nesting: Alternatives MUST use OR, not spaces. t:fish or t:bird, t:legendary (t:goblin or t:elf).`,
   examples: [
     `Azorius blink for Commander -> f:commander id:wu function:blink (NOT f:commander id:wu function:blink azorius)`,
@@ -42,12 +46,17 @@ CRITICAL RULES:
 
 // Colors, Formats, Types module
 const PACK_COLORS_FORMAT_TYPES: PackDefinition = {
-  rules: `Colors: c:/color: (w,u,b,r,g,c,m). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity: (id:g="has", id=g="exactly"). Comparisons: c>=uw, id<=esper, c=2. Color nicknames -> id: only (Azorius=id:wu, Rakdos=id:br, Dimir=id:ub, Boros=id:rw, Gruul=id:rg, Selesnya=id:gw, Orzhov=id:wb, Izzet=id:ur, Golgari=id:bg, Simic=id:gu).
+  rules: `Colors: c:/color: (w=white, u=blue, b=black, r=red, g=green, c=colorless, m=multicolor). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity: (id:g="has", id=g="exactly"). For Commander format, use id: for color identity. "Mono [color]" means exactly that color: mono blue = c=u or id=u, mono red = c=r or id=r, mono green = c=g or id=g, mono white = c=w or id=w, mono black = c=b or id=b.
+Comparisons: c>=uw, id<=esper, c=2. Color nicknames -> id: only (Azorius=id:wu, Rakdos=id:br, Dimir=id:ub, Boros=id:rw, Gruul=id:rg, Selesnya=id:gw, Orzhov=id:wb, Izzet=id:ur, Golgari=id:bg, Simic=id:gu).
 Types: t:/type: (partial words: t:merfolk).
 Formats: f:/format: (standard, modern, legacy, commander, pauper). Commander: is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner.
 Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -is:reprint).`,
   examples: [
     `Blue mv 5 -> c:u mv=5`,
+    `Mono blue -> c=u`,
+    `Mono blue counters in commander -> f:commander id=u function:counters-matter`,
+    `Mono red removal -> c=r function:removal`,
+    `Mono green ramp -> c=g function:ramp`,
     `Boros cards -> id:rw`,
     `Dimir commanders -> f:commander id:ub`,
     `Rakdos sacrifice synergies -> f:commander id:br (oracletag:"sacrifice outlet" or oracletag:"sacrifice payoff")`,
@@ -56,13 +65,16 @@ Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -
 
 // Function tags module
 const PACK_FUNCTION_TAGS: PackDefinition = {
-  rules: `Function tags: function:/oracletag:/otag: for card functions (removal, ramp, tutor, counterspell, board-wipe, token-creator, treasure-creator, clue-creator, food-creator, sacrifice-outlet, sacrifice-payoff, lifegain, lifegain-matters, mill, synergy, package, etc.).
-CRITICAL: Check function tags FIRST before using o:. If uncertain tag exists, use o: as fallback. Multiple alternatives -> (function:x or function:y), NOT spaces.`,
+  rules: `Function tags: function:/oracletag:/otag: for card functions (removal, ramp, tutor, counterspell, board-wipe, token-creator, treasure-creator, clue-creator, food-creator, sacrifice-outlet, sacrifice-payoff, lifegain, lifegain-matters, mill, synergy, package, counters-matter, etc.).
+CRITICAL: Check function tags FIRST before using o:. If uncertain tag exists, use o: as fallback. Multiple alternatives -> (function:x or function:y), NOT spaces.
+"Counters" can mean counterspells (function:counterspell) or +1/+1 counters (function:counters-matter) - choose based on context. "Mono" is NOT a function tag - it refers to mono-color (single color).`,
   examples: [
     `Removal for Commander -> f:commander function:removal`,
     `Ramp cards -> function:ramp`,
+    `Counterspells -> function:counterspell`,
     `Cards that make tokens -> function:token-creator`,
     `Cards that make 1/1 tokens -> function:token-creator o:/1\\/1/`,
+    `Cards that reduce the cost of Elementals -> (function:discount-self or function:discount-tap-creature) o:elemental`,
     `Draw cards -> o:"draw" (no function tag for generic draw)`,
   ],
 };
@@ -169,16 +181,17 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
   // COLORS_FORMAT_TYPES: commander/edh, formats, guild/color words, card types, negation
   if (
     /\b(commander|edh|brawl|standard|modern|legacy|pauper|vintage|format)\b/.test(query) ||
-    /\b(azorius|rakdos|dimir|boros|gruul|selesnya|orzhov|izzet|golgari|simic|esper|grixis|jund|naya|bant|abzan|jeskai|sultai|mardu|temur|wubrg|color|colors|colour|colours|guild)\b/.test(query) ||
+    /\b(azorius|rakdos|dimir|boros|gruul|selesnya|orzhov|izzet|golgari|simic|esper|grixis|jund|naya|bant|abzan|jeskai|sultai|mardu|temur|wubrg|color|colors|colour|colours|guild|mono|monocolor|monocolored)\b/.test(query) ||
+    /\b(white|blue|black|red|green|colorless|multicolor)\b/.test(query) ||
     /\b(creature|creatures|instant|instants|sorcery|sorceries|enchantment|enchantments|artifact|artifacts|planeswalker|planeswalkers|land|lands|tribal|legendary)\b/.test(query) ||
     /\b(not|without|no|excluding|except)\b/.test(query)
   ) {
     selected.add("COLORS_FORMAT_TYPES");
   }
 
-  // FUNCTION_TAGS: removal, ramp, tutor, counterspell, board wipe, token, treasure, clue, food, sacrifice, lifegain, mill, synergy, package
+  // FUNCTION_TAGS: removal, ramp, tutor, counterspell, board wipe, token, treasure, clue, food, sacrifice, lifegain, mill, synergy, package, discount
   if (
-    /\b(removal|ramp|tutor|counterspell|counter spell|board wipe|boardwipe|wipes|token|tokens|treasure|treasures|clue|clues|food|sacrifice|sacrificing|lifegain|life gain|mill|milling|synergy|synergies|package|packages|draw|drawing|card advantage)\b/.test(query)
+    /\b(removal|ramp|tutor|counterspell|counter spell|counters|board wipe|boardwipe|wipes|token|tokens|treasure|treasures|clue|clues|food|sacrifice|sacrificing|lifegain|life gain|mill|milling|synergy|synergies|package|packages|draw|drawing|card advantage|discount|discounts|discounted|reduce cost|reduces cost|reduced cost|cost reduction|cost reducer|cost reducers|cost reducing|cost less|costs less|cheaper|less to cast)\b/.test(query)
   ) {
     selected.add("FUNCTION_TAGS");
   }

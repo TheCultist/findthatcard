@@ -93,7 +93,7 @@ export default function PrivacyPage() {
           <section>
             <h2 className="text-2xl font-semibold text-gray-100 mb-3">Contact</h2>
             <p className="text-sm leading-relaxed">
-              If you have questions about this privacy policy, please contact us through the appropriate channels.
+              If you have questions about this privacy policy, please contact us at findthatcard@thecultist.it.
             </p>
           </section>
         </div>

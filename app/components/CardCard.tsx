@@ -1,12 +1,50 @@
 "use client";
 
 import { CardResult } from "@/types/scryfall";
-import { getCardTraderLink } from "@/lib/cardtrader/links";
+import { getCardTraderLink, getCardTraderHomepageLink } from "@/lib/cardtrader/links";
 import ManaCost from "@/app/components/ManaCost";
+import { useState } from "react";
 
 export default function CardCard({ card }: { card: CardResult }) {
+  const [isCheckingLink, setIsCheckingLink] = useState(false);
+
   const handleClick = () => {
     window.open(card.scryfall_uri, "_blank", "noopener,noreferrer");
+  };
+
+  const handleCardTraderClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    const cardtraderUrl = getCardTraderLink(
+      card.name,
+      card.set_name,
+      card.set_code,
+      card.collector_number
+    );
+
+    // Check if link is 404
+    setIsCheckingLink(true);
+    try {
+      const response = await fetch(`/api/check-link?url=${encodeURIComponent(cardtraderUrl)}`);
+      const data = await response.json();
+
+      if (data.is404) {
+        // Redirect to CardTrader homepage with share code
+        const homepageUrl = getCardTraderHomepageLink();
+        window.open(homepageUrl, "_blank", "noopener,noreferrer");
+      } else {
+        // Link is valid, open it
+        window.open(cardtraderUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (error) {
+      // On error, assume 404 and redirect to homepage
+      console.error("[CardCard] Error checking CardTrader link:", error);
+      const homepageUrl = getCardTraderHomepageLink();
+      window.open(homepageUrl, "_blank", "noopener,noreferrer");
+    } finally {
+      setIsCheckingLink(false);
+    }
   };
 
   return (
@@ -63,10 +101,11 @@ export default function CardCard({ card }: { card: CardResult }) {
         )}
         target="_blank"
         rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        className="block rounded border border-gray-700 bg-gray-800/50 p-3 text-center text-xs text-gray-400 transition-colors hover:border-blue-600 hover:bg-gray-800 hover:text-blue-400"
+        onClick={handleCardTraderClick}
+        className="block rounded border border-gray-700 bg-gray-800/50 p-3 text-center text-xs text-gray-400 transition-colors hover:border-blue-600 hover:bg-gray-800 hover:text-blue-400 disabled:opacity-50 disabled:cursor-wait"
+        aria-disabled={isCheckingLink}
       >
-        Buy on CardTrader
+        {isCheckingLink ? "Checking..." : "Buy on CardTrader"}
       </a>
     </div>
   );
