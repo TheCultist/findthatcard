@@ -166,8 +166,6 @@ export async function getTaggerTagContext(
       .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
       .slice(0, maxPerType)
       .map((entry) => entry.tag);
-
-    return scored;
   };
 
   return {
