@@ -28,6 +28,7 @@ Generated query: "${generatedQuery}"${invalidTagsSection}
 CRITICAL RULES:
 - "f:" is FORMAT (f:commander, f:modern, f:legacy), NOT function tags. Function tags use "function:", "otag:", or "oracletag:".
 - NEVER use non-existent tags. If a tag doesn't exist, use oracle text (o:) instead.
+- Keyword abilities MUST use kw:/keyword: (e.g., kw:surveil, kw:flying). Do NOT replace kw: with o:.
 - Check: Missing requirements? Extra filters? Overly broad function tags? Incorrect colors/types? Syntax errors?
 - Function tags must exist in the Tagger system. If uncertain, use oracle text (o:) as fallback.
 - Preserve valid function tags; do NOT replace them with o: unless they are invalid or clearly wrong.
@@ -41,6 +42,7 @@ Examples:
 - "put lands into play" -> function:play-additional-land, function:conjure-land, or function:create-land-tokens (NOT function:cheat-into-play - too broad)
 - "cards that deal damage" -> o:damage (NOT f:damage - f: is format!)
 - "cards that deal damage to any target" -> o:"damage" o:"any target" (if no function tag exists)
+- "cards with surveil" -> kw:surveil (NOT o:surveil)
 
 Output ONLY the Scryfall query string (max 388 chars). If correct, output it as-is. If wrong, output corrected version. No explanations:`;
 }

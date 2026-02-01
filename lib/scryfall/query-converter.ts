@@ -62,6 +62,8 @@ export function isScryfallQuery(query: string): boolean {
     "loyalty:",
     "oracle:",
     "o:",
+    "kw:",
+    "keyword:",
     "art:",
     "atag:",
     "arttag:",
