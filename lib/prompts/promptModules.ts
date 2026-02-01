@@ -69,7 +69,8 @@ const PACK_FUNCTION_TAGS: PackDefinition = {
   rules: `Function tags: function:/oracletag:/otag: for card functions (removal, ramp, tutor, counterspell, board-wipe, token-creator, treasure-creator, clue-creator, food-creator, sacrifice-outlet, sacrifice-payoff, lifegain, lifegain-matters, mill, synergy, package, counters-matter, etc.).
 CRITICAL: Check function tags FIRST before using o:. If uncertain tag exists, use o: as fallback. Multiple alternatives -> (function:x or function:y), NOT spaces.
 Keep it minimal: Use ONE function tag unless the user explicitly requests multiple distinct functions. Do NOT stack many related counter tags together.
-"Counters" can mean counterspells (function:counterspell) or +1/+1 counters (function:counters-matter) - choose based on context. "Mono" is NOT a function tag - it refers to mono-color (single color).`,
+"Counters" can mean counterspells (function:counterspell) or +1/+1 counters (function:counters-matter) - choose based on context. "Mono" is NOT a function tag - it refers to mono-color (single color).
+For numeric mana value/cmc filters, use mv:/manavalue: (e.g., mv=4). Only use function:mana-value-matters when the query explicitly asks about mana value being a theme.`,
   examples: [
     `Removal for Commander -> f:commander function:removal`,
     `Ramp cards -> function:ramp`,
@@ -95,11 +96,12 @@ CRITICAL: Use ONLY when explicitly requested. Quote multiword tags: art:"dragon 
 
 // Keywords module
 const PACK_KEYWORDS: PackDefinition = {
-  rules: `Keywords: kw:/keyword: for keyword abilities (flying, trample, vigilance, lifelink, haste, deathtouch, hexproof, etc.).`,
+  rules: `Keywords: kw:/keyword: for keyword abilities (flying, trample, vigilance, lifelink, haste, deathtouch, hexproof, ward, etc.).`,
   examples: [
     `Vigilance and lifelink -> kw:vigilance kw:lifelink`,
     `Flying creatures -> t:creature kw:flying`,
     `Cards with trample -> kw:trample`,
+    `Cards with ward -> kw:ward`,
   ],
 };
 
@@ -157,6 +159,7 @@ const PACK_ADVANCED: PackDefinition = {
     `Reserved List -> is:reserved`,
     `Banned in Legacy -> banned:legacy`,
     `Blue mv 5 -> c:u mv=5`,
+    `Board wipes with mana value 4 -> function:board-wipe mv=4`,
   ],
 };
 
