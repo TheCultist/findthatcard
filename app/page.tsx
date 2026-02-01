@@ -8,6 +8,7 @@ import CookieBanner from "./components/CookieBanner";
 import { fetchSymbolData } from "@/lib/scryfall/symbols";
 import useAdBlockDetection from "@/app/hooks/useAdBlockDetection";
 import CardCard from "@/app/components/CardCard";
+import AdBanner from "@/app/components/AdBanner";
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -139,9 +140,6 @@ export default function Home() {
           </h1>
           <p className="text-lg text-gray-400">
             Search Magic: The Gathering cards using natural language.
-            <span className="ml-1 text-sm text-gray-500">
-              Supports art/function tags too
-            </span>
           </p>
         </div>
 
@@ -196,9 +194,7 @@ export default function Home() {
               </p>
             </div>
           ) : (
-            <div className="flex h-24 w-full max-w-2xl items-center justify-center rounded-lg border border-dashed border-gray-800 bg-gray-900/50 text-sm text-gray-600">
-              Ad space
-            </div>
+            <AdBanner slot="4024965634" className="w-full max-w-2xl" />
           )}
         </div>
 
@@ -292,9 +288,7 @@ export default function Home() {
                       if (cardCount >= 30 && index === 19) {
                         items.push(
                           <div key={`ad-20`} className="col-span-full my-4">
-                            <div className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed border-gray-800 bg-gray-900/50 text-sm text-gray-600">
-                              Ad banner
-                            </div>
+                            <AdBanner slot="1553106733" className="w-full" />
                           </div>
                         );
                       }
@@ -303,9 +297,7 @@ export default function Home() {
                       if (cardCount >= 50 && index === 39) {
                         items.push(
                           <div key={`ad-40`} className="col-span-full my-4">
-                            <div className="flex h-24 w-full items-center justify-center rounded-lg border border-dashed border-gray-800 bg-gray-900/50 text-sm text-gray-600">
-                              Ad banner
-                            </div>
+                            <AdBanner slot="1553106733" className="w-full" />
                           </div>
                         );
                       }

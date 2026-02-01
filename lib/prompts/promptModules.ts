@@ -33,6 +33,7 @@ CRITICAL RULES:
 - FUNCTION TAGS FIRST: Check available function tags before using o:. Multiple alternatives -> (function:x or function:y), NOT spaces.
 - NO REDUNDANT COMBINATIONS: If a function tag covers the concept, don't also add oracle text unless filtering by specific details (e.g., token size). "Cards that make tokens" -> function:token-creator (NOT function:token-creator o:token). "Cards that make 1/1 tokens" -> function:token-creator o:/1\\/1/ (use regex for sizes, escape slashes).
 - ART TAGS: Use art:/atag:/arttag: ONLY when explicitly requested.
+- TAG LIMIT: For any single purpose (art, function, keyword, type), use at most 3 related tags; if more are needed, simplify to the most representative ones.
 - TYPE VS TARGETING: Use t: only when the user wants the cards themselves to be that type. If the user wants cards that affect a creature type (e.g., "discount elementals", "destroy dragons"), use o:"elemental"/o:"dragon" and DO NOT add t: unless explicitly requested.
 - COST REDUCTION: For "discount"/"reduce cost", use oracle text with a mana-cost wildcard, e.g. o:/cost \\{[0-9X]+\\} less/ (NOT o:"cost reduction").
 - QUOTES: Any multiword search term must be quoted (e.g., a:"Kev Walker", o:"any target", name:"Lightning Bolt").

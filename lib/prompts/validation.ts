@@ -1,6 +1,6 @@
 /**
- * Validation prompt for query correction
- * Used to validate and correct generated Scryfall queries against user intent
+ * Validation prompt for query correction.
+ * NOTE: Currently unused; kept for possible future use.
  */
 
 /**
@@ -19,7 +19,7 @@ export function buildValidationPrompt(
     const invalidTagsList = invalidTags
       .map(({ type, tag }) => `${type}:${tag}`)
       .join(", ");
-    invalidTagsSection = `\n\nCRITICAL: The following tags DO NOT EXIST and MUST be removed or replaced:\n${invalidTagsList}\n\nIf a function tag doesn't exist, use oracle text (o:) instead. If an art tag doesn't exist, remove it or use a valid alternative.`;
+    invalidTagsSection = `\n\nCRITICAL: The following tags DO NOT EXIST and MUST be removed or replaced:\n${invalidTagsList}\n\nIf a function tag doesn't exist, use oracle text (o:) instead. If an art tag doesn't exist, replace it with a valid art tag if possible (e.g., remove "-art", singularize/pluralize), otherwise remove it. Do NOT replace art intent with o:.`;
   }
 
   return `User request: "${naturalQuery}"
@@ -27,8 +27,10 @@ Generated query: "${generatedQuery}"${invalidTagsSection}
 
 CRITICAL RULES:
 - "f:" is FORMAT (f:commander, f:modern, f:legacy), NOT function tags. Function tags use "function:", "otag:", or "oracletag:".
-- NEVER use non-existent tags. If a tag doesn't exist, use oracle text (o:) instead.
+- NEVER use non-existent tags. If a FUNCTION tag doesn't exist, use oracle text (o:) instead. For ART tags, fix to a valid art tag or remove it (never replace art intent with o:).
 - Keyword abilities MUST use kw:/keyword: (e.g., kw:surveil, kw:flying). Do NOT replace kw: with o:.
+- Art intent MUST use art:/atag:/arttag: (e.g., art:demon, art:"dragon rider"). Do NOT replace art filters with o:.
+- If an art tag is invalid, fix it to a valid art tag (e.g., art:fire-art -> art:fire). Only drop the art tag if no valid alternative exists.
 - Check: Missing requirements? Extra filters? Overly broad function tags? Incorrect colors/types? Syntax errors?
 - Function tags must exist in the Tagger system. If uncertain, use oracle text (o:) as fallback.
 - Preserve valid function tags; do NOT replace them with o: unless they are invalid or clearly wrong.
