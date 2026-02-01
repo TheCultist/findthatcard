@@ -53,6 +53,16 @@ function extractTaggerKeywords(naturalQuery: string): string[] {
   const words = naturalQuery.toLowerCase().match(/[a-z0-9-]+/g) || [];
   const keywords = new Set<string>();
 
+  const normalized = naturalQuery.toLowerCase();
+  if (/\+1\s*\/\s*\+1/.test(normalized)) {
+    // Tagger uses "pp" for +1/+1 counter tags.
+    keywords.add("pp");
+  }
+  if (/-1\s*\/\s*-1/.test(normalized)) {
+    // Tagger uses "mm" for -1/-1 counter tags.
+    keywords.add("mm");
+  }
+
   for (const word of words) {
     if (word.length < 3 || stopwords.has(word)) {
       continue;
@@ -142,7 +152,17 @@ export async function getTaggerTagContext(
         return true;
       })
       .map((tag) => ({ tag, score: scoreTagMatch(tag, keywords) }))
-      .filter((entry) => entry.score > 0)
+      .filter((entry) => entry.score > 0);
+
+    if (scored.length === 0) {
+      return [];
+    }
+
+    const maxScore = scored.reduce((max, entry) => Math.max(max, entry.score), 0);
+    const minScore = maxScore >= 3 ? maxScore - 1 : 1;
+
+    return scored
+      .filter((entry) => entry.score >= minScore)
       .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
       .slice(0, maxPerType)
       .map((entry) => entry.tag);

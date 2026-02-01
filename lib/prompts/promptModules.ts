@@ -67,6 +67,7 @@ Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -
 const PACK_FUNCTION_TAGS: PackDefinition = {
   rules: `Function tags: function:/oracletag:/otag: for card functions (removal, ramp, tutor, counterspell, board-wipe, token-creator, treasure-creator, clue-creator, food-creator, sacrifice-outlet, sacrifice-payoff, lifegain, lifegain-matters, mill, synergy, package, counters-matter, etc.).
 CRITICAL: Check function tags FIRST before using o:. If uncertain tag exists, use o: as fallback. Multiple alternatives -> (function:x or function:y), NOT spaces.
+Keep it minimal: Use ONE function tag unless the user explicitly requests multiple distinct functions. Do NOT stack many related counter tags together.
 "Counters" can mean counterspells (function:counterspell) or +1/+1 counters (function:counters-matter) - choose based on context. "Mono" is NOT a function tag - it refers to mono-color (single color).`,
   examples: [
     `Removal for Commander -> f:commander function:removal`,
@@ -75,6 +76,7 @@ CRITICAL: Check function tags FIRST before using o:. If uncertain tag exists, us
     `Cards that make tokens -> function:token-creator`,
     `Cards that make 1/1 tokens -> function:token-creator o:/1\\/1/`,
     `Cards that reduce the cost of Elementals -> (function:discount-self or function:discount-tap-creature) o:elemental`,
+    `Selesnya cards that create +1/+1 counters for Commander -> f:commander id:gw function:gives-pp-counters`,
     `Draw cards -> o:"draw" (no function tag for generic draw)`,
   ],
 };

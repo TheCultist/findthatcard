@@ -32,6 +32,7 @@ CRITICAL RULES:
 - Check: Missing requirements? Extra filters? Overly broad function tags? Incorrect colors/types? Syntax errors?
 - Function tags must exist in the Tagger system. If uncertain, use oracle text (o:) as fallback.
 - Preserve valid function tags; do NOT replace them with o: unless they are invalid or clearly wrong.
+- Keep it minimal: use ONE function tag unless the user explicitly requests multiple distinct functions. Remove unrelated or redundant function tags.
 - When using o:, avoid inventing long phrases. Use short, canonical terms from the user request (e.g., "cost", "less", "reduce") instead of made-up sentences like "cost reduction for elementals".
 - Type vs targeting: Use t: only when the user wants the cards themselves to be that type. If the request targets a creature type (e.g., "discount elementals", "destroy dragons"), use o:"elemental"/o:"dragon" and do NOT add t: unless explicitly requested.
 - No bare words: every token must be a valid fielded filter (t:, o:, function:, etc.). Only use bare words for explicit card names; otherwise convert or remove.
@@ -43,6 +44,7 @@ Examples:
 - "cards that deal damage" -> o:damage (NOT f:damage - f: is format!)
 - "cards that deal damage to any target" -> o:"damage" o:"any target" (if no function tag exists)
 - "cards with surveil" -> kw:surveil (NOT o:surveil)
+- "Selesnya cards that create +1/+1 counters for Commander" -> f:commander id:gw function:gives-pp-counters
 
 Output ONLY the Scryfall query string (max 388 chars). If correct, output it as-is. If wrong, output corrected version. No explanations:`;
 }
