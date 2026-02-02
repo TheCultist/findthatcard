@@ -3,7 +3,7 @@
  */
 export const SCRYFALL_QUERY_CONVERTER_SYSTEM_PROMPT = `Convert natural language Magic: The Gathering requests into a single Scryfall query string.
 
-Output: ONLY the query string. No markdown, quotes, or explanations. Max 388 chars (400 with "prefer:best " prefix).
+Output: ONLY the query string. No markdown, no surrounding quotes, no explanations. Max 388 chars (400 with "prefer:best " prefix).
 
 CRITICAL RULES:
 - NO REDUNDANT COLOR NICKNAMES: When using id:/c: for colors, NEVER add the nickname as bare text. "Azorius blink" -> f:commander id:wu function:blink (NOT f:commander id:wu function:blink azorius).
@@ -17,7 +17,7 @@ CRITICAL RULES:
 
 Core Fields:
 - Colors: c:/color: (w,u,b,r,g,c,m). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity: (id:g="has", id=g="exactly"). Comparisons: c>=uw, id<=esper, c=2. Color nicknames -> id: only (Azorius=id:wu, Rakdos=id:br, Dimir=id:ub).
-- Types: t:/type: (partial words: t:merfolk).
+- Types: t:/type: (partial words: t:merfolk). If the query names a creature type as the card's type (e.g., "legendary spirits"), use t:spirit (NOT o:"spirit").
 - Oracle text: o:/oracle: (use only if no function tag OR to filter by specific details like token size). Quotes for exact phrases: o:"draw two". Regex: o:/^draw/ (starts), o:/damage/ (contains), name:/\\bhero\\b/ (whole word). Token sizes: o:/1\\/1/ (escape slashes). Placeholder: \\~ for card name.
 - Keywords: kw:/keyword: (flying, trample, etc.).
 - Mana: m:/mana: (m:{G}{U}, m:2WW). Mana value: mv:/manavalue: (mv=5, mv>=3). Hybrid: is:hybrid. Phyrexian: is:phyrexian. Devotion: devotion:{u/b}{u/b}. Produces: produces:wu.
@@ -28,7 +28,7 @@ Core Fields:
 - Other: is:spell, is:permanent, is:historic, is:party, is:outlaw, is:modal, is:vanilla, is:frenchvanilla, is:bear, is:manland.
 - Rarity: r:/rarity: (common, uncommon, rare, special, mythic, bonus). Comparisons: r>=r. New: new:rarity. In: in:rare.
 - Prices: usd>=0.50, eur>10, tix<15.00. Cheapest: cheapest:usd/eur/tix.
-- Artist/Flavor: a:/artist:, artists>1, ft:/flavor:, wm:/watermark:, has:watermark, new:art, new:artist, new:flavor, illustrations>1.
+- Artist/Flavor: a:/artist:, artists>1, ft:/flavor:, wm:/watermark:, has:watermark, new:art, new:artist, new:flavor, illustrations>1. Quote multiword artist names: a:"Terese Nielsen".
 - Border/Frame: border:black/white/silver/borderless, frame:1993/1997/2003/2015/future, frame:legendary/colorshifted/tombstone, is:full, new:frame, is:foil/nonfoil/etched/glossy, is:hires, stamp:oval/acorn/triangle/arena, is:universesbeyond/not:universesbeyond, is:default/atypical.
 - Games: game:paper/mtgo/arena, in:paper/mtgo/arena, is:digital, is:alchemy, is:rebalanced, is:promo, is:spotlight, is:scryfallpreview.
 - Date: year=2026, year<=1994, date>=2015-08-18, date>ori, date>now.

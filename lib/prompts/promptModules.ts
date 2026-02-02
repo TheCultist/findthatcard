@@ -21,7 +21,7 @@ type PackDefinition = {
 
 // Base module - always included
 const BASE: PackDefinition = {
-  rules: `Output: ONLY the query string. No markdown, quotes, or explanations. Max 388 chars (400 with "prefer:best " prefix).
+  rules: `Output: ONLY the query string. No markdown, no surrounding quotes, no explanations. Max 388 chars (400 with "prefer:best " prefix).
 
 CRITICAL RULES:
 - COLOR ACCURACY: Match colors exactly. Blue=u, Red=r, Green=g, White=w, Black=b. "Mono blue" = c=u or id=u (NOT c=g or id=g). Double-check color mappings before outputting.
@@ -49,7 +49,7 @@ CRITICAL RULES:
 const PACK_COLORS_FORMAT_TYPES: PackDefinition = {
   rules: `Colors: c:/color: (w=white, u=blue, b=black, r=red, g=green, c=colorless, m=multicolor). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity: (id:g="has", id=g="exactly"). For Commander format, use id: for color identity. "Mono [color]" means exactly that color: mono blue = c=u or id=u, mono red = c=r or id=r, mono green = c=g or id=g, mono white = c=w or id=w, mono black = c=b or id=b.
 Comparisons: c>=uw, id<=esper, c=2. Color nicknames -> id: only (Azorius=id:wu, Rakdos=id:br, Dimir=id:ub, Boros=id:rw, Gruul=id:rg, Selesnya=id:gw, Orzhov=id:wb, Izzet=id:ur, Golgari=id:bg, Simic=id:gu).
-Types: t:/type: (partial words: t:merfolk).
+Types: t:/type: (partial words: t:merfolk). If the query names a creature type as the card's type (e.g., "legendary spirits"), use t:spirit (NOT o:"spirit").
 Formats: f:/format: (standard, modern, legacy, commander, pauper). Commander: is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner.
 Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -is:reprint).`,
   examples: [
@@ -61,6 +61,7 @@ Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -
     `Boros cards -> id:rw`,
     `Dimir commanders -> f:commander id:ub`,
     `Rakdos sacrifice synergies -> f:commander id:br (oracletag:"sacrifice outlet" or oracletag:"sacrifice payoff")`,
+    `Red legendary spirits -> c:r t:legendary t:spirit`,
   ],
 };
 
@@ -107,11 +108,11 @@ const PACK_KEYWORDS: PackDefinition = {
 
 // Artist module
 const PACK_ARTIST: PackDefinition = {
-  rules: `Artist: a:/artist: for illustrator names. NEVER use art: for artists.`,
+  rules: `Artist: a:/artist: for illustrator names. NEVER use art: for artists. Quote multiword artist names: a:"Terese Nielsen".`,
   examples: [
-    `Illustrated by Paolo Parente -> a:Paolo Parente`,
-    `Art by Rebecca Guay -> artist:Rebecca Guay`,
-    `Drawn by John Avon -> a:John Avon`,
+    `Illustrated by Paolo Parente -> a:"Paolo Parente"`,
+    `Art by Rebecca Guay -> artist:"Rebecca Guay"`,
+    `Drawn by John Avon -> a:"John Avon"`,
   ],
 };
 
