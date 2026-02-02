@@ -4,6 +4,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Find That Card",
   description: "Search Magic: The Gathering cards using natural language. Supports art and function tags from Scryfall Tagger.",
+  icons: {
+    icon: "/brand/cardicon.svg",
+    shortcut: "/brand/cardicon.svg",
+    apple: "/brand/cardicon.svg",
+  },
 };
 
 export default function RootLayout({
