@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import SearchPage from "@/app/components/SearchPage";
 
 type SearchPageProps = {
@@ -30,5 +31,9 @@ export function generateMetadata({ searchParams }: SearchPageProps): Metadata {
 }
 
 export default function SearchIndexPage() {
-  return <SearchPage />;
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-black" />}>
+      <SearchPage />
+    </Suspense>
+  );
 }
