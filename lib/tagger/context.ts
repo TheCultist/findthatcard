@@ -252,16 +252,6 @@ export async function getTaggerTagContext(
       return [];
     }
 
-    const exactMatches = scored.filter((entry) =>
-      scopedKeywords.some((keyword) => entry.tag.toLowerCase() === keyword.toLowerCase())
-    );
-    if (exactMatches.length > 0) {
-      return exactMatches
-        .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
-        .slice(0, maxPerType)
-        .map((entry) => entry.tag);
-    }
-
     let filtered = scored;
     if (type === "function") {
       const withoutCycles = filtered.filter(
@@ -271,23 +261,32 @@ export async function getTaggerTagContext(
         filtered = withoutCycles;
       }
 
-      const minHyphens = filtered.reduce((min, entry) => {
-        const hyphens = entry.tag.split("-").length - 1;
-        return Math.min(min, hyphens);
-      }, Number.POSITIVE_INFINITY);
-      const simplest = filtered.filter(
-        (entry) => entry.tag.split("-").length - 1 === minHyphens
-      );
-      if (simplest.length > 0) {
-        filtered = simplest;
-      }
+      // Keep more specific tags when their scores are higher; do not auto-filter by hyphen count.
     }
 
     const maxScore = filtered.reduce((max, entry) => Math.max(max, entry.score), 0);
     const minScore = maxScore >= 3 ? maxScore - 1 : 1;
 
-    return filtered
-      .filter((entry) => entry.score >= minScore)
+    let ranked = filtered.filter((entry) => entry.score >= minScore);
+
+    if (type === "function") {
+      ranked = ranked.filter((entry) => {
+        const token = entry.tag.toLowerCase();
+        if (token.includes("-")) {
+          return true;
+        }
+        return !ranked.some(
+          (other) =>
+            other.score > entry.score &&
+            other.tag
+              .toLowerCase()
+              .split(/[^a-z0-9]+/)
+              .includes(token)
+        );
+      });
+    }
+
+    return ranked
       .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
       .slice(0, maxPerType)
       .map((entry) => entry.tag);

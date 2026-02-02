@@ -43,6 +43,63 @@ function normalizeFormatFunctionTags(query: string): string {
   }, query);
 }
 
+function pickLandTutorTag(
+  naturalQuery: string,
+  tagContext?: TaggerTagContext
+): string | null {
+  if (!tagContext?.function || tagContext.function.length === 0) {
+    return null;
+  }
+
+  const query = naturalQuery.toLowerCase();
+  if (!/\btutor\b/.test(query) || !/\blands?\b/.test(query)) {
+    return null;
+  }
+
+  const candidates = tagContext.function.filter((tag) => {
+    const lower = tag.toLowerCase();
+    return lower.includes("tutor") && lower.includes("land");
+  });
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const landTypes = ["forest", "island", "mountain", "plains", "swamp", "gate", "desert", "cave"];
+  const keywords = [
+    { word: "basic", weight: 2 },
+    { word: "any", weight: 1 },
+    { word: "snow", weight: 1 },
+  ];
+
+  let bestLand = candidates[0];
+  let bestScore = -1;
+
+  for (const tag of candidates) {
+    const lower = tag.toLowerCase();
+    let score = 0;
+
+    for (const entry of keywords) {
+      if (query.includes(entry.word) && lower.includes(entry.word)) {
+        score += entry.weight;
+      }
+    }
+
+    for (const landType of landTypes) {
+      if (query.includes(landType) && lower.includes(landType)) {
+        score += 2;
+      }
+    }
+
+    if (score > bestScore || (score === bestScore && tag.length < bestLand.length)) {
+      bestLand = tag;
+      bestScore = score;
+    }
+  }
+
+  return bestLand;
+}
+
 function buildStrategyCandidates(): string[] {
   const candidates: string[] = [];
   for (const entry of STRATEGY_ORACLETAGS) {
@@ -306,7 +363,53 @@ export async function convertToScryfallQuery(
     const cleanedQuery = query.replace(/^```[\w]*\n?/g, "").replace(/```$/g, "").trim();
     const queryWithStrategies = appendStrategyTags(cleanedQuery, naturalQuery);
     const expandedQuery = expandStrategyTags(queryWithStrategies);
-    const normalizedQuery = normalizeFormatFunctionTags(expandedQuery);
+    let normalizedQuery = normalizeFormatFunctionTags(expandedQuery);
+
+    const landTutorTag = pickLandTutorTag(naturalQuery, tagContext);
+    if (landTutorTag) {
+      if (/\bfunction:tutor\b(?!-)/i.test(normalizedQuery)) {
+        normalizedQuery = normalizedQuery.replace(
+          /\bfunction:tutor\b(?!-)/gi,
+          `function:${landTutorTag}`
+        );
+      }
+
+      const toHandTag =
+        tagContext?.function.find((tag) => tag === "tutor-to-hand") ||
+        tagContext?.function.find((tag) => tag === "tutor-hand");
+      const toBattlefieldTag = tagContext?.function.find(
+        (tag) => tag === "tutor-to-battlefield"
+      );
+
+      const wantsHand = /\bhand\b/i.test(naturalQuery);
+      const wantsBattlefield = /\b(battlefield|into play|onto the battlefield)\b/i.test(
+        naturalQuery
+      );
+      const hasOr = /\bor\b/i.test(normalizedQuery);
+
+      if (wantsHand && toHandTag) {
+        const hasLandTag = new RegExp(`\\bfunction:${landTutorTag}\\b`, "i").test(
+          normalizedQuery
+        );
+        const hasToHandTag = new RegExp(`\\bfunction:${toHandTag}\\b`, "i").test(
+          normalizedQuery
+        );
+        if (hasOr || !hasLandTag || !hasToHandTag) {
+          normalizedQuery = `${normalizedQuery} function:${landTutorTag} function:${toHandTag}`.trim();
+        }
+      } else if (wantsBattlefield && toBattlefieldTag) {
+        const hasLandTag = new RegExp(`\\bfunction:${landTutorTag}\\b`, "i").test(
+          normalizedQuery
+        );
+        const hasToBattlefieldTag = new RegExp(
+          `\\bfunction:${toBattlefieldTag}\\b`,
+          "i"
+        ).test(normalizedQuery);
+        if (hasOr || !hasLandTag || !hasToBattlefieldTag) {
+          normalizedQuery = `${normalizedQuery} function:${landTutorTag} function:${toBattlefieldTag}`.trim();
+        }
+      }
+    }
 
     if (!normalizedQuery) {
       const errorMsg = "Failed to generate Scryfall query (empty response)";
