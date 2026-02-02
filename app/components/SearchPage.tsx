@@ -254,7 +254,7 @@ export default function SearchPage() {
 
         {/* Example Chips */}
         {exampleQueries.length > 0 && (
-          <div className="mb-6 flex flex-wrap gap-2">
+          <div className="mb-6 flex flex-wrap justify-center gap-2">
             {exampleQueries.map((example, index) => (
               <button
                 key={`${example}-${index}`}

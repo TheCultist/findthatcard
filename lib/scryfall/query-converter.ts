@@ -18,9 +18,29 @@ const MAX_SCRYFALL_QUERY_LENGTH = 400;
 export const PREFER_BEST_PREFIX = "prefer:best "; // 12 characters
 export const EFFECTIVE_MAX_QUERY_LENGTH =
   MAX_SCRYFALL_QUERY_LENGTH - PREFER_BEST_PREFIX.length; // 388 characters
+const FORMAT_NAMES = [
+  "legacy",
+  "modern",
+  "standard",
+  "pioneer",
+  "vintage",
+  "pauper",
+  "commander",
+  "brawl",
+] as const;
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeFormatFunctionTags(query: string): string {
+  return FORMAT_NAMES.reduce((acc, format) => {
+    const pattern = new RegExp(`(^|\\s|\\()(-)?function:${format}\\b`, "gi");
+    return acc.replace(pattern, (_match, prefix, negation) => {
+      const negated = negation ? "-" : "";
+      return `${prefix}${negated}f:${format}`;
+    });
+  }, query);
 }
 
 function buildStrategyCandidates(): string[] {
@@ -286,8 +306,9 @@ export async function convertToScryfallQuery(
     const cleanedQuery = query.replace(/^```[\w]*\n?/g, "").replace(/```$/g, "").trim();
     const queryWithStrategies = appendStrategyTags(cleanedQuery, naturalQuery);
     const expandedQuery = expandStrategyTags(queryWithStrategies);
+    const normalizedQuery = normalizeFormatFunctionTags(expandedQuery);
 
-    if (!expandedQuery) {
+    if (!normalizedQuery) {
       const errorMsg = "Failed to generate Scryfall query (empty response)";
       console.error(`[OpenAI] ${errorMsg}`, {
         model: OPENAI_MODEL,
@@ -298,14 +319,14 @@ export async function convertToScryfallQuery(
     }
 
     // Validate parentheses are balanced
-    const openParens = (expandedQuery.match(/\(/g) || []).length;
-    const closeParens = (expandedQuery.match(/\)/g) || []).length;
+    const openParens = (normalizedQuery.match(/\(/g) || []).length;
+    const closeParens = (normalizedQuery.match(/\)/g) || []).length;
     if (openParens !== closeParens) {
       console.warn(
-        `[OpenAI] Generated query has unbalanced parentheses (${openParens} open, ${closeParens} close): "${expandedQuery}"`
+        `[OpenAI] Generated query has unbalanced parentheses (${openParens} open, ${closeParens} close): "${normalizedQuery}"`
       );
       // Try to fix by adding missing closing parentheses
-      const fixedQuery = expandedQuery + ")".repeat(openParens - closeParens);
+      const fixedQuery = normalizedQuery + ")".repeat(openParens - closeParens);
       console.warn(
         `[OpenAI] Attempting to fix by adding closing parentheses: "${fixedQuery}"`
       );
@@ -320,14 +341,14 @@ export async function convertToScryfallQuery(
     }
 
     // Validate length - truncate if necessary (accounting for prefer:best prefix)
-    if (expandedQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
+    if (normalizedQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
       console.warn(
-        `[OpenAI] Generated query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${expandedQuery.length}), truncating...`
+        `[OpenAI] Generated query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${normalizedQuery.length}), truncating...`
       );
-      return truncateScryfallQuery(expandedQuery, EFFECTIVE_MAX_QUERY_LENGTH);
+      return truncateScryfallQuery(normalizedQuery, EFFECTIVE_MAX_QUERY_LENGTH);
     }
 
-    return expandedQuery;
+    return normalizedQuery;
   } catch (error) {
     // Log detailed error information
     if (process.env.NODE_ENV === "development") {

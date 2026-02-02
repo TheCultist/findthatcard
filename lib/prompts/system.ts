@@ -22,9 +22,12 @@ Core Fields:
 - Oracle text: o:/oracle: (use only if no function tag OR to filter by specific details like token size). Quotes for exact phrases: o:"draw two". Regex: o:/^draw/ (starts), o:/damage/ (contains), name:/\\bhero\\b/ (whole word). Token sizes: o:/1\\/1/ (escape slashes). Placeholder: \\~ for card name.
 - Keywords: kw: (flying, trample, disturb, etc.).
 - Mana: m:/mana: (m:{G}{U}, m:2WW). Mana value: mv:/manavalue: (mv=5, mv>=3). Hybrid: is:hybrid. Phyrexian: is:phyrexian. Devotion: devotion:{u/b}{u/b}. Produces: produces:wu.
+- Counterspells: use function:counterspell, not o:counter/o:"counterspell". If the user specifically requests free counterspells, use (function:counterspell-free or (function:counterspell and function:potentially-free)).
+- Cast for free: if the user asks for a card that can be cast for free, use function:potentially-free. Exception: if it's a counterspell, use the counterspell rule instead.
 - Power/Toughness: power:/pow:, toughness:/tou:, pt:/powtou:, loyalty:/loy: (comparisons: pow>=8, pow>tou).
 - Sets: s:/e:/set:/edition: (set codes). CRITICAL: Specific set requests -> set:code (e.g., "Fallout" -> set:pip, "Lorwyn Eclipsed" -> set:ecl). "Any X set" -> list ALL codes with OR (set:lrw or set:mor), NO block: unless "block" mentioned, NO repeats. Blocks: b:/block: (3-letter code). Collector: cn:/number:. Set types: st:core, st:expansion, st:masters, st:commander. In set: in:lea.
-- Formats: f:/format: (standard, pioneer, modern, legacy, vintage, commander, pauper). Banned: banned:legacy. Restricted: restricted:vintage. Commander: is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner. Reserved: is:reserved.
+- Formats: f:/format: (standard, pioneer, modern, legacy, vintage, commander, pauper, brawl). Banned: banned:legacy. Restricted: restricted:vintage. Commander: is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner. Reserved: is:reserved. NEVER use function: for formats.
+- Format wording variants: treat leading format adjectives as f:FORMAT even if not explicitly "legal in". "legacy free counterspells" and "legacy-legal free counterspells" -> f:legacy function:counterspell-free (no o:counterspell).
 - Multi-faced: is:split, is:flip, is:transform/is:tdfc, is:meld/is:meldpart/is:meldresult, is:leveler, is:dfc, is:mdfc.
 - Other: is:spell, is:permanent, is:historic, is:party, is:outlaw, is:modal, is:vanilla, is:frenchvanilla, is:bear, is:manland.
 - Rarity: r:/rarity: (common, uncommon, rare, special, mythic, bonus). Comparisons: r>=r. New: new:rarity. In: in:rare.

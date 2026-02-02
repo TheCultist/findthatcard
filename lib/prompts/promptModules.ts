@@ -38,11 +38,16 @@ CRITICAL RULES:
 - TAG LIMIT: For any single purpose (art, function, keyword, type), use at most 3 related tags; if more are needed, simplify to the most representative ones.
 - TYPE VS TARGETING: Use t: only when the user wants the cards themselves to be that type. If the user wants cards that affect a creature type (e.g., "discount elementals", "destroy dragons"), use o:"elemental"/o:"dragon" and DO NOT add t: unless explicitly requested.
 - COST REDUCTION: For "discount"/"reduce cost", use oracle text with a mana-cost wildcard, e.g. o:/cost \\{[0-9X]+\\} less/ (NOT o:"cost reduction").
+- COUNTERSPELLS: Use function:counterspell. If the user specifically requests free counterspells, use (function:counterspell-free or (function:counterspell and function:potentially-free)).
+- CAST FOR FREE: If the user asks for a card that can be cast for free, use function:potentially-free. Exception: if it's a counterspell, use the counterspell rule instead.
 - MANA VALUE FILTERS: For mana cost thresholds (e.g., "under 3 mana", "3 mana or less", "at most 4"), use mv comparisons (mv<3, mv<=3, mv<=4). Do NOT use cost-reduction regex unless discounting is explicitly requested.
 - STRATEGY TAGS: If the query asks for a common MTG strategy, use the placeholder tag strategy:NAME and DO NOT expand to oracletag/function tags. Valid strategy names: ${STRATEGY_TAG_NAMES.join(
     ", "
   )}. Use quotes for multiword names (e.g., strategy:"Cost Reduction").
 - SETS: Specific set requests -> set:code (e.g., "Fallout" -> set:pip, "War of the Spark" -> set:war, "Lorwyn Eclipsed" -> set:ecl). "Any X set" -> list ALL codes with OR (set:lrw or set:mor), NO block unless "block" mentioned, NO repeats.
+- UNIVERSES BEYOND: If the query specifies Universes Beyond, use is:universesbeyond (or not:universesbeyond if excluded).
+- FORMATS FIRST: Legacy/Modern/Standard/Pauper/Vintage/Commander/Brawl are formats (f:legacy, f:modern, f:standard, f:pauper, f:vintage, f:commander, f:brawl). NEVER use function: for formats.
+- FORMAT WORDING VARIANTS: Treat leading format adjectives as f:FORMAT even if not explicitly "legal in". "legacy free counterspells" and "legacy-legal free counterspells" -> f:legacy function:counterspell-free (no o:counterspell).
 - QUOTES: Any multiword search term must be quoted (e.g., a:"Kev Walker", o:"any target", name:"Lightning Bolt").
 - OR/Nesting: Alternatives MUST use OR, not spaces. t:fish or t:bird, t:legendary (t:goblin or t:elf).`,
   examples: [
@@ -70,6 +75,7 @@ const PACK_FUNCTION_TAGS: PackDefinition = {
 Check function tags FIRST before using o:. If uncertain tag exists, use o: as fallback. Multiple alternatives -> (function:x or function:y), NOT spaces.
 Keep it minimal: Use ONE function tag unless the user explicitly requests multiple distinct functions. Do NOT stack many related counter tags together.
 "Counters" can mean counterspells (function:counterspell) or +1/+1 counters (function:counters-matter) - choose based on context. "Mono" is NOT a function tag - it refers to mono-color (single color).
+Counterspells: use function:counterspell, not o:counter/o:"counterspell". If "free", prefer function:counterspell-free or function:potentially-free and do NOT add t:instant unless explicitly requested.
 For numeric mana value/cmc filters, use mv:/manavalue: (e.g., mv=4). Only use function:mana-value-matters when the query explicitly asks about mana value being a theme.
 `,
   examples: [
@@ -137,7 +143,7 @@ const PACK_ADVANCED: PackDefinition = {
 - Games: game:paper/mtgo/arena, in:paper/mtgo/arena, is:digital, is:alchemy, is:rebalanced
 - Rarity: r:/rarity: (common, uncommon, rare, special, mythic, bonus). Comparisons: r>=r
 - Multi-faced: is:split, is:flip, is:transform/is:tdfc, is:meld/is:meldpart/is:meldresult, is:leveler, is:dfc, is:mdfc
-- Other: is:spell, is:permanent, is:historic, is:party, is:outlaw, is:modal, is:vanilla, is:frenchvanilla, is:bear, is:manland`,
+- Other: is:spell, is:permanent, is:historic, is:party, is:outlaw, is:modal, is:vanilla, is:frenchvanilla, is:bear, is:manland, is:universesbeyond, not:universesbeyond`,
   examples: [
     `Power 8+ -> pow>=8`,
     `Banned in Legacy -> banned:legacy`,
@@ -228,7 +234,9 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
 
   // ADVANCED: foil, borderless, frame, rarity, banned, restricted, reserved, arena, mtgo, paper, power, toughness, mana value, mv
   if (
-    /\b(foil|borderless|frame|rarity|banned|restricted|reserved|arena|mtgo|paper|power|toughness|mana value|mv|cmc|converted mana cost|p\/t|pt|loyalty|split|flip|transform|meld|dfc|mdfc|spell|permanent|historic|party|outlaw|modal|vanilla|french vanilla|bear|manland|digital|alchemy|rebalanced|promo|spotlight|scryfall preview|reprint|unique|prints|sets|paperprints|papersets|language|japanese|russian|chinese|korean|spanish|french|german|italian|portuguese|dual|fetchland|shockland|fastland|checkland|painland|filterland|bounceland|canopyland|scryland|surveilland|shadowland|slowland|tangoland|tricycleland|triland|masterpiece|colorshifted)\b/.test(query)
+    /\b(foil|borderless|frame|rarity|banned|restricted|reserved|arena|mtgo|paper|power|toughness|mana value|mv|cmc|converted mana cost|p\/t|pt|loyalty|split|flip|transform|meld|dfc|mdfc|spell|permanent|historic|party|outlaw|modal|vanilla|french vanilla|bear|manland|digital|alchemy|rebalanced|promo|spotlight|scryfall preview|reprint|unique|prints|sets|paperprints|papersets|language|japanese|russian|chinese|korean|spanish|french|german|italian|portuguese|dual|fetchland|shockland|fastland|checkland|painland|filterland|bounceland|canopyland|scryland|surveilland|shadowland|slowland|tangoland|tricycleland|triland|masterpiece|colorshifted|universes beyond|universes-beyond|universesbeyond)\b/.test(
+      query
+    )
   ) {
     selected.add("ADVANCED");
   }
