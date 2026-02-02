@@ -178,10 +178,14 @@ function scoreTagMatch(tag: string, keywords: string[]): number {
         break;
       }
 
-      if (token.includes(keyword) || keyword.includes(token)) {
-        score += 1;
-        matched = true;
-        break;
+      const tokenLongEnough = token.length >= 4;
+      const keywordLongEnough = keyword.length >= 4;
+      if (tokenLongEnough && keywordLongEnough) {
+        if (token.includes(keyword) || keyword.includes(token)) {
+          score += 1;
+          matched = true;
+          break;
+        }
       }
     }
 
@@ -224,7 +228,11 @@ export async function getTaggerTagContext(
       return [];
     }
 
-    const scopedKeywords = type === "art" && artKeywords.length > 0 ? artKeywords : keywords;
+    if (type === "art" && artKeywords.length === 0) {
+      return [];
+    }
+
+    const scopedKeywords = type === "art" ? artKeywords : keywords;
     if (scopedKeywords.length === 0) {
       return [];
     }
@@ -244,10 +252,41 @@ export async function getTaggerTagContext(
       return [];
     }
 
-    const maxScore = scored.reduce((max, entry) => Math.max(max, entry.score), 0);
+    const exactMatches = scored.filter((entry) =>
+      scopedKeywords.some((keyword) => entry.tag.toLowerCase() === keyword.toLowerCase())
+    );
+    if (exactMatches.length > 0) {
+      return exactMatches
+        .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
+        .slice(0, maxPerType)
+        .map((entry) => entry.tag);
+    }
+
+    let filtered = scored;
+    if (type === "function") {
+      const withoutCycles = filtered.filter(
+        (entry) => !entry.tag.toLowerCase().startsWith("cycle-")
+      );
+      if (withoutCycles.length > 0) {
+        filtered = withoutCycles;
+      }
+
+      const minHyphens = filtered.reduce((min, entry) => {
+        const hyphens = entry.tag.split("-").length - 1;
+        return Math.min(min, hyphens);
+      }, Number.POSITIVE_INFINITY);
+      const simplest = filtered.filter(
+        (entry) => entry.tag.split("-").length - 1 === minHyphens
+      );
+      if (simplest.length > 0) {
+        filtered = simplest;
+      }
+    }
+
+    const maxScore = filtered.reduce((max, entry) => Math.max(max, entry.score), 0);
     const minScore = maxScore >= 3 ? maxScore - 1 : 1;
 
-    return scored
+    return filtered
       .filter((entry) => entry.score >= minScore)
       .sort((a, b) => b.score - a.score || a.tag.localeCompare(b.tag))
       .slice(0, maxPerType)

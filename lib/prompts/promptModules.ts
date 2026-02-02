@@ -3,6 +3,8 @@
  * Reduces token cost by including only relevant modules based on query analysis
  */
 
+import { STRATEGY_TAG_NAMES } from "@/lib/strategies/oracletagStrategies";
+
 export type PromptPack =
   | "BASE"
   | "COLORS_FORMAT_TYPES"
@@ -39,18 +41,18 @@ CRITICAL RULES:
 - QUOTES: Any multiword search term must be quoted (e.g., a:"Kev Walker", o:"any target", name:"Lightning Bolt").
 - OR/Nesting: Alternatives MUST use OR, not spaces. t:fish or t:bird, t:legendary (t:goblin or t:elf).`,
   examples: [
-    `Azorius blink for Commander -> f:commander id:wu function:blink (NOT f:commander id:wu function:blink azorius)`,
-    `Dimir removal for Commander -> f:commander id:ub function:removal (NOT f:commander id:ub function:removal dimir)`,
+    `Azorius blink for Commander -> f:commander id=wu function:blink (NOT f:commander id=wu function:blink azorius)`,
+    `Dimir removal for Commander -> f:commander id=ub function:removal (NOT f:commander id=ub function:removal dimir)`,
     `Lifegain for Commander -> f:commander (function:lifegain or function:lifegain-matters) NOT f:commander function:lifegain function:lifegain-matters`,
   ],
 };
 
 // Colors, Formats, Types module
 const PACK_COLORS_FORMAT_TYPES: PackDefinition = {
-  rules: `Colors: c:/color: (w=white, u=blue, b=black, r=red, g=green, c=colorless, m=multicolor). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity: (id:g="has", id=g="exactly"). For Commander format, use id: for color identity. "Mono [color]" means exactly that color: mono blue = c=u or id=u, mono red = c=r or id=r, mono green = c=g or id=g, mono white = c=w or id=w, mono black = c=b or id=b.
-Comparisons: c>=uw, id<=esper, c=2. Color nicknames -> id: only (Azorius=id:wu, Rakdos=id:br, Dimir=id:ub, Boros=id:rw, Gruul=id:rg, Selesnya=id:gw, Orzhov=id:wb, Izzet=id:ur, Golgari=id:bg, Simic=id:gu).
+  rules: `Colors: c:/color: (w=white, u=blue, b=black, r=red, g=green, c=colorless, m=multicolor). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity:. Use id= for exact/specific identities or color nicknames (Azorius=id=wu, Rakdos=id=br, Dimir=id=ub, Boros=id=rw, Gruul=id=rg, Selesnya=id=gw, Orzhov=id=wb, Izzet=id=ur, Golgari=id=bg, Simic=id=gu). Use id: for "within that identity". Use id>= for "at least/contains those colors". Use id<= for "at most/only colors within". "Mono [color]" means exactly that color: mono blue = c=u or id=u, mono red = c=r or id=r, mono green = c=g or id=g, mono white = c=w or id=w, mono black = c=b or id=b.
+Comparisons: c>=uw, id<=esper, c=2.
 Types: t:/type: (partial words: t:merfolk). If the query names a creature type as the card's type (e.g., "legendary spirits"), use t:spirit (NOT o:"spirit").
-Formats: f:/format: (standard, modern, legacy, commander, pauper). Commander: is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner.
+Formats: f:/format: (standard, pioneer, modern, legacy, vintage, commander, pauper). Commander: is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner.
 Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -is:reprint).`,
   examples: [
     `Blue mv 5 -> c:u mv=5`,
@@ -58,9 +60,12 @@ Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -
     `Mono blue counters in commander -> f:commander id=u function:counters-matter`,
     `Mono red removal -> c=r function:removal`,
     `Mono green ramp -> c=g function:ramp`,
-    `Boros cards -> id:rw`,
-    `Dimir commanders -> f:commander id:ub`,
-    `Rakdos sacrifice synergies -> f:commander id:br (oracletag:"sacrifice outlet" or oracletag:"sacrifice payoff")`,
+    `Boros cards -> id=rw`,
+    `Dimir commanders -> f:commander id=ub`,
+    `Rakdos sacrifice synergies -> f:commander id=br (oracletag:"sacrifice outlet" or oracletag:"sacrifice payoff")`,
+    `Cards within Dimir identity -> id:ub`,
+    `Cards at least Dimir identity -> id>=ub`,
+    `Cards at most Dimir identity -> id<=ub`,
     `Red legendary spirits -> c:r t:legendary t:spirit`,
   ],
 };
@@ -71,7 +76,11 @@ const PACK_FUNCTION_TAGS: PackDefinition = {
 CRITICAL: Check function tags FIRST before using o:. If uncertain tag exists, use o: as fallback. Multiple alternatives -> (function:x or function:y), NOT spaces.
 Keep it minimal: Use ONE function tag unless the user explicitly requests multiple distinct functions. Do NOT stack many related counter tags together.
 "Counters" can mean counterspells (function:counterspell) or +1/+1 counters (function:counters-matter) - choose based on context. "Mono" is NOT a function tag - it refers to mono-color (single color).
-For numeric mana value/cmc filters, use mv:/manavalue: (e.g., mv=4). Only use function:mana-value-matters when the query explicitly asks about mana value being a theme.`,
+For numeric mana value/cmc filters, use mv:/manavalue: (e.g., mv=4). Only use function:mana-value-matters when the query explicitly asks about mana value being a theme.
+
+Strategy tags: If the query asks for a common MTG strategy, use the placeholder tag strategy:NAME and DO NOT expand to oracletag/function tags. Valid strategy names: ${STRATEGY_TAG_NAMES.join(
+    ", "
+  )}. Use quotes for multiword names (e.g., strategy:"Cost Reduction").`,
   examples: [
     `Removal for Commander -> f:commander function:removal`,
     `Ramp cards -> function:ramp`,
@@ -79,8 +88,9 @@ For numeric mana value/cmc filters, use mv:/manavalue: (e.g., mv=4). Only use fu
     `Cards that make tokens -> function:token-creator`,
     `Cards that make 1/1 tokens -> function:token-creator o:/1\\/1/`,
     `Cards that reduce the cost of Elementals -> (function:discount-self or function:discount-tap-creature) o:elemental`,
-    `Selesnya cards that create +1/+1 counters for Commander -> f:commander id:gw function:gives-pp-counters`,
+    `Selesnya cards that create +1/+1 counters for Commander -> f:commander id=gw function:gives-pp-counters`,
     `Draw cards -> o:"draw" (no function tag for generic draw)`,
+    `Orzhov aristocrats -> id=wb strategy:Aristocrats`,
   ],
 };
 
@@ -91,7 +101,7 @@ CRITICAL: Use ONLY when explicitly requested. Quote multiword tags: art:"dragon 
 If the query is "TYPE with [art]" (e.g., "equipment with sword art"), use t:TYPE for the card type and art: for the depiction (t:equipment art:sword).`,
   examples: [
     `Zombie art -> art:zombie (NOT long OR list)`,
-    `Boros fantasy creatures -> id:rw t:creature (art:dragon or art:angel or art:demon)`,
+    `Boros fantasy creatures -> id=rw t:creature (art:dragon or art:angel or art:demon)`,
     `Dragon art -> art:dragon`,
     `Equipment with sword art -> t:equipment art:sword`,
   ],
@@ -192,7 +202,7 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
     /\b(commander|edh|brawl|standard|modern|legacy|pauper|vintage|format)\b/.test(query) ||
     /\b(azorius|rakdos|dimir|boros|gruul|selesnya|orzhov|izzet|golgari|simic|esper|grixis|jund|naya|bant|abzan|jeskai|sultai|mardu|temur|wubrg|color|colors|colour|colours|guild|mono|monocolor|monocolored)\b/.test(query) ||
     /\b(white|blue|black|red|green|colorless|multicolor)\b/.test(query) ||
-    /\b(creature|creatures|instant|instants|sorcery|sorceries|enchantment|enchantments|artifact|artifacts|planeswalker|planeswalkers|land|lands|tribal|legendary)\b/.test(query) ||
+    /\b(creature|creatures|instant|instants|sorcery|sorceries|enchantment|enchantments|artifact|artifacts|planeswalker|planeswalkers|land|lands|tribal|legendary|adventure|kindred|battle|battles)\b/.test(query) ||
     /\b(not|without|no|excluding|except)\b/.test(query)
   ) {
     selected.add("COLORS_FORMAT_TYPES");
@@ -214,7 +224,9 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
 
   // KEYWORDS: keyword abilities list
   if (
-    /\b(flying|trample|vigilance|lifelink|haste|deathtouch|hexproof|indestructible|reach|first strike|double strike|menace|prowess|flash|ward|keyword|keywords)\b/.test(query)
+    /\b(flying|trample|vigilance|lifelink|haste|deathtouch|hexproof|indestructible|reach|first strike|double strike|menace|prowess|flash|ward|keyword|keywords)\b/.test(
+      query
+    )
   ) {
     selected.add("KEYWORDS");
   }

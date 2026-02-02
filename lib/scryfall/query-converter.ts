@@ -4,6 +4,7 @@ import {
 } from "@/lib/prompts";
 import { buildSystemPrompt, selectPacks } from "@/lib/prompts/promptModules";
 import { TaggerTagContext } from "@/lib/tagger/context";
+import { expandStrategyTags } from "@/lib/strategies/oracletagStrategies";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -223,8 +224,9 @@ export async function convertToScryfallQuery(
 
     // Clean up any markdown code blocks if the model adds them
     const cleanedQuery = query.replace(/^```[\w]*\n?/g, "").replace(/```$/g, "").trim();
+    const expandedQuery = expandStrategyTags(cleanedQuery);
 
-    if (!cleanedQuery) {
+    if (!expandedQuery) {
       const errorMsg = "Failed to generate Scryfall query (empty response)";
       console.error(`[OpenAI] ${errorMsg}`, {
         model: OPENAI_MODEL,
@@ -235,14 +237,14 @@ export async function convertToScryfallQuery(
     }
 
     // Validate parentheses are balanced
-    const openParens = (cleanedQuery.match(/\(/g) || []).length;
-    const closeParens = (cleanedQuery.match(/\)/g) || []).length;
+    const openParens = (expandedQuery.match(/\(/g) || []).length;
+    const closeParens = (expandedQuery.match(/\)/g) || []).length;
     if (openParens !== closeParens) {
       console.warn(
-        `[OpenAI] Generated query has unbalanced parentheses (${openParens} open, ${closeParens} close): "${cleanedQuery}"`
+        `[OpenAI] Generated query has unbalanced parentheses (${openParens} open, ${closeParens} close): "${expandedQuery}"`
       );
       // Try to fix by adding missing closing parentheses
-      const fixedQuery = cleanedQuery + ")".repeat(openParens - closeParens);
+      const fixedQuery = expandedQuery + ")".repeat(openParens - closeParens);
       console.warn(
         `[OpenAI] Attempting to fix by adding closing parentheses: "${fixedQuery}"`
       );
@@ -257,14 +259,14 @@ export async function convertToScryfallQuery(
     }
 
     // Validate length - truncate if necessary (accounting for prefer:best prefix)
-    if (cleanedQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
+    if (expandedQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
       console.warn(
-        `[OpenAI] Generated query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${cleanedQuery.length}), truncating...`
+        `[OpenAI] Generated query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${expandedQuery.length}), truncating...`
       );
-      return truncateScryfallQuery(cleanedQuery, EFFECTIVE_MAX_QUERY_LENGTH);
+      return truncateScryfallQuery(expandedQuery, EFFECTIVE_MAX_QUERY_LENGTH);
     }
 
-    return cleanedQuery;
+    return expandedQuery;
   } catch (error) {
     // Log detailed error information
     if (process.env.NODE_ENV === "development") {

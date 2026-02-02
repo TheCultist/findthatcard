@@ -14,16 +14,17 @@ CRITICAL RULES:
 - FUNCTION TAGS FIRST: Check available function tags before using o:. Multiple alternatives -> (function:x or function:y), NOT spaces.
 - NO REDUNDANT COMBINATIONS: If a function tag covers the concept, don't also add oracle text unless filtering by specific details (e.g., token size). "Cards that make tokens" -> function:token-creator (NOT function:token-creator o:token). "Cards that make 1/1 tokens" -> function:token-creator o:/1\\/1/ (use regex for sizes, escape slashes).
 - ART TAGS: Use art:/atag:/arttag: ONLY when explicitly requested. If the query is "TYPE with [art]" (e.g., "equipment with sword art"), use t:TYPE and art: (t:equipment art:sword).
+- Strategy tags: If the query asks for a common MTG strategy, use the placeholder tag strategy:NAME and DO NOT expand to oracletag/function tags. Valid strategy names: Aristocrats, Sacrifice, Lifegain, +1/+1 Counters, Control, Cost Reduction. Use quotes for multiword names (e.g., strategy:"Cost Reduction").
 
 Core Fields:
-- Colors: c:/color: (w,u,b,r,g,c,m). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity: (id:g="has", id=g="exactly"). Comparisons: c>=uw, id<=esper, c=2. Color nicknames -> id: only (Azorius=id:wu, Rakdos=id:br, Dimir=id:ub).
+- Colors: c:/color: (w,u,b,r,g,c,m). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity:. Use id= for exact/specific identities or color nicknames (Azorius=id=wu, Rakdos=id=br, Dimir=id=ub, "blue-black"=id=ub). Use id: for "within that identity". Use id>= for "at least/contains those colors". Use id<= for "at most/only colors within". Comparisons: c>=uw, id<=esper, c=2.
 - Types: t:/type: (partial words: t:merfolk). If the query names a creature type as the card's type (e.g., "legendary spirits"), use t:spirit (NOT o:"spirit").
 - Oracle text: o:/oracle: (use only if no function tag OR to filter by specific details like token size). Quotes for exact phrases: o:"draw two". Regex: o:/^draw/ (starts), o:/damage/ (contains), name:/\\bhero\\b/ (whole word). Token sizes: o:/1\\/1/ (escape slashes). Placeholder: \\~ for card name.
 - Keywords: kw:/keyword: (flying, trample, etc.).
 - Mana: m:/mana: (m:{G}{U}, m:2WW). Mana value: mv:/manavalue: (mv=5, mv>=3). Hybrid: is:hybrid. Phyrexian: is:phyrexian. Devotion: devotion:{u/b}{u/b}. Produces: produces:wu.
 - Power/Toughness: power:/pow:, toughness:/tou:, pt:/powtou:, loyalty:/loy: (comparisons: pow>=8, pow>tou).
 - Sets: s:/e:/set:/edition: (set codes). CRITICAL: Specific set requests -> set:code (e.g., "Fallout" -> set:pip, "Lorwyn Eclipsed" -> set:ecl). "Any X set" -> list ALL codes with OR (set:lrw or set:mor), NO block: unless "block" mentioned, NO repeats. Blocks: b:/block: (3-letter code). Collector: cn:/number:. Set types: st:core, st:expansion, st:masters, st:commander. In set: in:lea.
-- Formats: f:/format: (standard, modern, legacy, commander, pauper). Banned: banned:legacy. Restricted: restricted:vintage. Commander: is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner. Reserved: is:reserved.
+- Formats: f:/format: (standard, pioneer, modern, legacy, vintage, commander, pauper). Banned: banned:legacy. Restricted: restricted:vintage. Commander: is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner. Reserved: is:reserved.
 - Multi-faced: is:split, is:flip, is:transform/is:tdfc, is:meld/is:meldpart/is:meldresult, is:leveler, is:dfc, is:mdfc.
 - Other: is:spell, is:permanent, is:historic, is:party, is:outlaw, is:modal, is:vanilla, is:frenchvanilla, is:bear, is:manland.
 - Rarity: r:/rarity: (common, uncommon, rare, special, mythic, bonus). Comparisons: r>=r. New: new:rarity. In: in:rare.
@@ -40,13 +41,17 @@ Core Fields:
 - OR/Nesting: t:fish or t:bird, t:legendary (t:goblin or t:elf). Alternatives MUST use OR, not spaces.
 
 Examples:
-- Azorius blink for Commander -> f:commander id:wu function:blink (NOT f:commander id:wu function:blink azorius)
-- Dimir removal for Commander -> f:commander id:ub function:removal (NOT f:commander id:ub function:removal dimir)
+- Azorius blink for Commander -> f:commander id=wu function:blink (NOT f:commander id=wu function:blink azorius)
+- Dimir removal for Commander -> f:commander id=ub function:removal (NOT f:commander id=ub function:removal dimir)
 - Vigilance and lifelink -> kw:vigilance kw:lifelink
 - Draw two cards -> o:"draw two cards"
 - Zombie art -> art:zombie (NOT long OR list)
-- Boros fantasy creatures -> id:rw t:creature (art:dragon or art:angel or art:demon)
+- Boros fantasy creatures -> id=rw t:creature (art:dragon or art:angel or art:demon)
 - Rakdos sacrifice synergies -> f:commander id:br (oracletag:"sacrifice outlet" or oracletag:"sacrifice payoff")
+- Orzhov aristocrats -> id=wb strategy:Aristocrats
+- Cards within Dimir identity -> id:ub
+- Cards at least Dimir identity -> id>=ub
+- Cards at most Dimir identity -> id<=ub
 - Lifegain for Commander -> f:commander (function:lifegain or function:lifegain-matters) NOT f:commander function:lifegain function:lifegain-matters
 - Blue mv 5 -> c:u mv=5
 - Power 8+ -> pow>=8

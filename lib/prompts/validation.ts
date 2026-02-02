@@ -40,6 +40,7 @@ CRITICAL RULES:
 - No bare words: every token must be a valid fielded filter (t:, o:, function:, etc.). Only use bare words for explicit card names; otherwise convert or remove.
 - For cost reduction, prefer function:discount-* if available; otherwise use a mana-cost wildcard in oracle text, e.g. o:/cost \\{[0-9X]+\\} less/ (not o:"cost reduction").
 - Quote multiword values for any field (a:, o:, name:, etc.).
+- Color identity operators: use id= for exact/specific identities or color nicknames, id: for "within that identity", id>= for "at least/contains", id<= for "at most/only colors within".
 
 Examples:
 - "put lands into play" -> function:play-additional-land, function:conjure-land, or function:create-land-tokens (NOT function:cheat-into-play - too broad)
