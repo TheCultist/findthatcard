@@ -23,6 +23,10 @@ export interface ScryfallRelatedCard {
   uri: string;
 }
 
+export interface ScryfallPurchaseUris {
+  tcgplayer?: string;
+}
+
 export interface ScryfallCard {
   id: string;
   name: string;
@@ -39,6 +43,8 @@ export interface ScryfallCard {
   digital?: boolean; // Whether this is a digital-only card
   collector_number?: string; // Collector number for this printing
   all_parts?: ScryfallRelatedCard[]; // Related cards (tokens, meld parts, etc.)
+  tcgplayer_id?: number; // TCGPlayer product ID for this printing
+  purchase_uris?: ScryfallPurchaseUris; // Purchase links for this card
 }
 
 export interface ScryfallSearchResponse {
@@ -87,6 +93,8 @@ export interface CardResult {
   cardtrader_blueprint_ids: number[] | null; // CardTrader blueprint IDs for this card
   collector_number: string | null; // Collector number for this printing
   set_code: string | null; // Set code (e.g., "lea", "war")
+  tcgplayer_id: number | null; // TCGPlayer product ID for this printing
+  tcgplayer_link: string | null; // TCGPlayer partner link for this printing
 }
 
 export interface ErrorResponse {

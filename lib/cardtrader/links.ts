@@ -40,6 +40,7 @@ export const SET_NAME_MAPPING: Record<string, string> = {
   "neon-dynasty-commander": "commander-kamigawa-neon-dynasty",
   "tales-of-middle-earth-commander": "commander-the-lord-of-the-rings",
   "lord-of-the-rings-tales-of-middle-earth": "the-lord-of-the-rings",
+  "adventures-in-the-forgotten-realms": "d-d-adventures-in-the-forgotten-realms",
   // Add more mappings here as needed
   // Format: "Scryfall Set Name": "cardtrader-set-name"
 };
@@ -94,7 +95,7 @@ export function getCardTraderLink(
   void _collectorNumber;
 
   const shareCode =
-    process.env.NEXT_PUBLIC_CARDTRADER_SHARE_CODE || "thecultist";
+    process.env.TCG_PLAYER_PARTNER_LINK || "thecultist";
 
   // Try to construct card-specific URL if we have set name and card name
   if (setName && cardName) {
@@ -132,6 +133,6 @@ export function getCardTraderLink(
  */
 export function getCardTraderHomepageLink(): string {
   const shareCode =
-    process.env.NEXT_PUBLIC_CARDTRADER_SHARE_CODE || "thecultist";
+    process.env.TCG_PLAYER_PARTNER_LINK || "thecultist";
   return `https://www.cardtrader.com/en/magic?share_code=${shareCode}`;
 }

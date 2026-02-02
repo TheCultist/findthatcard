@@ -51,6 +51,15 @@ export default function CardCard({ card }: { card: CardResult }) {
     }
   };
 
+  const tcgPlayerUrl = card.tcgplayer_link;
+
+  const handleTcgPlayerClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.stopPropagation();
+    if (!tcgPlayerUrl) {
+      e.preventDefault();
+    }
+  };
+
   return (
     <div
       onClick={handleClick}
@@ -94,22 +103,61 @@ export default function CardCard({ card }: { card: CardResult }) {
         </div>
       </div>
 
-      {/* CardTrader Affiliate Link */}
-      <a
-        href={getCardTraderLink(
-          card.name,
-          card.set_name,
-          card.set_code,
-          card.collector_number
-        )}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={handleCardTraderClick}
-        className="block rounded border border-gray-700 bg-gray-800/50 p-3 text-center text-xs text-gray-400 transition-colors hover:border-blue-600 hover:bg-gray-800 hover:text-blue-400 disabled:opacity-50 disabled:cursor-wait"
-        aria-disabled={isCheckingLink}
-      >
-        {isCheckingLink ? "Checking..." : "Buy on CardTrader"}
-      </a>
+      <div className="text-center text-xs font-semibold uppercase tracking-wide text-gray-400">
+        Buy this card
+      </div>
+      <div className="mt-2 flex gap-2">
+        {/* CardTrader Affiliate Link */}
+        <a
+          href={getCardTraderLink(
+            card.name,
+            card.set_name,
+            card.set_code,
+            card.collector_number
+          )}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleCardTraderClick}
+          className={`flex flex-1 items-center justify-center rounded border border-gray-700 bg-gray-800/50 p-3 transition-colors hover:border-blue-600 hover:bg-gray-800 ${
+            isCheckingLink ? "cursor-wait opacity-60" : "hover:opacity-100"
+          }`}
+          aria-label="Buy on CardTrader"
+          aria-disabled={isCheckingLink}
+        >
+          <span className="sr-only">
+            {isCheckingLink ? "Checking CardTrader link" : "Buy on CardTrader"}
+          </span>
+          <Image
+            src="/brand/cardtrader.svg"
+            alt="CardTrader"
+            width={120}
+            height={24}
+            className="h-6 w-auto"
+          />
+        </a>
+
+        {/* TCGPlayer Link */}
+        <a
+          href={tcgPlayerUrl || "#"}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={handleTcgPlayerClick}
+          className={`flex flex-1 items-center justify-center rounded border border-gray-700 bg-gray-800/50 p-3 transition-colors hover:border-blue-600 hover:bg-gray-800 ${
+            tcgPlayerUrl ? "hover:opacity-100" : "cursor-not-allowed opacity-50"
+          }`}
+          aria-label="Buy on TCGPlayer"
+          aria-disabled={!tcgPlayerUrl}
+        >
+          <span className="sr-only">Buy on TCGPlayer</span>
+          <Image
+            src="/brand/tcgplayer.svg"
+            alt="TCGPlayer"
+            width={120}
+            height={24}
+            className="h-6 w-auto"
+          />
+        </a>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { SearchResponse, CardResult, ScryfallCard } from "@/types/scryfall";
+import { getTcgPlayerLink } from "@/lib/tcgplayer/links";
 
 type CardSearchResponse = {
   data?: ScryfallCard[];
@@ -293,6 +294,11 @@ export async function transformScryfallResponse(
         cardtrader_blueprint_ids: null, // Not used anymore - linking to homepage instead
         collector_number: card.collector_number || null,
         set_code: card.set || null,
+        tcgplayer_id: card.tcgplayer_id ?? null,
+        tcgplayer_link: getTcgPlayerLink({
+          tcgplayerId: card.tcgplayer_id ?? null,
+          destinationUrl: card.purchase_uris?.tcgplayer ?? null,
+        }),
       };
     })
   );
