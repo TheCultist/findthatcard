@@ -43,7 +43,7 @@ export default function CookieBanner() {
               This site uses essential cookies for functionality and may use analytics cookies to understand how visitors interact with the site.
             </p>
             <p className="mt-1 text-xs text-gray-500">
-              By clicking "Accept", you consent to our use of cookies. You can also{" "}
+              By clicking &quot;Accept&quot;, you consent to our use of cookies. You can also{" "}
               <button
                 onClick={handleReject}
                 className="underline hover:text-gray-400"

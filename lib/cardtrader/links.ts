@@ -87,9 +87,12 @@ export function getCardTraderSetName(
 export function getCardTraderLink(
   cardName: string,
   setName: string | null,
-  setCode: string | null,
-  collectorNumber: string | null
+  _setCode: string | null,
+  _collectorNumber: string | null
 ): string {
+  void _setCode;
+  void _collectorNumber;
+
   const shareCode =
     process.env.NEXT_PUBLIC_CARDTRADER_SHARE_CODE || "thecultist";
 

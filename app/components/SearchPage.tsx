@@ -197,7 +197,7 @@ export default function SearchPage() {
         }
       }, 100);
     }
-  }, [results?.page, loading]);
+  }, [results, loading]);
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();

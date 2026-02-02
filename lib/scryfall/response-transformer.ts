@@ -1,5 +1,9 @@
 import { SearchResponse, CardResult, ScryfallCard } from "@/types/scryfall";
 
+type CardSearchResponse = {
+  data?: ScryfallCard[];
+};
+
 const CARDS_PER_PAGE = 60;
 const SCRYFALL_USER_AGENT =
   process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthat.card)";
@@ -55,7 +59,7 @@ export async function transformScryfallResponse(
           );
 
           if (baseCardResponse.ok) {
-            const baseCardData = await baseCardResponse.json();
+            const baseCardData: CardSearchResponse = await baseCardResponse.json();
             if (baseCardData.data && baseCardData.data.length > 0) {
               // Replace the alchemy card with the non-alchemy version
               const basePrint = baseCardData.data[0];
@@ -77,9 +81,9 @@ export async function transformScryfallResponse(
             );
 
             if (printsResponse.ok) {
-              const printsData = await printsResponse.json();
+              const printsData: CardSearchResponse = await printsResponse.json();
               // Find the first non-alchemy, non-digital, non-rebalanced print
-              const basePrint = printsData.data?.find((print: any) => {
+              const basePrint = printsData.data?.find((print) => {
                 const printSetName = (print.set_name || "").toLowerCase();
                 const printSetType = (print.set_type || "").toLowerCase();
                 const printIsDigital = print.digital === true;
@@ -166,7 +170,7 @@ export async function transformScryfallResponse(
           );
 
           if (baseCardResponse.ok) {
-            const baseCardData = await baseCardResponse.json();
+            const baseCardData: CardSearchResponse = await baseCardResponse.json();
             if (baseCardData.data && baseCardData.data.length > 0) {
               const basePrint = baseCardData.data[0];
               // Use the first non-alchemy print's name (this should be the base card name)
@@ -184,9 +188,9 @@ export async function transformScryfallResponse(
             );
 
             if (printsResponse.ok) {
-              const printsData = await printsResponse.json();
+              const printsData: CardSearchResponse = await printsResponse.json();
               // Find the first non-alchemy, non-digital, non-rebalanced print
-              const basePrint = printsData.data?.find((print: any) => {
+              const basePrint = printsData.data?.find((print) => {
                 const printSetName = (print.set_name || "").toLowerCase();
                 const printSetType = (print.set_type || "").toLowerCase();
                 const printIsDigital = print.digital === true;
@@ -224,7 +228,7 @@ export async function transformScryfallResponse(
           );
 
           if (baseCardResponse.ok) {
-            const baseCardData = await baseCardResponse.json();
+            const baseCardData: CardSearchResponse = await baseCardResponse.json();
             if (baseCardData.data && baseCardData.data.length > 0) {
               const basePrint = baseCardData.data[0];
               // Update set name and type to use non-digital set
@@ -243,9 +247,9 @@ export async function transformScryfallResponse(
             );
 
             if (printsResponse.ok) {
-              const printsData = await printsResponse.json();
+              const printsData: CardSearchResponse = await printsResponse.json();
               // Find the first non-digital, non-alchemy, non-rebalanced print
-              const basePrint = printsData.data?.find((print: any) => {
+              const basePrint = printsData.data?.find((print) => {
                 const printSetName = (print.set_name || "").toLowerCase();
                 const printSetType = (print.set_type || "").toLowerCase();
                 const printIsDigital = print.digital === true;

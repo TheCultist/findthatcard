@@ -3,10 +3,14 @@
 import { CardResult } from "@/types/scryfall";
 import { getCardTraderLink, getCardTraderHomepageLink } from "@/lib/cardtrader/links";
 import ManaCost from "@/app/components/ManaCost";
+import Image from "next/image";
 import { useState } from "react";
 
 export default function CardCard({ card }: { card: CardResult }) {
   const [isCheckingLink, setIsCheckingLink] = useState(false);
+  const initialImageSrc = card.image_uris.normal || card.image_uris.small || "";
+  const [imageSrc, setImageSrc] = useState(initialImageSrc);
+  const [imageFailed, setImageFailed] = useState(false);
 
   const handleClick = () => {
     window.open(card.scryfall_uri, "_blank", "noopener,noreferrer");
@@ -53,20 +57,19 @@ export default function CardCard({ card }: { card: CardResult }) {
       className="group cursor-pointer rounded-lg border border-gray-800 bg-gray-900 p-4 transition-all hover:border-gray-700 hover:shadow-lg hover:shadow-blue-500/10"
     >
       {/* Card Image */}
-      {card.image_uris.normal || card.image_uris.small ? (
-        <div className="mb-3 aspect-[5/7] overflow-hidden rounded border border-gray-800 bg-gray-950">
-          <img
-            src={card.image_uris.normal || card.image_uris.small || ""}
+      {imageSrc && !imageFailed ? (
+        <div className="mb-3 aspect-[5/7] overflow-hidden rounded border border-gray-800 bg-gray-950 relative">
+          <Image
+            src={imageSrc}
             alt={card.name}
-            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-            loading="lazy"
-            onError={(e) => {
-              const target = e.target as HTMLImageElement;
-              // Try fallback to small if normal fails
-              if (card.image_uris.small && target.src !== card.image_uris.small) {
-                target.src = card.image_uris.small;
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+            className="object-cover transition-transform group-hover:scale-105"
+            onError={() => {
+              if (card.image_uris.small && imageSrc !== card.image_uris.small) {
+                setImageSrc(card.image_uris.small);
               } else {
-                target.style.display = "none";
+                setImageFailed(true);
               }
             }}
           />

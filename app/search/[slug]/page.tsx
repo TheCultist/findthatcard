@@ -2,9 +2,7 @@ import type { Metadata } from "next";
 import SearchPage from "@/app/components/SearchPage";
 
 type SearchSlugPageProps = {
-  params: {
-    slug: string;
-  };
+  params: Promise<{ slug: string }> | { slug: string };
 };
 
 const buildMetadata = (query: string): Metadata => {
@@ -23,8 +21,12 @@ const buildMetadata = (query: string): Metadata => {
   };
 };
 
-export function generateMetadata({ params }: SearchSlugPageProps): Metadata {
-  const query = params.slug.replace(/-/g, " ");
+export async function generateMetadata({
+  params,
+}: SearchSlugPageProps): Promise<Metadata> {
+  const resolvedParams = await params;
+  const slug = resolvedParams?.slug ?? "";
+  const query = slug.replace(/-/g, " ");
   return buildMetadata(query);
 }
 

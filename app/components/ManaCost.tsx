@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import {
   getSymbolSvg,
@@ -55,13 +56,16 @@ export default function ManaCost({ manaCost }: { manaCost: string }) {
                   }
 
                   return (
-                    <img
+                    <Image
                       key={`${symbol}-${symbolIndex}`}
                       src={svgUri}
                       alt={symbol}
-                      className="h-4 w-4 inline-block flex-shrink-0"
+                      width={16}
+                      height={16}
+                      unoptimized
+                      className="inline-block flex-shrink-0"
                       onError={(e) => {
-                        const target = e.target as HTMLImageElement;
+                        const target = e.currentTarget as HTMLImageElement;
                         target.style.display = "none";
                         const textSpan = document.createElement("span");
                         textSpan.textContent = symbol;
@@ -112,14 +116,17 @@ export default function ManaCost({ manaCost }: { manaCost: string }) {
         }
 
         return (
-          <img
+          <Image
             key={`${symbol}-${index}`}
             src={svgUri}
             alt={symbol}
-            className="h-4 w-4 inline-block flex-shrink-0"
+            width={16}
+            height={16}
+            unoptimized
+            className="inline-block flex-shrink-0"
             onError={(e) => {
               // Fallback: show text if image fails to load
-              const target = e.target as HTMLImageElement;
+              const target = e.currentTarget as HTMLImageElement;
               target.style.display = "none";
               const textSpan = document.createElement("span");
               textSpan.textContent = symbol;

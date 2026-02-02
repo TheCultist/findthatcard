@@ -15,7 +15,7 @@ export default function AdBanner({ slot, className }: Props) {
     loaded.current = true;
 
     try {
-      // @ts-ignore
+      // @ts-expect-error adsbygoogle is injected by AdSense
       (window.adsbygoogle = window.adsbygoogle || []).push({});
     } catch (e) {
       console.warn("AdSense error", e);
