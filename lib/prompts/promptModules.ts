@@ -38,12 +38,16 @@ CRITICAL RULES:
 - TAG LIMIT: For any single purpose (art, function, keyword, type), use at most 3 related tags; if more are needed, simplify to the most representative ones.
 - TYPE VS TARGETING: Use t: only when the user wants the cards themselves to be that type. If the user wants cards that affect a creature type (e.g., "discount elementals", "destroy dragons"), use o:"elemental"/o:"dragon" and DO NOT add t: unless explicitly requested.
 - COST REDUCTION: For "discount"/"reduce cost", use oracle text with a mana-cost wildcard, e.g. o:/cost \\{[0-9X]+\\} less/ (NOT o:"cost reduction").
+- MANA VALUE FILTERS: For mana cost thresholds (e.g., "under 3 mana", "3 mana or less", "at most 4"), use mv comparisons (mv<3, mv<=3, mv<=4). Do NOT use cost-reduction regex unless discounting is explicitly requested.
+- STRATEGY TAGS: If the query asks for a common MTG strategy, use the placeholder tag strategy:NAME and DO NOT expand to oracletag/function tags. Valid strategy names: ${STRATEGY_TAG_NAMES.join(
+    ", "
+  )}. Use quotes for multiword names (e.g., strategy:"Cost Reduction").
+- SETS: Specific set requests -> set:code (e.g., "Fallout" -> set:pip, "War of the Spark" -> set:war, "Lorwyn Eclipsed" -> set:ecl). "Any X set" -> list ALL codes with OR (set:lrw or set:mor), NO block unless "block" mentioned, NO repeats.
 - QUOTES: Any multiword search term must be quoted (e.g., a:"Kev Walker", o:"any target", name:"Lightning Bolt").
 - OR/Nesting: Alternatives MUST use OR, not spaces. t:fish or t:bird, t:legendary (t:goblin or t:elf).`,
   examples: [
     `Azorius blink for Commander -> f:commander id=wu function:blink (NOT f:commander id=wu function:blink azorius)`,
-    `Dimir removal for Commander -> f:commander id=ub function:removal (NOT f:commander id=ub function:removal dimir)`,
-    `Lifegain for Commander -> f:commander (function:lifegain or function:lifegain-matters) NOT f:commander function:lifegain function:lifegain-matters`,
+    `Dimir spells under 3 mana for Commander -> f:commander id=ub t:instant t:sorcery mv<3`,
   ],
 };
 
@@ -55,41 +59,22 @@ Types: t:/type: (partial words: t:merfolk). If the query names a creature type a
 Formats: f:/format: (standard, pioneer, modern, legacy, vintage, commander, pauper). Commander: is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner.
 Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -is:reprint).`,
   examples: [
-    `Blue mv 5 -> c:u mv=5`,
     `Mono blue -> c=u`,
-    `Mono blue counters in commander -> f:commander id=u function:counters-matter`,
-    `Mono red removal -> c=r function:removal`,
-    `Mono green ramp -> c=g function:ramp`,
-    `Boros cards -> id=rw`,
     `Dimir commanders -> f:commander id=ub`,
-    `Rakdos sacrifice synergies -> f:commander id=br (oracletag:"sacrifice outlet" or oracletag:"sacrifice payoff")`,
-    `Cards within Dimir identity -> id:ub`,
-    `Cards at least Dimir identity -> id>=ub`,
-    `Cards at most Dimir identity -> id<=ub`,
-    `Red legendary spirits -> c:r t:legendary t:spirit`,
   ],
 };
 
 // Function tags module
 const PACK_FUNCTION_TAGS: PackDefinition = {
   rules: `Function tags: function:/oracletag:/otag: for card functions (removal, ramp, tutor, counterspell, board-wipe, token-creator, treasure-creator, clue-creator, food-creator, sacrifice-outlet, sacrifice-payoff, lifegain, lifegain-matters, mill, synergy, package, counters-matter, etc.).
-CRITICAL: Check function tags FIRST before using o:. If uncertain tag exists, use o: as fallback. Multiple alternatives -> (function:x or function:y), NOT spaces.
+Check function tags FIRST before using o:. If uncertain tag exists, use o: as fallback. Multiple alternatives -> (function:x or function:y), NOT spaces.
 Keep it minimal: Use ONE function tag unless the user explicitly requests multiple distinct functions. Do NOT stack many related counter tags together.
 "Counters" can mean counterspells (function:counterspell) or +1/+1 counters (function:counters-matter) - choose based on context. "Mono" is NOT a function tag - it refers to mono-color (single color).
 For numeric mana value/cmc filters, use mv:/manavalue: (e.g., mv=4). Only use function:mana-value-matters when the query explicitly asks about mana value being a theme.
-
-Strategy tags: If the query asks for a common MTG strategy, use the placeholder tag strategy:NAME and DO NOT expand to oracletag/function tags. Valid strategy names: ${STRATEGY_TAG_NAMES.join(
-    ", "
-  )}. Use quotes for multiword names (e.g., strategy:"Cost Reduction").`,
+`,
   examples: [
     `Removal for Commander -> f:commander function:removal`,
-    `Ramp cards -> function:ramp`,
     `Counterspells -> function:counterspell`,
-    `Cards that make tokens -> function:token-creator`,
-    `Cards that make 1/1 tokens -> function:token-creator o:/1\\/1/`,
-    `Cards that reduce the cost of Elementals -> (function:discount-self or function:discount-tap-creature) o:elemental`,
-    `Selesnya cards that create +1/+1 counters for Commander -> f:commander id=gw function:gives-pp-counters`,
-    `Draw cards -> o:"draw" (no function tag for generic draw)`,
     `Orzhov aristocrats -> id=wb strategy:Aristocrats`,
   ],
 };
@@ -97,24 +82,19 @@ Strategy tags: If the query asks for a common MTG strategy, use the placeholder 
 // Art tags module
 const PACK_ART_TAGS: PackDefinition = {
   rules: `Art tags: art:/atag:/arttag: for concrete depictions (art:zombie, art:dragon, art:angel, art:demon, art:elf, art:goblin, etc.).
-CRITICAL: Use ONLY when explicitly requested. Quote multiword tags: art:"dragon rider". NEVER use vague tags like art:creature or art:fantasy.
 If the query is "TYPE with [art]" (e.g., "equipment with sword art"), use t:TYPE for the card type and art: for the depiction (t:equipment art:sword).`,
   examples: [
     `Zombie art -> art:zombie (NOT long OR list)`,
-    `Boros fantasy creatures -> id=rw t:creature (art:dragon or art:angel or art:demon)`,
-    `Dragon art -> art:dragon`,
     `Equipment with sword art -> t:equipment art:sword`,
   ],
 };
 
 // Keywords module
 const PACK_KEYWORDS: PackDefinition = {
-  rules: `Keywords: kw:/keyword: for keyword abilities (flying, trample, vigilance, lifelink, haste, deathtouch, hexproof, ward, etc.).`,
+  rules: `Keywords: kw: for keyword abilities (flying, trample, vigilance, lifelink, haste, deathtouch, hexproof, ward, disturb, etc.).`,
   examples: [
     `Vigilance and lifelink -> kw:vigilance kw:lifelink`,
     `Flying creatures -> t:creature kw:flying`,
-    `Cards with trample -> kw:trample`,
-    `Cards with ward -> kw:ward`,
   ],
 };
 
@@ -123,21 +103,16 @@ const PACK_ARTIST: PackDefinition = {
   rules: `Artist: a:/artist: for illustrator names. NEVER use art: for artists. Quote multiword artist names: a:"Terese Nielsen".`,
   examples: [
     `Illustrated by Paolo Parente -> a:"Paolo Parente"`,
-    `Art by Rebecca Guay -> artist:"Rebecca Guay"`,
-    `Drawn by John Avon -> a:"John Avon"`,
   ],
 };
 
 // Sets module
 const PACK_SETS: PackDefinition = {
-  rules: `Sets: s:/e:/set:/edition: (set codes). CRITICAL: Specific set requests -> set:code (e.g., "Fallout" -> set:pip, "War of the Spark" -> set:war, "Lorwyn Eclipsed" -> set:ecl). "Any X set" -> list ALL codes with OR (set:lrw or set:mor), NO block: unless "block" mentioned, NO repeats. Blocks: b:/block: (3-letter code). Collector: cn:/number:. Set types: st:core, st:expansion, st:masters, st:commander. In set: in:lea.
+  rules: `Sets: s:/e:/set:/edition: (set codes). "Any X set" -> list ALL codes with OR (set:lrw or set:mor), NO block: unless "block" mentioned, NO repeats. Blocks: b:/block: (3-letter code). Collector: cn:/number:. Set types: st:core, st:expansion, st:masters, st:commander. In set: in:lea.
 AVOID inventing set codes. Only use if query explicitly asks for set/edition/printing.`,
   examples: [
     `War of the Spark -> set:war`,
-    `Fallout set -> set:pip`,
-    `Lorwyn Eclipsed commander -> set:ecl`,
     `Any Lorwyn set -> set:lrw or set:mor or set:ecc or set:ecl (NOT block:)`,
-    `Innistrad block -> block:isd (ONLY if "block" mentioned)`,
   ],
 };
 
@@ -148,10 +123,7 @@ Oracle text: o:/oracle: - Quotes for exact phrases: o:"draw two". Regex: o:/^dra
 Name: name:/^Lightning/ (starts), name:/hero/ (contains), name:/\\bhero\\b/ (whole word).`,
   examples: [
     `Text starts "draw" -> o:/^draw/`,
-    `Text includes "damage" -> o:/damage/`,
     `Name starts "Lightning" -> name:/^Lightning/`,
-    `"hero" whole word -> name:/\\bhero\\b/`,
-    `"hero" anywhere -> name:/hero/`,
   ],
 };
 
@@ -168,11 +140,7 @@ const PACK_ADVANCED: PackDefinition = {
 - Other: is:spell, is:permanent, is:historic, is:party, is:outlaw, is:modal, is:vanilla, is:frenchvanilla, is:bear, is:manland`,
   examples: [
     `Power 8+ -> pow>=8`,
-    `Split cards -> is:split`,
-    `Reserved List -> is:reserved`,
     `Banned in Legacy -> banned:legacy`,
-    `Blue mv 5 -> c:u mv=5`,
-    `Board wipes with mana value 4 -> function:board-wipe mv=4`,
   ],
 };
 
@@ -196,6 +164,9 @@ const PACK_REGISTRY: Record<PromptPack, PackDefinition> = {
 export function selectPacks(naturalQuery: string): PromptPack[] {
   const query = naturalQuery.toLowerCase();
   const selected = new Set<PromptPack>(["BASE"]); // BASE always included
+  const hasStrategyName = STRATEGY_TAG_NAMES.some((name) =>
+    query.includes(name.toLowerCase())
+  );
 
   // COLORS_FORMAT_TYPES: commander/edh, formats, guild/color words, card types, negation
   if (
@@ -210,7 +181,10 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
 
   // FUNCTION_TAGS: removal, ramp, tutor, counterspell, board wipe, token, treasure, clue, food, sacrifice, lifegain, mill, synergy, package, discount
   if (
-    /\b(removal|ramp|tutor|counterspell|counter spell|counters|board wipe|boardwipe|wipes|token|tokens|treasure|treasures|clue|clues|food|sacrifice|sacrificing|lifegain|life gain|mill|milling|synergy|synergies|package|packages|draw|drawing|card advantage|discount|discounts|discounted|reduce cost|reduces cost|reduced cost|cost reduction|cost reducer|cost reducers|cost reducing|cost less|costs less|cheaper|less to cast)\b/.test(query)
+    /\b(removal|ramp|tutor|counterspell|counter spell|counters|board wipe|boardwipe|wipes|token|tokens|treasure|treasures|clue|clues|food|sacrifice|sacrificing|lifegain|life gain|mill|milling|synergy|synergies|package|packages|draw|drawing|card advantage|discount|discounts|discounted|reduce cost|reduces cost|reduced cost|cost reduction|cost reducer|cost reducers|cost reducing|cost less|costs less|cheaper|less to cast|control)\b/.test(
+      query
+    ) ||
+    hasStrategyName
   ) {
     selected.add("FUNCTION_TAGS");
   }
@@ -224,7 +198,7 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
 
   // KEYWORDS: keyword abilities list
   if (
-    /\b(flying|trample|vigilance|lifelink|haste|deathtouch|hexproof|indestructible|reach|first strike|double strike|menace|prowess|flash|ward|keyword|keywords)\b/.test(
+    /\b(flying|trample|vigilance|lifelink|haste|deathtouch|hexproof|indestructible|reach|first strike|double strike|menace|prowess|flash|ward|disturb|keyword|keywords)\b/.test(
       query
     )
   ) {

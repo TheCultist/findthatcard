@@ -4,7 +4,10 @@ import {
 } from "@/lib/prompts";
 import { buildSystemPrompt, selectPacks } from "@/lib/prompts/promptModules";
 import { TaggerTagContext } from "@/lib/tagger/context";
-import { expandStrategyTags } from "@/lib/strategies/oracletagStrategies";
+import {
+  expandStrategyTags,
+  STRATEGY_ORACLETAGS,
+} from "@/lib/strategies/oracletagStrategies";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -15,6 +18,63 @@ const MAX_SCRYFALL_QUERY_LENGTH = 400;
 export const PREFER_BEST_PREFIX = "prefer:best "; // 12 characters
 export const EFFECTIVE_MAX_QUERY_LENGTH =
   MAX_SCRYFALL_QUERY_LENGTH - PREFER_BEST_PREFIX.length; // 388 characters
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildStrategyCandidates(): string[] {
+  const candidates: string[] = [];
+  for (const entry of STRATEGY_ORACLETAGS) {
+    candidates.push(entry.strategy);
+    for (const alias of entry.aliases || []) {
+      candidates.push(alias);
+    }
+  }
+  return candidates;
+}
+
+function detectStrategies(naturalQuery: string): string[] {
+  const query = naturalQuery.toLowerCase();
+  const found = new Set<string>();
+  for (const candidate of buildStrategyCandidates()) {
+    const normalized = candidate.toLowerCase();
+    const isWordy = /^[a-z0-9 ]+$/.test(normalized);
+    if (isWordy) {
+      const pattern = new RegExp(`\\b${escapeRegex(normalized).replace(/ +/g, "\\s+")}\\b`, "i");
+      if (pattern.test(naturalQuery)) {
+        found.add(candidate);
+      }
+    } else if (query.includes(normalized)) {
+      found.add(candidate);
+    }
+  }
+  return Array.from(found);
+}
+
+function appendStrategyTags(query: string, naturalQuery: string): string {
+  const detected = detectStrategies(naturalQuery);
+  if (detected.length === 0) {
+    return query;
+  }
+
+  const queryLower = query.toLowerCase();
+  const missing = detected.filter(
+    (strategy) => !queryLower.includes(`strategy:${strategy.toLowerCase()}`)
+  );
+
+  if (missing.length === 0) {
+    return query;
+  }
+
+  const strategyTokens = missing.map((strategy) => {
+    return /[^\w]/.test(strategy)
+      ? `strategy:"${strategy}"`
+      : `strategy:${strategy}`;
+  });
+
+  return `${query} ${strategyTokens.join(" ")}`.trim();
+}
 
 /**
  * Truncates a Scryfall query to the maximum allowed length, trying to preserve word boundaries
@@ -224,7 +284,8 @@ export async function convertToScryfallQuery(
 
     // Clean up any markdown code blocks if the model adds them
     const cleanedQuery = query.replace(/^```[\w]*\n?/g, "").replace(/```$/g, "").trim();
-    const expandedQuery = expandStrategyTags(cleanedQuery);
+    const queryWithStrategies = appendStrategyTags(cleanedQuery, naturalQuery);
+    const expandedQuery = expandStrategyTags(queryWithStrategies);
 
     if (!expandedQuery) {
       const errorMsg = "Failed to generate Scryfall query (empty response)";

@@ -211,6 +211,8 @@ export default function SearchPage() {
     handleSearch(chipQuery, 1);
   };
 
+  const trimmedQuery = query.trim();
+
   return (
     <main className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
@@ -252,7 +254,7 @@ export default function SearchPage() {
 
         {/* Example Chips */}
         {exampleQueries.length > 0 && (
-          <div className="mb-6 flex flex-wrap justify-center gap-2">
+          <div className="mb-6 flex flex-wrap gap-2">
             {exampleQueries.map((example, index) => (
               <button
                 key={`${example}-${index}`}
@@ -315,22 +317,24 @@ export default function SearchPage() {
         </section>
 
         {/* Ad Space / Adblock Message */}
-        <div className="mb-8 flex justify-center">
-          {adBlockDetected ? (
-            <div className="w-full max-w-2xl rounded-lg border border-gray-700 bg-gray-900/50 p-4 text-center">
-              <p className="text-sm text-gray-400">
-                <span className="font-medium text-gray-300">Find That Card is supported by ads.</span>
-                <br />
-                <span className="text-xs text-gray-500">
-                  A single, non-intrusive ad helps keep this site free. Please consider whitelisting{" "}
-                  <span className="font-medium text-gray-400">findthat.card</span> in your ad blocker.
-                </span>
-              </p>
-            </div>
-          ) : (
-            <AdBanner slot="4024965634" className="w-full max-w-2xl" />
-          )}
-        </div>
+        {trimmedQuery && (
+          <div className="mb-8 flex justify-center">
+            {adBlockDetected ? (
+              <div className="w-full max-w-2xl rounded-lg border border-gray-700 bg-gray-900/50 p-4 text-center">
+                <p className="text-sm text-gray-400">
+                  <span className="font-medium text-gray-300">Find That Card is supported by ads.</span>
+                  <br />
+                  <span className="text-xs text-gray-500">
+                    A single, non-intrusive ad helps keep this site free. Please consider whitelisting{" "}
+                    <span className="font-medium text-gray-400">findthat.card</span> in your ad blocker.
+                  </span>
+                </p>
+              </div>
+            ) : (
+              <AdBanner slot="4024965634" className="w-full max-w-2xl" />
+            )}
+          </div>
+        )}
 
         {/* Query Display - Editable */}
         {editableQuery && (
@@ -371,6 +375,11 @@ export default function SearchPage() {
                 </a>
               </div>
             </div>
+            {trimmedQuery && (
+              <p className="mt-3 text-xs text-gray-500">
+                {`This search shows Magic: The Gathering cards matching "${trimmedQuery}".`}
+              </p>
+            )}
           </div>
         )}
 
@@ -421,7 +430,7 @@ export default function SearchPage() {
                       // Insert ad banner after 20th card if we have 30+ results
                       if (cardCount >= 30 && index === 19) {
                         items.push(
-                          <div key={`ad-20`} className="col-span-full my-4">
+                          <div key="ad-20" className="col-span-full my-4">
                             <AdBanner slot="1553106733" className="w-full" />
                           </div>
                         );
@@ -430,7 +439,7 @@ export default function SearchPage() {
                       // Insert ad banner after 40th card if we have 50+ results
                       if (cardCount >= 50 && index === 39) {
                         items.push(
-                          <div key={`ad-40`} className="col-span-full my-4">
+                          <div key="ad-40" className="col-span-full my-4">
                             <AdBanner slot="1553106733" className="w-full" />
                           </div>
                         );
@@ -492,10 +501,7 @@ export default function SearchPage() {
             . Not endorsed by Wizards of the Coast or Scryfall.
           </p>
           <p className="mt-2">
-            <Link
-              href="/privacy"
-              className="text-blue-400 hover:underline"
-            >
+            <Link href="/privacy" className="text-blue-400 hover:underline">
               Privacy Policy
             </Link>
           </p>

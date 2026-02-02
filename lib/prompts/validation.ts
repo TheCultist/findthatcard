@@ -28,7 +28,7 @@ Generated query: "${generatedQuery}"${invalidTagsSection}
 CRITICAL RULES:
 - "f:" is FORMAT (f:commander, f:modern, f:legacy), NOT function tags. Function tags use "function:", "otag:", or "oracletag:".
 - NEVER use non-existent tags. If a FUNCTION tag doesn't exist, use oracle text (o:) instead. For ART tags, fix to a valid art tag or remove it (never replace art intent with o:).
-- Keyword abilities MUST use kw:/keyword: (e.g., kw:surveil, kw:flying). Do NOT replace kw: with o:.
+- Keyword abilities MUST use kw: (e.g., kw:surveil, kw:flying). Do NOT replace kw: with o:.
 - Art intent MUST use art:/atag:/arttag: (e.g., art:demon, art:"dragon rider"). Do NOT replace art filters with o:.
 - If an art tag is invalid, fix it to a valid art tag (e.g., art:fire-art -> art:fire). Only drop the art tag if no valid alternative exists.
 - Check: Missing requirements? Extra filters? Overly broad function tags? Incorrect colors/types? Syntax errors?

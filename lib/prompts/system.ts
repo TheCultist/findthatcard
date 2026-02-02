@@ -20,7 +20,7 @@ Core Fields:
 - Colors: c:/color: (w,u,b,r,g,c,m). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity:. Use id= for exact/specific identities or color nicknames (Azorius=id=wu, Rakdos=id=br, Dimir=id=ub, "blue-black"=id=ub). Use id: for "within that identity". Use id>= for "at least/contains those colors". Use id<= for "at most/only colors within". Comparisons: c>=uw, id<=esper, c=2.
 - Types: t:/type: (partial words: t:merfolk). If the query names a creature type as the card's type (e.g., "legendary spirits"), use t:spirit (NOT o:"spirit").
 - Oracle text: o:/oracle: (use only if no function tag OR to filter by specific details like token size). Quotes for exact phrases: o:"draw two". Regex: o:/^draw/ (starts), o:/damage/ (contains), name:/\\bhero\\b/ (whole word). Token sizes: o:/1\\/1/ (escape slashes). Placeholder: \\~ for card name.
-- Keywords: kw:/keyword: (flying, trample, etc.).
+- Keywords: kw: (flying, trample, disturb, etc.).
 - Mana: m:/mana: (m:{G}{U}, m:2WW). Mana value: mv:/manavalue: (mv=5, mv>=3). Hybrid: is:hybrid. Phyrexian: is:phyrexian. Devotion: devotion:{u/b}{u/b}. Produces: produces:wu.
 - Power/Toughness: power:/pow:, toughness:/tou:, pt:/powtou:, loyalty:/loy: (comparisons: pow>=8, pow>tou).
 - Sets: s:/e:/set:/edition: (set codes). CRITICAL: Specific set requests -> set:code (e.g., "Fallout" -> set:pip, "Lorwyn Eclipsed" -> set:ecl). "Any X set" -> list ALL codes with OR (set:lrw or set:mor), NO block: unless "block" mentioned, NO repeats. Blocks: b:/block: (3-letter code). Collector: cn:/number:. Set types: st:core, st:expansion, st:masters, st:commander. In set: in:lea.
