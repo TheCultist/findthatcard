@@ -94,3 +94,9 @@ export function expandStrategyTags(query: string): string {
     return `${leading}${replacement}`;
   });
 }
+
+export function resolveStrategyName(value: string): string | null {
+  const map = buildStrategyTagMap();
+  const entry = map.get(normalizeStrategyName(value));
+  return entry ? entry.strategy : null;
+}

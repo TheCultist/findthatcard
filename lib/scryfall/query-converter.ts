@@ -6,12 +6,25 @@ import { buildSystemPrompt, selectPacks } from "@/lib/prompts/promptModules";
 import { TaggerTagContext } from "@/lib/tagger/context";
 import {
   expandStrategyTags,
+  resolveStrategyName,
   STRATEGY_ORACLETAGS,
 } from "@/lib/strategies/oracletagStrategies";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (openaiClient) {
+    return openaiClient;
+  }
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "The OPENAI_API_KEY environment variable is missing or empty."
+    );
+  }
+  openaiClient = new OpenAI({ apiKey });
+  return openaiClient;
+}
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const MAX_SCRYFALL_QUERY_LENGTH = 400;
@@ -126,7 +139,12 @@ function detectStrategies(naturalQuery: string): string[] {
       found.add(candidate);
     }
   }
-  return Array.from(found);
+  const resolved = new Set<string>();
+  for (const entry of found) {
+    const canonical = resolveStrategyName(entry) || entry;
+    resolved.add(canonical);
+  }
+  return Array.from(resolved);
 }
 
 function appendStrategyTags(query: string, naturalQuery: string): string {
@@ -151,6 +169,129 @@ function appendStrategyTags(query: string, naturalQuery: string): string {
   });
 
   return `${query} ${strategyTokens.join(" ")}`.trim();
+}
+
+export function finalizeScryfallQuery(args: {
+  naturalQuery: string;
+  rawQuery: string;
+  tagContext?: TaggerTagContext;
+  maxLength?: number;
+}): string {
+  const {
+    naturalQuery,
+    rawQuery,
+    tagContext,
+    maxLength = EFFECTIVE_MAX_QUERY_LENGTH,
+  } = args;
+
+  // Clean up any markdown code blocks if the model adds them
+  const cleanedQuery = rawQuery
+    .replace(/^```[\w]*\n?/g, "")
+    .replace(/```$/g, "")
+    .trim();
+  const queryWithStrategies = appendStrategyTags(cleanedQuery, naturalQuery);
+  const expandedQuery = expandStrategyTags(queryWithStrategies);
+  let normalizedQuery = normalizeFormatFunctionTags(expandedQuery);
+
+  const landTutorTag = pickLandTutorTag(naturalQuery, tagContext);
+  if (landTutorTag) {
+    if (/\bfunction:tutor\b(?!-)/i.test(normalizedQuery)) {
+      normalizedQuery = normalizedQuery.replace(
+        /\bfunction:tutor\b(?!-)/gi,
+        `function:${landTutorTag}`
+      );
+    }
+
+    const toHandTag =
+      tagContext?.function.find((tag) => tag === "tutor-to-hand") ||
+      tagContext?.function.find((tag) => tag === "tutor-hand");
+    const toBattlefieldTag = tagContext?.function.find(
+      (tag) => tag === "tutor-to-battlefield"
+    );
+
+    const wantsHand = /\bhand\b/i.test(naturalQuery);
+    const wantsBattlefield = /\b(battlefield|into play|onto the battlefield)\b/i.test(
+      naturalQuery
+    );
+    const hasOr = /\bor\b/i.test(normalizedQuery);
+
+    if (wantsHand && toHandTag) {
+      const hasLandTag = new RegExp(`\\bfunction:${landTutorTag}\\b`, "i").test(
+        normalizedQuery
+      );
+      const hasToHandTag = new RegExp(`\\bfunction:${toHandTag}\\b`, "i").test(
+        normalizedQuery
+      );
+      if (hasOr || !hasLandTag || !hasToHandTag) {
+        const additions: string[] = [];
+        if (!hasLandTag) {
+          additions.push(`function:${landTutorTag}`);
+        }
+        if (!hasToHandTag) {
+          additions.push(`function:${toHandTag}`);
+        }
+        if (additions.length > 0) {
+          normalizedQuery = `${normalizedQuery} ${additions.join(" ")}`.trim();
+        }
+      }
+    } else if (wantsBattlefield && toBattlefieldTag) {
+      const hasLandTag = new RegExp(`\\bfunction:${landTutorTag}\\b`, "i").test(
+        normalizedQuery
+      );
+      const hasToBattlefieldTag = new RegExp(
+        `\\bfunction:${toBattlefieldTag}\\b`,
+        "i"
+      ).test(normalizedQuery);
+      if (hasOr || !hasLandTag || !hasToBattlefieldTag) {
+        const additions: string[] = [];
+        if (!hasLandTag) {
+          additions.push(`function:${landTutorTag}`);
+        }
+        if (!hasToBattlefieldTag) {
+          additions.push(`function:${toBattlefieldTag}`);
+        }
+        if (additions.length > 0) {
+          normalizedQuery = `${normalizedQuery} ${additions.join(" ")}`.trim();
+        }
+      }
+    }
+  }
+
+  if (!normalizedQuery) {
+    throw new Error("Failed to generate Scryfall query (empty response)");
+  }
+
+  // Validate parentheses are balanced
+  const openParens = (normalizedQuery.match(/\(/g) || []).length;
+  const closeParens = (normalizedQuery.match(/\)/g) || []).length;
+  if (openParens !== closeParens) {
+    console.warn(
+      `[OpenAI] Generated query has unbalanced parentheses (${openParens} open, ${closeParens} close): "${normalizedQuery}"`
+    );
+    // Try to fix by adding missing closing parentheses
+    const fixedQuery = normalizedQuery + ")".repeat(openParens - closeParens);
+    console.warn(
+      `[OpenAI] Attempting to fix by adding closing parentheses: "${fixedQuery}"`
+    );
+    // Only use fixed query if it's still under the limit (accounting for prefer:best prefix)
+    if (fixedQuery.length <= maxLength) {
+      return fixedQuery;
+    }
+    // If fixed query is too long, throw error to trigger regeneration
+    throw new Error(
+      "Generated query has unbalanced parentheses and cannot be automatically fixed"
+    );
+  }
+
+  // Validate length - truncate if necessary (accounting for prefer:best prefix)
+  if (normalizedQuery.length > maxLength) {
+    console.warn(
+      `[OpenAI] Generated query exceeds ${maxLength} characters (${normalizedQuery.length}), truncating...`
+    );
+    return truncateScryfallQuery(normalizedQuery, maxLength);
+  }
+
+  return normalizedQuery;
 }
 
 /**
@@ -227,6 +368,7 @@ export function isScryfallQuery(query: string): boolean {
     "banned:",
     "legal:",
     "id:",
+    "id=",
     "name:",
     "number:",
     "block:",
@@ -280,14 +422,14 @@ export async function convertToScryfallQuery(
     console.log(`[OpenAI] System prompt length: ${systemPrompt.length} chars`);
   }
 
+  let query = "";
   try {
     const isGpt5 = OPENAI_MODEL.startsWith("gpt-5");
-    let query = "";
 
     if (isGpt5) {
       // Use Responses API for reasoning models (gpt-5-mini, gpt-5, etc.)
       // Use "low" effort for economical token usage - this is a relatively simple conversion task
-      const completion = await openai.responses.create({
+      const completion = await getOpenAIClient().responses.create({
         model: OPENAI_MODEL,
         reasoning: {
           effort: "low", // Low effort balances speed and cost efficiency for query conversion
@@ -336,7 +478,7 @@ export async function convertToScryfallQuery(
       }
     } else {
       // Use Chat Completions API for non-reasoning models
-      const completion = await openai.chat.completions.create({
+      const completion = await getOpenAIClient().chat.completions.create({
         model: OPENAI_MODEL,
         messages: [
           { role: "system", content: systemPrompt },
@@ -359,100 +501,20 @@ export async function convertToScryfallQuery(
       query = completion.choices[0]?.message?.content?.trim() || "";
     }
 
-    // Clean up any markdown code blocks if the model adds them
-    const cleanedQuery = query.replace(/^```[\w]*\n?/g, "").replace(/```$/g, "").trim();
-    const queryWithStrategies = appendStrategyTags(cleanedQuery, naturalQuery);
-    const expandedQuery = expandStrategyTags(queryWithStrategies);
-    let normalizedQuery = normalizeFormatFunctionTags(expandedQuery);
-
-    const landTutorTag = pickLandTutorTag(naturalQuery, tagContext);
-    if (landTutorTag) {
-      if (/\bfunction:tutor\b(?!-)/i.test(normalizedQuery)) {
-        normalizedQuery = normalizedQuery.replace(
-          /\bfunction:tutor\b(?!-)/gi,
-          `function:${landTutorTag}`
-        );
-      }
-
-      const toHandTag =
-        tagContext?.function.find((tag) => tag === "tutor-to-hand") ||
-        tagContext?.function.find((tag) => tag === "tutor-hand");
-      const toBattlefieldTag = tagContext?.function.find(
-        (tag) => tag === "tutor-to-battlefield"
-      );
-
-      const wantsHand = /\bhand\b/i.test(naturalQuery);
-      const wantsBattlefield = /\b(battlefield|into play|onto the battlefield)\b/i.test(
-        naturalQuery
-      );
-      const hasOr = /\bor\b/i.test(normalizedQuery);
-
-      if (wantsHand && toHandTag) {
-        const hasLandTag = new RegExp(`\\bfunction:${landTutorTag}\\b`, "i").test(
-          normalizedQuery
-        );
-        const hasToHandTag = new RegExp(`\\bfunction:${toHandTag}\\b`, "i").test(
-          normalizedQuery
-        );
-        if (hasOr || !hasLandTag || !hasToHandTag) {
-          normalizedQuery = `${normalizedQuery} function:${landTutorTag} function:${toHandTag}`.trim();
-        }
-      } else if (wantsBattlefield && toBattlefieldTag) {
-        const hasLandTag = new RegExp(`\\bfunction:${landTutorTag}\\b`, "i").test(
-          normalizedQuery
-        );
-        const hasToBattlefieldTag = new RegExp(
-          `\\bfunction:${toBattlefieldTag}\\b`,
-          "i"
-        ).test(normalizedQuery);
-        if (hasOr || !hasLandTag || !hasToBattlefieldTag) {
-          normalizedQuery = `${normalizedQuery} function:${landTutorTag} function:${toBattlefieldTag}`.trim();
-        }
-      }
-    }
-
-    if (!normalizedQuery) {
-      const errorMsg = "Failed to generate Scryfall query (empty response)";
-      console.error(`[OpenAI] ${errorMsg}`, {
+    return finalizeScryfallQuery({
+      naturalQuery,
+      rawQuery: query,
+      tagContext,
+      maxLength: EFFECTIVE_MAX_QUERY_LENGTH,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("empty response")) {
+      console.error(`[OpenAI] ${error.message}`, {
         model: OPENAI_MODEL,
-        isGpt5,
+        isGpt5: OPENAI_MODEL.startsWith("gpt-5"),
         rawQuery: query,
       });
-      throw new Error(errorMsg);
     }
-
-    // Validate parentheses are balanced
-    const openParens = (normalizedQuery.match(/\(/g) || []).length;
-    const closeParens = (normalizedQuery.match(/\)/g) || []).length;
-    if (openParens !== closeParens) {
-      console.warn(
-        `[OpenAI] Generated query has unbalanced parentheses (${openParens} open, ${closeParens} close): "${normalizedQuery}"`
-      );
-      // Try to fix by adding missing closing parentheses
-      const fixedQuery = normalizedQuery + ")".repeat(openParens - closeParens);
-      console.warn(
-        `[OpenAI] Attempting to fix by adding closing parentheses: "${fixedQuery}"`
-      );
-      // Only use fixed query if it's still under the limit (accounting for prefer:best prefix)
-      if (fixedQuery.length <= EFFECTIVE_MAX_QUERY_LENGTH) {
-        return fixedQuery;
-      }
-      // If fixed query is too long, throw error to trigger regeneration
-      throw new Error(
-        "Generated query has unbalanced parentheses and cannot be automatically fixed"
-      );
-    }
-
-    // Validate length - truncate if necessary (accounting for prefer:best prefix)
-    if (normalizedQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
-      console.warn(
-        `[OpenAI] Generated query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${normalizedQuery.length}), truncating...`
-      );
-      return truncateScryfallQuery(normalizedQuery, EFFECTIVE_MAX_QUERY_LENGTH);
-    }
-
-    return normalizedQuery;
-  } catch (error) {
     // Log detailed error information
     if (process.env.NODE_ENV === "development") {
       console.error("[OpenAI] API call error details:", {
