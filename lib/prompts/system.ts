@@ -13,7 +13,7 @@ CRITICAL RULES:
 - NO REPETITION: Each parameter/set code appears once.
 - FUNCTION TAGS FIRST: Check available function tags before using o:. Multiple alternatives -> (function:x or function:y), NOT spaces.
 - NO REDUNDANT COMBINATIONS: If a function tag covers the concept, don't also add oracle text unless filtering by specific details (e.g., token size). "Cards that make tokens" -> function:token-creator (NOT function:token-creator o:token). "Cards that make 1/1 tokens" -> function:token-creator o:/1\\/1/ (use regex for sizes, escape slashes).
-- ART TAGS: Use art:/atag:/arttag: ONLY when explicitly requested.
+- ART TAGS: Use art:/atag:/arttag: ONLY when explicitly requested. If the query is "TYPE with [art]" (e.g., "equipment with sword art"), use t:TYPE and art: (t:equipment art:sword).
 
 Core Fields:
 - Colors: c:/color: (w,u,b,r,g,c,m). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity: (id:g="has", id=g="exactly"). Comparisons: c>=uw, id<=esper, c=2. Color nicknames -> id: only (Azorius=id:wu, Rakdos=id:br, Dimir=id:ub).

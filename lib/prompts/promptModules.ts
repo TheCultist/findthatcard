@@ -87,11 +87,13 @@ For numeric mana value/cmc filters, use mv:/manavalue: (e.g., mv=4). Only use fu
 // Art tags module
 const PACK_ART_TAGS: PackDefinition = {
   rules: `Art tags: art:/atag:/arttag: for concrete depictions (art:zombie, art:dragon, art:angel, art:demon, art:elf, art:goblin, etc.).
-CRITICAL: Use ONLY when explicitly requested. Quote multiword tags: art:"dragon rider". NEVER use vague tags like art:creature or art:fantasy.`,
+CRITICAL: Use ONLY when explicitly requested. Quote multiword tags: art:"dragon rider". NEVER use vague tags like art:creature or art:fantasy.
+If the query is "TYPE with [art]" (e.g., "equipment with sword art"), use t:TYPE for the card type and art: for the depiction (t:equipment art:sword).`,
   examples: [
     `Zombie art -> art:zombie (NOT long OR list)`,
     `Boros fantasy creatures -> id:rw t:creature (art:dragon or art:angel or art:demon)`,
     `Dragon art -> art:dragon`,
+    `Equipment with sword art -> t:equipment art:sword`,
   ],
 };
 

@@ -2,6 +2,7 @@
 
 import { useState, FormEvent, useEffect } from "react";
 import Link from "next/link";
+import { ShieldCheckIcon, PaintBrushIcon, QueueListIcon } from "@heroicons/react/24/outline";
 import { SearchResponse, ErrorResponse } from "@/types/scryfall";
 import { getRandomExamples } from "@/lib/example-queries";
 import CookieBanner from "./components/CookieBanner";
@@ -22,7 +23,7 @@ export default function Home() {
 
   // Load random examples on mount
   useEffect(() => {
-    setExampleQueries(getRandomExamples(5));
+    setExampleQueries(getRandomExamples(4));
   }, []);
 
   // Fetch symbol data once on mount
@@ -179,6 +180,54 @@ export default function Home() {
             ))}
           </div>
         )}
+
+        {/* Static intro content */}
+        <section className="mb-8 text-sm text-gray-400">
+          <div className="mx-auto max-w-4xl text-center">
+            <p className="text-base text-gray-300">
+              Find That Card is a Magic: The Gathering search tool that lets you describe cards in
+              plain language.
+            </p>
+            <div className="mt-5 grid grid-cols-1 gap-3 text-center sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-2xl border border-gray-800/70 bg-gray-900/30 px-5 py-5">
+                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
+                  <ShieldCheckIcon className="h-6 w-6" aria-hidden="true" />
+                </div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Card intent
+                </p>
+                <p className="mt-2 text-sm text-gray-300">
+                  Removal, ramp, tutors, tokens, or any role you can describe.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-800/70 bg-gray-900/30 px-5 py-5">
+                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
+                  <PaintBrushIcon className="h-6 w-6" aria-hidden="true" />
+                </div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Art and flavor
+                </p>
+                <p className="mt-2 text-sm text-gray-300">
+                  Dragons, angels, swords, landscapes, or other artwork subjects.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-gray-800/70 bg-gray-900/30 px-5 py-5">
+                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
+                  <QueueListIcon className="h-6 w-6" aria-hidden="true" />
+                </div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Formats and rules
+                </p>
+                <p className="mt-2 text-sm text-gray-300">
+                  Commander, Modern, Pauper, plus colors, keywords, and mechanics.
+                </p>
+              </div>
+            </div>
+            <p className="mt-4 text-xs text-gray-500">
+              Results are powered by Scryfall and updated in real time.
+            </p>
+          </div>
+        </section>
 
         {/* Ad Space / Adblock Message */}
         <div className="mb-8 flex justify-center">
