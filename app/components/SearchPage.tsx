@@ -275,6 +275,13 @@ export default function SearchPage() {
               Find That Card is a Magic: The Gathering search tool that lets you describe cards in
               plain language.
             </p>
+            <p className="mt-2 text-xs text-gray-500">
+              Find That Card is a project by{" "}
+              <Link href="/about" className="text-blue-400 hover:underline">
+                Cardboard Cultist
+              </Link>
+              .
+            </p>
             <div className="mt-5 grid grid-cols-1 gap-3 text-center sm:grid-cols-2 lg:grid-cols-3">
               <div className="rounded-2xl border border-gray-800/70 bg-gray-900/30 px-5 py-5">
                 <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
@@ -501,6 +508,10 @@ export default function SearchPage() {
             . Not endorsed by Wizards of the Coast or Scryfall.
           </p>
           <p className="mt-2">
+            <Link href="/about" className="text-blue-400 hover:underline">
+              About
+            </Link>
+            <span className="mx-2 text-gray-600">•</span>
             <Link href="/privacy" className="text-blue-400 hover:underline">
               Privacy Policy
             </Link>
