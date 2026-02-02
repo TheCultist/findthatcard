@@ -142,7 +142,8 @@ const PACK_ADVANCED: PackDefinition = {
 - Rarity: r:/rarity: (common, uncommon, rare, special, mythic, bonus). Comparisons: r>=r
 - Multi-faced: is:split, is:flip, is:transform/is:tdfc, is:meld/is:meldpart/is:meldresult, is:leveler, is:dfc, is:mdfc
 - Other: is:spell, is:permanent, is:historic, is:party, is:outlaw, is:modal, is:vanilla, is:frenchvanilla, is:bear, is:manland, is:universesbeyond, not:universesbeyond
-UNIVERSES BEYOND: If the query specifies Universes Beyond, use is:universesbeyond (or not:universesbeyond if excluded).`,
+- GAMES/DIGITAL RULE: If the user mentions Arena/MTGO/paper/digital/alchemy/rebalanced, use the appropriate tag (game:paper or game:arena or game:mtgo; is:digital/is:alchemy/is:rebalanced) and DO NOT add unrelated game filters.
+- UNIVERSES BEYOND: If the query specifies Universes Beyond, use is:universesbeyond (or not:universesbeyond if excluded).`,
   examples: [
     `Power 8+ -> pow>=8`,
     `Banned in Legacy -> banned:legacy`,

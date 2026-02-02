@@ -17,6 +17,20 @@ import {
 } from "@/lib/scryfall/query-converter";
 import { CARDS_PER_PAGE, searchScryfall } from "@/lib/scryfall/client";
 
+const DEFAULT_GAME_FILTER = "game:paper";
+
+function applyDefaultGameFilter(query: string): string {
+  const lower = query.toLowerCase();
+  const hasGameFilter = /\b(game|in):(paper|arena|mtgo)\b/.test(lower);
+  const hasDigitalFilter = /\b-?is:(digital|alchemy|rebalanced)\b/.test(lower);
+
+  if (hasGameFilter || hasDigitalFilter) {
+    return query;
+  }
+
+  return `${query} ${DEFAULT_GAME_FILTER}`.trim();
+}
+
 /**
  * POST /api/search
  */
@@ -63,6 +77,7 @@ export async function POST(request: NextRequest) {
     try {
       tagContext = isDirectScryfallQuery ? undefined : await getTaggerTagContext(body.naturalQuery);
       scryfallQuery = await convertToScryfallQuery(body.naturalQuery, undefined, tagContext);
+      scryfallQuery = applyDefaultGameFilter(scryfallQuery);
       
       // Validate and truncate Scryfall query length (accounting for prefer:best prefix)
       if (scryfallQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
@@ -82,6 +97,7 @@ export async function POST(request: NextRequest) {
         // Regenerate query without invalid tags
         const regenerationPrompt = getRegenerationPrompt(body.naturalQuery, invalidTags, tagContext);
         scryfallQuery = await convertToScryfallQuery(body.naturalQuery, regenerationPrompt, tagContext);
+        scryfallQuery = applyDefaultGameFilter(scryfallQuery);
         
         // Validate and truncate regenerated query length (accounting for prefer:best prefix)
         if (scryfallQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
