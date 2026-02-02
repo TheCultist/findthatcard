@@ -49,7 +49,7 @@ Types: t:/type: (partial words: t:merfolk). If the query names a creature type a
 TYPE VS TARGETING: Use t: only when the user wants the cards themselves to be that type. If the user wants cards that affect a creature type (e.g., "discount elementals", "destroy dragons"), use o:"elemental"/o:"dragon" and DO NOT add t: unless explicitly requested.
 Formats: f:/format: (standard, pioneer, modern, legacy, vintage, commander, pauper). Commander: is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner. NEVER use function: for formats.
 FORMAT WORDING VARIANTS: Treat leading format adjectives as f:FORMAT even if not explicitly "legal in". "legacy free counterspells" and "legacy-legal free counterspells" -> f:legacy function:counterspell-free (no o:counterspell).
-Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -is:reprint).`,
+Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -is:reprint). "Not in X"/"without X" must be -c:x where X is the letter or color nickname of that color.`,
   examples: [
     `Mono blue -> c=u`,
     `Dimir commanders -> f:commander id=ub`,
@@ -65,7 +65,7 @@ FUNCTION TAG SPECIFICITY: If a more specific function tag exists in the availabl
 NO REDUNDANT COMBINATIONS: If a function tag covers the concept, don't also add oracle text unless filtering by specific details (e.g., token size). "Cards that make tokens" -> function:token-creator (NOT function:token-creator o:token). "Cards that make 1/1 tokens" -> function:token-creator o:/1\\/1/ (use regex for sizes, escape slashes).
 CARDS LIKE X: If the user asks for "cards like X"/"similar to X", treat X as a card name. Only use a function tag if X EXACTLY matches a function tag name after normalizing spaces/hyphens (no fuzzy matching). Otherwise, use an oracle regex capturing the primary effect of the named card (e.g., "Cards like Lightning Bolt" -> o:/deals [0-9]+ damage to any target/). Do NOT map "Lightning Bolt" to function:boltland.
 Keep it minimal: Use ONE function tag unless the user explicitly requests multiple distinct functions. Do NOT stack many related counter tags together.
-"Counters" can mean counterspells (function:counterspell) or +1/+1 counters (function:counters-matter) - choose based on context. "Mono" is NOT a function tag - it refers to mono-color (single color).
+"Counters" can mean counterspells (function:counterspell) or +1/+1 counters (function:counters-matter) - choose based on context. If the query is about countering spells, ALWAYS use function:counterspell (NOT o:counter, NOT function:ability-counter). Only use function:ability-counter if the user explicitly asks to counter abilities. "Mono" is NOT a function tag - it refers to mono-color (single color).
 COST REDUCTION: For "discount"/"reduce cost", use oracle text with a mana-cost wildcard, e.g. o:/cost \\{[0-9X]+\\} less/ (NOT o:"cost reduction").
 Counterspells: use function:counterspell, not o:counter/o:"counterspell". If the user specifically requests free counterspells, use (function:counterspell-free or (function:counterspell and function:potentially-free)). Do NOT add t:instant unless explicitly requested.
 CAST FOR FREE: If the user asks for a card that can be cast for free, use function:potentially-free. Exception: if it's a counterspell, use the counterspell rule instead.
@@ -77,6 +77,7 @@ STRATEGY TAGS: If the query asks for a common MTG strategy, use the placeholder 
   examples: [
     `Removal for Commander -> f:commander function:removal`,
     `Counterspells -> function:counterspell`,
+    `Counterspells that are not in red -> function:counterspell -c:r`,
     `Orzhov aristocrats -> id=wb strategy:Aristocrats`,
     `Cards like Lightning Bolt -> o:/deals [0-9]+ damage to any target/ (NOT function:boltland)`,
     `Tutor for lands -> function:land-tutor (NOT function:tutor)`,

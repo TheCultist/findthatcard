@@ -56,6 +56,68 @@ function normalizeFormatFunctionTags(query: string): string {
   }, query);
 }
 
+function normalizeWhitespace(query: string): string {
+  return query.replace(/\s{2,}/g, " ").trim();
+}
+
+function dedupeTokens(query: string): string {
+  const seen = new Set<string>();
+  const tokens = query.split(/\s+/).filter(Boolean);
+  const result: string[] = [];
+
+  for (const token of tokens) {
+    const key = token.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(token);
+  }
+
+  return result.join(" ");
+}
+
+function normalizeCounterspellIntent(naturalQuery: string, query: string): string {
+  const wantsCounterspells = /\bcounter\s*spells?\b|\bcounterspells?\b/i.test(naturalQuery);
+  if (!wantsCounterspells) {
+    return query;
+  }
+
+  let updated = query;
+  const hasCounterspellTag = /\bfunction:counterspell\b/i.test(updated);
+  if (!hasCounterspellTag) {
+    updated = `${updated} function:counterspell`;
+  }
+
+  // If the user asked for counterspells, remove ability counter tags and oracle "counter" text.
+  updated = updated.replace(/\bfunction:ability-counter\b/gi, "");
+  updated = updated.replace(/\bo:"counterspell"\b/gi, "");
+  updated = updated.replace(/\bo:"counter"\b/gi, "");
+  updated = updated.replace(/\bo:counter\b/gi, "");
+  updated = updated.replace(/\bo:"counter target spell"\b/gi, "");
+  updated = updated.replace(/\bo:"counter target spell\."\b/gi, "");
+
+  return normalizeWhitespace(updated);
+}
+
+function normalizeNotRedRequirement(naturalQuery: string, query: string): string {
+  const wantsExcludeRed = /\b(not in|without|no|non[-\s]?|excluding|exclude)\s+red\b/i.test(
+    naturalQuery
+  );
+  if (!wantsExcludeRed) {
+    return query;
+  }
+
+  let updated = query;
+  updated = updated.replace(/\b-?function:red-hate\b/gi, "");
+  updated = updated.replace(/-c:r(?!ù)/gi, "-c:r");
+  if (!/\b-c:r\b/i.test(updated)) {
+    updated = `${updated} -c:r`;
+  }
+
+  return normalizeWhitespace(updated);
+}
+
 function pickLandTutorTag(
   naturalQuery: string,
   tagContext?: TaggerTagContext
@@ -256,6 +318,10 @@ export function finalizeScryfallQuery(args: {
       }
     }
   }
+
+  normalizedQuery = normalizeCounterspellIntent(naturalQuery, normalizedQuery);
+  normalizedQuery = normalizeNotRedRequirement(naturalQuery, normalizedQuery);
+  normalizedQuery = dedupeTokens(normalizedQuery);
 
   if (!normalizedQuery) {
     throw new Error("Failed to generate Scryfall query (empty response)");

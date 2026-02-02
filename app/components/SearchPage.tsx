@@ -60,6 +60,7 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageInput, setPageInput] = useState("1");
   const [exampleQueries, setExampleQueries] = useState<string[]>([]);
   const adBlockDetected = useAdBlockDetection();
 
@@ -123,6 +124,7 @@ export default function SearchPage() {
 
         setResults(data as SearchResponse);
         setCurrentPage(data.page);
+        setPageInput(String(data.page));
         // Update editable query with the generated Scryfall query (only on first page)
         if (page === 1) {
           setEditableQuery(data.scryfallQuery);
@@ -156,6 +158,7 @@ export default function SearchPage() {
     lastUrlQueryRef.current = urlQuery;
     setQuery(urlQuery);
     setCurrentPage(1);
+    setPageInput("1");
     handleSearch(urlQuery, 1, { updateUrl: false });
   }, [getQueryFromUrl, handleSearch]);
 
@@ -164,6 +167,7 @@ export default function SearchPage() {
       return;
     }
     setCurrentPage(1);
+    setPageInput("1");
     handleSearch(editableQuery, 1, { updateUrl: false });
   };
 
@@ -176,6 +180,24 @@ export default function SearchPage() {
       handleSearch(searchQuery, newPage, { updateUrl: false });
     }
   };
+
+  const handleJumpToPage = () => {
+    if (!results) {
+      return;
+    }
+    const parsedPage = Number.parseInt(pageInput, 10);
+    if (Number.isNaN(parsedPage)) {
+      setPageInput(String(results.page));
+      return;
+    }
+    const maxPage = Math.max(1, Math.ceil(results.total / results.per_page));
+    const clampedPage = Math.min(Math.max(parsedPage, 1), maxPage);
+    setPageInput(String(clampedPage));
+    if (clampedPage !== results.page) {
+      handlePageChange(clampedPage);
+    }
+  };
+
 
   // Scroll to query section when results change (after loading completes)
   useEffect(() => {
@@ -202,12 +224,14 @@ export default function SearchPage() {
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setCurrentPage(1);
+    setPageInput("1");
     handleSearch(query, 1);
   };
 
   const handleChipClick = (chipQuery: string) => {
     setQuery(chipQuery);
     setCurrentPage(1);
+    setPageInput("1");
     handleSearch(chipQuery, 1);
   };
 
@@ -459,24 +483,86 @@ export default function SearchPage() {
 
                 {/* Pagination Controls */}
                 {(results.has_more || results.page > 1) && (
-                  <div className="mt-8 flex items-center justify-center gap-4">
-                    <button
-                      onClick={() => handlePageChange(results.page - 1)}
-                      disabled={loading || results.page === 1}
-                      className="rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Previous
-                    </button>
-                    <span className="text-sm text-gray-400">
-                      Page {results.page} of {Math.ceil(results.total / results.per_page)}
-                    </span>
-                    <button
-                      onClick={() => handlePageChange(results.page + 1)}
-                      disabled={loading || !results.has_more}
-                      className="rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Next
-                    </button>
+                  <div className="mt-8 flex flex-col items-center justify-center gap-3">
+                    <div className="flex flex-wrap items-center justify-center gap-4">
+                      <button
+                        onClick={() => handlePageChange(results.page - 1)}
+                        disabled={loading || results.page === 1}
+                        className="rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Previous
+                      </button>
+                      <span className="text-sm text-gray-400">
+                        Page {results.page} of {Math.ceil(results.total / results.per_page)}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {(() => {
+                          const totalPages = Math.max(
+                            1,
+                            Math.ceil(results.total / results.per_page)
+                          );
+                          const startPage = Math.max(1, results.page - 3);
+                          const endPage = Math.min(totalPages, results.page + 3);
+                          const pages = [];
+
+                          for (let page = startPage; page <= endPage; page += 1) {
+                            pages.push(page);
+                          }
+
+                          return pages.map((page) => (
+                            <button
+                              key={`page-${page}`}
+                              onClick={() => handlePageChange(page)}
+                              disabled={loading || page === results.page}
+                              className={
+                                page === results.page
+                                  ? "rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-300"
+                                  : "rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                              }
+                            >
+                              {page}
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                      <button
+                        onClick={() => handlePageChange(results.page + 1)}
+                        disabled={loading || !results.has_more}
+                        className="rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Next
+                      </button>
+                    </div>
+                    {Math.ceil(results.total / results.per_page) >= 5 && (
+                      <div className="flex items-center gap-2">
+                        <label htmlFor="page-jump" className="text-xs text-gray-500">
+                          Jump to
+                        </label>
+                        <input
+                          id="page-jump"
+                          type="number"
+                          min={1}
+                          max={Math.ceil(results.total / results.per_page)}
+                          value={pageInput}
+                          onChange={(e) => setPageInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleJumpToPage();
+                            }
+                          }}
+                          className="w-20 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                          disabled={loading}
+                        />
+                        <button
+                          onClick={handleJumpToPage}
+                          disabled={loading}
+                          className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Go
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
