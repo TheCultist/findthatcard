@@ -96,7 +96,9 @@ If the query is "TYPE with [art]" (e.g., "equipment with sword art"), use t:TYPE
 
 // Keywords module
 const PACK_KEYWORDS: PackDefinition = {
-  rules: `Keywords: kw: for keyword abilities (flying, trample, vigilance, lifelink, haste, deathtouch, hexproof, ward, disturb, storm, etc.). Always use kw: for keyword abilities; do NOT use function: or o: for them.`,
+  rules: `Keywords: kw: for keyword abilities (flying, trample, vigilance, lifelink, haste, deathtouch, hexproof, ward, disturb, storm, etc.).
+USE kw: ONLY when the cards themselves have the keyword (e.g., "cards with flying", "has deathtouch"). If the request is about cards that GIVE/GRANT a keyword to other permanents/players, do NOT use kw:; use the related function tag if available, otherwise o:.
+PRIORITY: If the user explicitly asks for cards WITH a keyword (or that HAVE it), use kw: even if the wording also mentions giving.`,
   examples: [
     `Vigilance and lifelink -> kw:vigilance kw:lifelink`,
     `Flying creatures -> t:creature kw:flying`,
@@ -176,6 +178,13 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
     query.includes(name.toLowerCase())
   );
   const hasSimilarityQuery = /\b(cards? like|similar to)\b/.test(query);
+  const hasKeywordQuery =
+    /\b(flying|trample|vigilance|lifelink|haste|deathtouch|hexproof|indestructible|reach|first strike|double strike|menace|prowess|flash|ward|disturb|storm|keyword|keywords)\b/.test(
+      query
+    );
+  const hasKeywordGrantQuery =
+    hasKeywordQuery &&
+    /\b(give|gives|giving|grant|grants|granting)\b/.test(query);
 
   // COLORS_FORMAT_TYPES: commander/edh, formats, guild/color words, card types, negation
   if (
@@ -194,7 +203,8 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
       query
     ) ||
     hasStrategyName ||
-    hasSimilarityQuery
+    hasSimilarityQuery ||
+    hasKeywordGrantQuery
   ) {
     selected.add("FUNCTION_TAGS");
   }
@@ -207,11 +217,7 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
   }
 
   // KEYWORDS: keyword abilities list
-  if (
-    /\b(flying|trample|vigilance|lifelink|haste|deathtouch|hexproof|indestructible|reach|first strike|double strike|menace|prowess|flash|ward|disturb|storm|keyword|keywords)\b/.test(
-      query
-    )
-  ) {
+  if (hasKeywordQuery) {
     selected.add("KEYWORDS");
   }
 
