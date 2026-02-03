@@ -7,7 +7,11 @@ type Props = {
   className?: string;
 };
 
+const SHOW_ADS = process.env.NEXT_PUBLIC_SHOW_ADS === "true";
+
 export default function AdBanner({ slot, className }: Props) {
+  if (!SHOW_ADS) return null;
+
   const loaded = useRef(false);
 
   useEffect(() => {
