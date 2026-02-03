@@ -34,14 +34,14 @@ CRITICAL RULES:
 - QUOTES: Any multiword search term must be quoted (e.g., a:"Kev Walker", o:"any target", name:"Lightning Bolt").
 - OR/Nesting: Alternatives MUST use OR, not spaces. t:fish or t:bird, t:legendary (t:goblin or t:elf).`,
   examples: [
-    `Azorius blink for Commander -> f:commander id=wu function:blink (NOT f:commander id=wu function:blink azorius)`,
-    `Dimir spells under 3 mana for Commander -> f:commander id=ub t:instant t:sorcery mv<3`,
+    `Azorius blink for Commander -> f:commander id:wu function:blink (NOT f:commander id:wu function:blink azorius)`,
+    `Dimir spells under 3 mana for Commander -> f:commander id:ub t:instant t:sorcery mv<3`,
   ],
 };
 
 // Colors, Formats, Types module
 const PACK_COLORS_FORMAT_TYPES: PackDefinition = {
-  rules: `Colors: c:/color: (w=white, u=blue, b=black, r=red, g=green, c=colorless, m=multicolor). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity:. Use id= for exact/specific identities or color nicknames (Azorius=id=wu, Rakdos=id=br, Dimir=id=ub, Boros=id=rw, Gruul=id=rg, Selesnya=id=gw, Orzhov=id=wb, Izzet=id=ur, Golgari=id=bg, Simic=id=gu). Use id: for "within that identity". Use id>= for "at least/contains those colors". Use id<= for "at most/only colors within". "Mono [color]" means exactly that color: mono blue = c=u or id=u, mono red = c=r or id=r, mono green = c=g or id=g, mono white = c=w or id=w, mono black = c=b or id=b.
+  rules: `Colors: c:/color: (w=white, u=blue, b=black, r=red, g=green, c=colorless, m=multicolor). c:g="has green", c=g="exactly green" (mono). Color identity: id:/identity:. Use id: for color combinations/nicknames unless the user explicitly says they want EXACTLY that combination. Use id= only for exact/specific identities or when "exactly" is requested. Guild/shard/wedge nicknames: Azorius=wu, Rakdos=br, Dimir=ub, Boros=rw, Gruul=rg, Selesnya=gw, Orzhov=wb, Izzet=ur, Golgari=bg, Simic=gu, Esper=wub, Grixis=ubr, Jund=brg, Naya=rgw, Bant=guw, Abzan=wbg, Jeskai=urw, Sultai=bug, Mardu=brw, Temur=urg. Use id>= for "at least/contains those colors". Use id<= for "at most/only colors within". "Mono [color]" means exactly that color: use id= (mono blue = id=u, mono red = id=r, mono green = id=g, mono white = id=w, mono black = id=b).
 COLOR ACCURACY: Match colors exactly. Blue=u, Red=r, Green=g, White=w, Black=b. "Mono blue" = c=u or id=u (NOT c=g or id=g). Double-check color mappings before outputting.
 NO REDUNDANT COLOR NICKNAMES: When using id:/c: for colors, NEVER add the nickname as bare text. "Azorius blink" -> f:commander id:wu function:blink (NOT f:commander id:wu function:blink azorius).
 Comparisons: c>=uw, id<=esper, c=2.
@@ -51,8 +51,8 @@ Formats: f:/format: (standard, pioneer, modern, legacy, vintage, commander, paup
 FORMAT WORDING VARIANTS: Treat leading format adjectives as f:FORMAT even if not explicitly "legal in". "legacy free counterspells" and "legacy-legal free counterspells" -> f:legacy function:counterspell-free (no o:counterspell).
 Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -is:reprint). "Not in X"/"without X" must be -c:x where X is the letter or color nickname of that color.`,
   examples: [
-    `Mono blue -> c=u`,
-    `Dimir commanders -> f:commander id=ub`,
+    `Mono blue -> id=u`,
+    `Dimir commanders -> f:commander id:ub`,
   ],
 };
 
@@ -78,7 +78,7 @@ STRATEGY TAGS: If the query asks for a common MTG strategy, use the placeholder 
     `Removal for Commander -> f:commander function:removal`,
     `Counterspells -> function:counterspell`,
     `Counterspells that are not in red -> function:counterspell -c:r`,
-    `Orzhov aristocrats -> id=wb strategy:Aristocrats`,
+    `Orzhov aristocrats -> id:wb strategy:Aristocrats`,
     `Cards like Lightning Bolt -> o:/deals [0-9]+ damage to any target/ (NOT function:boltland)`,
     `Tutor for lands -> function:land-tutor (NOT function:tutor)`,
   ],

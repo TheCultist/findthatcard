@@ -6,6 +6,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import { ShieldCheckIcon, PaintBrushIcon, QueueListIcon } from "@heroicons/react/24/outline";
 import { SearchResponse, ErrorResponse } from "@/types/scryfall";
 import { getRandomExamples } from "@/lib/example-queries";
+import { getRandomProTip } from "@/lib/pro-tips";
 import CookieBanner from "@/app/components/CookieBanner";
 import { fetchSymbolData } from "@/lib/scryfall/symbols";
 import useAdBlockDetection from "@/app/hooks/useAdBlockDetection";
@@ -62,6 +63,7 @@ export default function SearchPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
   const [exampleQueries, setExampleQueries] = useState<string[]>([]);
+  const [proTip, setProTip] = useState("");
   const adBlockDetected = useAdBlockDetection();
 
   const getQueryFromUrl = useCallback(() => {
@@ -161,6 +163,12 @@ export default function SearchPage() {
     setPageInput("1");
     handleSearch(urlQuery, 1, { updateUrl: false });
   }, [getQueryFromUrl, handleSearch]);
+
+  useEffect(() => {
+    if (loading) {
+      setProTip(getRandomProTip());
+    }
+  }, [loading]);
 
   const handleEditableQuerySearch = () => {
     if (!editableQuery.trim()) {
@@ -428,8 +436,16 @@ export default function SearchPage() {
 
         {/* Loading State */}
         {loading && (
-          <div className="flex justify-center py-12">
+          <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-700 border-t-blue-600"></div>
+            {proTip && (
+              <div className="w-full max-w-2xl rounded-2xl border border-gray-800/70 bg-gray-900/50 px-5 py-4 text-sm text-gray-400 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
+                <span className="text-xs font-semibold uppercase tracking-wide text-blue-400">
+                  Pro tip
+                </span>
+                <p className="mt-2 text-base text-gray-300">{proTip}</p>
+              </div>
+            )}
           </div>
         )}
 
