@@ -238,110 +238,114 @@ export default function SearchPage() {
   const trimmedQuery = query.trim();
 
   return (
-    <main className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+    <main className="min-h-screen px-4 py-10 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <Link
-            href="/"
-            className="inline-flex justify-center hover:text-blue-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40 rounded"
-          >
-            <h1 className="mb-2 text-4xl font-bold tracking-tight sm:text-5xl">
-              Find That Card
-            </h1>
-          </Link>
-          <p className="text-lg text-gray-400">
-            Search Magic: The Gathering cards using natural language.
-          </p>
-        </div>
-
-        {/* Search Form */}
-        <form onSubmit={handleSubmit} className="mb-6">
-          <div className="flex flex-col gap-4 sm:flex-row">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder='Try "white creatures" or "cards with dragons in the art"'
-              className="flex-1 rounded-lg border border-gray-800 bg-gray-900 px-4 py-3 text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              disabled={loading}
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-blue-600 px-6 py-3 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? "Searching..." : "Search"}
-            </button>
-          </div>
-        </form>
-
-        {/* Example Chips */}
-        {exampleQueries.length > 0 && (
-          <div className="mb-6 flex flex-wrap justify-center gap-2">
-            {exampleQueries.map((example, index) => (
-              <button
-                key={`${example}-${index}`}
-                onClick={() => handleChipClick(example)}
-                disabled={loading}
-                className="rounded-full border border-gray-700 bg-gray-900 px-4 py-1.5 text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+        <section className="relative overflow-hidden rounded-3xl border border-gray-800/60 bg-gray-950/80 px-6 py-10 shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_20px_60px_-30px_rgba(15,23,42,0.9)] sm:px-10 sm:py-14">
+          <div className="relative">
+            {/* Header */}
+            <div className="text-center">
+              <Link
+                href="/"
+                className="inline-flex justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
               >
-                {example}
-              </button>
-            ))}
+                <h1 className="mb-2 text-5xl font-bold tracking-tight text-gray-100 sm:text-6xl">
+                  Find That Card
+                </h1>
+              </Link>
+              <p className="mx-auto max-w-2xl text-xl text-gray-400">
+                Search Magic: The Gathering cards using natural language.
+              </p>
+            </div>
+
+            {/* Search Form */}
+            <form onSubmit={handleSubmit} className="mt-8">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder='Try "white creatures" or "cards with dragons in the art"'
+                  className="flex-1 rounded-xl border border-gray-700/80 bg-gray-950/70 px-4 py-3 text-gray-100 placeholder-gray-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  disabled={loading}
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="rounded-xl bg-blue-600 px-7 py-3 font-medium text-white shadow-[0_10px_30px_-16px_rgba(59,130,246,0.8)] transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {loading ? "Searching..." : "Search"}
+                </button>
+              </div>
+            </form>
+
+            {/* Example Chips */}
+            {exampleQueries.length > 0 && (
+              <div className="mt-6 flex flex-wrap justify-center gap-2">
+                {exampleQueries.map((example, index) => (
+                  <button
+                    key={`${example}-${index}`}
+                    onClick={() => handleChipClick(example)}
+                    disabled={loading}
+                    className="rounded-full border border-gray-700/70 bg-gray-900/60 px-4 py-1.5 text-base text-gray-300 shadow-sm transition-colors hover:border-blue-500/40 hover:bg-gray-800/80 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
+        </section>
 
         {/* Static intro content */}
-        <section className="mb-8 text-sm text-gray-400">
+        <section className="mb-10 mt-10 text-base text-gray-400">
           <div className="mx-auto max-w-4xl text-center">
-            <p className="text-base text-gray-300">
+            <p className="text-lg text-gray-200">
               Find That Card is a Magic: The Gathering search tool that lets you describe cards in
               plain language.
             </p>
-            <p className="mt-2 text-xs text-gray-500">
+            <p className="mt-2 text-sm text-gray-500">
               Find That Card is a project by{" "}
               <Link href="/about" className="text-blue-400 hover:underline">
                 Cardboard Cultist
               </Link>
               .
             </p>
-            <div className="mt-5 grid grid-cols-1 gap-3 text-center sm:grid-cols-2 lg:grid-cols-3">
-              <div className="rounded-2xl border border-gray-800/70 bg-gray-900/30 px-5 py-5">
-                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
+            <div className="mt-6 grid grid-cols-1 gap-4 text-center sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-2xl border border-gray-800/80 bg-gray-900/40 px-6 py-6 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
                   <ShieldCheckIcon className="h-6 w-6" aria-hidden="true" />
                 </div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">
                   Card intent
                 </p>
-                <p className="mt-2 text-sm text-gray-300">
+                <p className="mt-2 text-base text-gray-300">
                   Removal, ramp, tutors, tokens, or any role you can describe.
                 </p>
               </div>
-              <div className="rounded-2xl border border-gray-800/70 bg-gray-900/30 px-5 py-5">
-                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
+              <div className="rounded-2xl border border-gray-800/80 bg-gray-900/40 px-6 py-6 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
                   <PaintBrushIcon className="h-6 w-6" aria-hidden="true" />
                 </div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">
                   Art and flavor
                 </p>
-                <p className="mt-2 text-sm text-gray-300">
+                <p className="mt-2 text-base text-gray-300">
                   Dragons, angels, swords, landscapes, or other artwork subjects.
                 </p>
               </div>
-              <div className="rounded-2xl border border-gray-800/70 bg-gray-900/30 px-5 py-5">
-                <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
+              <div className="rounded-2xl border border-gray-800/80 bg-gray-900/40 px-6 py-6 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
                   <QueueListIcon className="h-6 w-6" aria-hidden="true" />
                 </div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">
                   Formats and rules
                 </p>
-                <p className="mt-2 text-sm text-gray-300">
+                <p className="mt-2 text-base text-gray-300">
                   Commander, Modern, Pauper, plus colors, keywords, and mechanics.
                 </p>
               </div>
             </div>
-            <p className="mt-4 text-xs text-gray-500">
+            <p className="mt-5 text-sm text-gray-500">
               Results are powered by Scryfall and updated in real time.
             </p>
           </div>
@@ -352,10 +356,10 @@ export default function SearchPage() {
           <div className="mb-8 flex justify-center">
             {adBlockDetected ? (
               <div className="w-full max-w-2xl rounded-lg border border-gray-700 bg-gray-900/50 p-4 text-center">
-                <p className="text-sm text-gray-400">
+                <p className="text-base text-gray-400">
                   <span className="font-medium text-gray-300">Find That Card is supported by ads.</span>
                   <br />
-                  <span className="text-xs text-gray-500">
+                  <span className="text-sm text-gray-500">
                     A single, non-intrusive ad helps keep this site free. Please consider whitelisting{" "}
                     <span className="font-medium text-gray-400">findthat.card</span> in your ad blocker.
                   </span>
@@ -372,7 +376,7 @@ export default function SearchPage() {
           <div id="query-display" className="mb-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
-                <span className="text-xs text-gray-500 whitespace-nowrap">Query:</span>
+                <span className="text-sm text-gray-500 whitespace-nowrap">Query:</span>
                 <input
                   type="text"
                   value={editableQuery}
@@ -383,7 +387,7 @@ export default function SearchPage() {
                       handleEditableQuerySearch();
                     }
                   }}
-                  className="flex-1 bg-transparent text-sm text-blue-400 focus:outline-none font-mono"
+                  className="flex-1 bg-transparent text-base text-blue-400 focus:outline-none font-mono"
                   disabled={loading}
                   placeholder="Edit Scryfall query..."
                 />
@@ -392,7 +396,7 @@ export default function SearchPage() {
                 <button
                   onClick={handleEditableQuerySearch}
                   disabled={loading || !editableQuery.trim()}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-base font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Search
                 </button>
@@ -400,14 +404,14 @@ export default function SearchPage() {
                   href={`https://scryfall.com/search?q=${encodeURIComponent(editableQuery)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-700"
+                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-base text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-700"
                 >
                   View on Scryfall
                 </a>
               </div>
             </div>
             {trimmedQuery && (
-              <p className="mt-3 text-xs text-gray-500">
+              <p className="mt-3 text-sm text-gray-500">
                 {`This search shows Magic: The Gathering cards matching "${trimmedQuery}".`}
               </p>
             )}
@@ -418,7 +422,7 @@ export default function SearchPage() {
         {error && (
           <div className="mb-6 rounded-lg border border-red-800 bg-red-950/30 p-4 text-red-400">
             <p className="font-medium">Error</p>
-            <p className="text-sm">{error}</p>
+            <p className="text-base">{error}</p>
           </div>
         )}
 
@@ -431,8 +435,8 @@ export default function SearchPage() {
 
         {/* Results */}
         {results && (
-          <div id="results-section" className="mb-8">
-            <div className="mb-4 flex items-center justify-between text-sm text-gray-400">
+          <div id="results-section" className="mb-10">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-4 py-3 text-base text-gray-300 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
               <div>
                 Found {results.total.toLocaleString()} card{results.total !== 1 ? "s" : ""}
                 {results.total > 0 && (
@@ -444,12 +448,12 @@ export default function SearchPage() {
             </div>
 
             {results.cards.length === 0 ? (
-              <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-8 text-center text-gray-400">
+              <div className="rounded-2xl border border-gray-800/80 bg-gray-900/50 p-10 text-center text-gray-300 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
                 No cards found. Try a different search query.
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {(() => {
                     const items: React.ReactNode[] = [];
                     const cardCount = results.cards.length;
@@ -461,7 +465,7 @@ export default function SearchPage() {
                       // Insert ad banner after 20th card if we have 30+ results
                       if (cardCount >= 30 && index === 19) {
                         items.push(
-                          <div key="ad-20" className="col-span-full my-4">
+                          <div key="ad-20" className="col-span-full my-4 rounded-2xl border border-gray-800/70 bg-gray-900/40 p-4">
                             <AdBanner slot="1553106733" className="w-full" />
                           </div>
                         );
@@ -470,7 +474,7 @@ export default function SearchPage() {
                       // Insert ad banner after 40th card if we have 50+ results
                       if (cardCount >= 50 && index === 39) {
                         items.push(
-                          <div key="ad-40" className="col-span-full my-4">
+                          <div key="ad-40" className="col-span-full my-4 rounded-2xl border border-gray-800/70 bg-gray-900/40 p-4">
                             <AdBanner slot="1553106733" className="w-full" />
                           </div>
                         );
@@ -483,16 +487,16 @@ export default function SearchPage() {
 
                 {/* Pagination Controls */}
                 {(results.has_more || results.page > 1) && (
-                  <div className="mt-8 flex flex-col items-center justify-center gap-3">
-                    <div className="flex flex-wrap items-center justify-center gap-4">
+                  <div className="mt-8 flex flex-col items-center justify-center gap-4">
+                    <div className="flex flex-wrap items-center justify-center gap-4 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-4 py-3 text-base text-gray-300 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
                       <button
                         onClick={() => handlePageChange(results.page - 1)}
                         disabled={loading || results.page === 1}
-                        className="rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg border border-gray-700 bg-gray-950/60 px-4 py-2 text-base font-medium text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Previous
                       </button>
-                      <span className="text-sm text-gray-400">
+                      <span className="text-base text-gray-400">
                         Page {results.page} of {Math.ceil(results.total / results.per_page)}
                       </span>
                       <div className="flex flex-wrap items-center gap-2">
@@ -516,8 +520,8 @@ export default function SearchPage() {
                               disabled={loading || page === results.page}
                               className={
                                 page === results.page
-                                  ? "rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-300"
-                                  : "rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                  ? "rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 text-base font-semibold text-blue-300"
+                                  : "rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-base text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                               }
                             >
                               {page}
@@ -528,14 +532,14 @@ export default function SearchPage() {
                       <button
                         onClick={() => handlePageChange(results.page + 1)}
                         disabled={loading || !results.has_more}
-                        className="rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg border border-gray-700 bg-gray-950/60 px-4 py-2 text-base font-medium text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Next
                       </button>
                     </div>
                     {Math.ceil(results.total / results.per_page) >= 5 && (
-                      <div className="flex items-center gap-2">
-                        <label htmlFor="page-jump" className="text-xs text-gray-500">
+                      <div className="flex items-center gap-2 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-4 py-3 text-base text-gray-300">
+                        <label htmlFor="page-jump" className="text-sm text-gray-500">
                           Jump to
                         </label>
                         <input
@@ -551,13 +555,13 @@ export default function SearchPage() {
                               handleJumpToPage();
                             }
                           }}
-                          className="w-20 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                          className="w-20 rounded-lg border border-gray-700 bg-gray-950/60 px-3 py-2 text-base text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                           disabled={loading}
                         />
                         <button
                           onClick={handleJumpToPage}
                           disabled={loading}
-                          className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="rounded-lg border border-gray-700 bg-gray-950/60 px-3 py-2 text-base text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Go
                         </button>
@@ -571,7 +575,7 @@ export default function SearchPage() {
         )}
 
         {/* Footer */}
-        <footer className="mt-16 border-t border-gray-800 pt-8 pb-24 text-center text-xs text-gray-500">
+        <footer className="mt-16 border-t border-gray-800 pt-8 pb-24 text-center text-sm text-gray-500">
           <p>
             Unofficial fan content. Card data and images from{" "}
             <a
