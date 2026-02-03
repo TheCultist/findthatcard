@@ -96,10 +96,11 @@ If the query is "TYPE with [art]" (e.g., "equipment with sword art"), use t:TYPE
 
 // Keywords module
 const PACK_KEYWORDS: PackDefinition = {
-  rules: `Keywords: kw: for keyword abilities (flying, trample, vigilance, lifelink, haste, deathtouch, hexproof, ward, disturb, etc.).`,
+  rules: `Keywords: kw: for keyword abilities (flying, trample, vigilance, lifelink, haste, deathtouch, hexproof, ward, disturb, storm, etc.). Always use kw: for keyword abilities; do NOT use function: or o: for them.`,
   examples: [
     `Vigilance and lifelink -> kw:vigilance kw:lifelink`,
     `Flying creatures -> t:creature kw:flying`,
+    `Cards with storm -> kw:storm`,
   ],
 };
 
@@ -207,7 +208,7 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
 
   // KEYWORDS: keyword abilities list
   if (
-    /\b(flying|trample|vigilance|lifelink|haste|deathtouch|hexproof|indestructible|reach|first strike|double strike|menace|prowess|flash|ward|disturb|keyword|keywords)\b/.test(
+    /\b(flying|trample|vigilance|lifelink|haste|deathtouch|hexproof|indestructible|reach|first strike|double strike|menace|prowess|flash|ward|disturb|storm|keyword|keywords)\b/.test(
       query
     )
   ) {
