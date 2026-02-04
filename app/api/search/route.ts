@@ -84,7 +84,9 @@ export async function POST(request: NextRequest) {
           scryfallQuery
         );
       }
-      scryfallQuery = applyDefaultGameFilter(scryfallQuery);
+      if (!isDirectScryfallQuery) {
+        scryfallQuery = applyDefaultGameFilter(scryfallQuery);
+      }
       
       // Validate and truncate Scryfall query length (accounting for prefer:best prefix)
       if (scryfallQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
@@ -104,7 +106,9 @@ export async function POST(request: NextRequest) {
         // Regenerate query without invalid tags
         const regenerationPrompt = getRegenerationPrompt(body.naturalQuery, invalidTags, tagContext);
         scryfallQuery = await convertToScryfallQuery(body.naturalQuery, regenerationPrompt, tagContext);
-        scryfallQuery = applyDefaultGameFilter(scryfallQuery);
+        if (!isDirectScryfallQuery) {
+          scryfallQuery = applyDefaultGameFilter(scryfallQuery);
+        }
         
         // Validate and truncate regenerated query length (accounting for prefer:best prefix)
         if (scryfallQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {

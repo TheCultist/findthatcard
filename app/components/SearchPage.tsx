@@ -401,7 +401,7 @@ export default function SearchPage() {
 
         {/* Query Display - Editable */}
         {(editableQuery || sourceQuery || results) && !loading && (
-          <div id="query-display" className="mb-6">
+          <div id="query-display" className="relative z-50 mb-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
                 <span className="text-sm text-gray-500 whitespace-nowrap">Query:</span>
