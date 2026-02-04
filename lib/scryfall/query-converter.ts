@@ -118,6 +118,120 @@ function normalizeNotRedRequirement(naturalQuery: string, query: string): string
   return normalizeWhitespace(updated);
 }
 
+function normalizeManaCostSymbolIntent(naturalQuery: string, query: string): string {
+  const wantsXInCost =
+    /\b(x|x's)\b/i.test(naturalQuery) &&
+    /\b(mana cost|cost)\b/i.test(naturalQuery);
+  if (!wantsXInCost) {
+    return query;
+  }
+
+  let updated = query;
+  if (!/\bm:X\b/i.test(updated)) {
+    updated = `${updated} m:X`;
+  }
+  updated = updated.replace(/\bo:"?X"?\b/gi, "");
+  updated = updated.replace(/\bfunction:converted-mana-cost-matters\b/gi, "");
+
+  return normalizeWhitespace(updated);
+}
+
+function pickBurnFunctionTag(
+  naturalQuery: string,
+  tagContext?: TaggerTagContext
+): string {
+  const candidates =
+    tagContext?.function.filter((tag) => tag.toLowerCase().startsWith("burn")) || [];
+  if (candidates.length === 0) {
+    return "burn";
+  }
+
+  const query = naturalQuery.toLowerCase();
+  const selectors: Array<{ keyword: string; tokens: string[]; weight: number }> = [
+    { keyword: "player", tokens: ["player", "players"], weight: 2 },
+    { keyword: "opponent", tokens: ["opponent", "opponents"], weight: 2 },
+    { keyword: "creature", tokens: ["creature", "creatures"], weight: 2 },
+    { keyword: "planeswalker", tokens: ["planeswalker", "planeswalkers"], weight: 2 },
+    { keyword: "any-target", tokens: ["any target"], weight: 1 },
+    { keyword: "face", tokens: ["face"], weight: 1 },
+  ];
+
+  let best = candidates[0];
+  let bestScore = -1;
+  for (const tag of candidates) {
+    const lower = tag.toLowerCase();
+    let score = 0;
+    for (const selector of selectors) {
+      if (selector.tokens.some((token) => query.includes(token)) && lower.includes(selector.keyword)) {
+        score += selector.weight;
+      }
+    }
+    if (score > bestScore || (score === bestScore && tag.length < best.length)) {
+      best = tag;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
+function normalizeBurnIntent(
+  naturalQuery: string,
+  query: string,
+  tagContext?: TaggerTagContext
+): string {
+  const wantsDirectDamage =
+    /\b(direct damage|burn)\b/i.test(naturalQuery) ||
+    (/\bdeal(s|t)?\b/i.test(naturalQuery) && /\bdamage\b/i.test(naturalQuery));
+  const hasDisqualifier = /\b(prevent|prevention|redirect|redirection|multiply|multiplier)\b/i.test(
+    naturalQuery
+  );
+
+  if (!wantsDirectDamage || hasDisqualifier) {
+    return query;
+  }
+
+  let updated = query;
+  const burnTag = pickBurnFunctionTag(naturalQuery, tagContext);
+  if (!/\bfunction:burn\b/i.test(updated) && !/\bfunction:burn-\w+\b/i.test(updated)) {
+    updated = `${updated} function:${burnTag}`;
+  }
+  updated = updated.replace(/\bfunction:damage-\w+\b/gi, "");
+  updated = updated.replace(/\bo:"[^"]*damage[^"]*"\b/gi, "");
+  updated = updated.replace(/\bo:damage\b/gi, "");
+  updated = updated.replace(/\bo:"?(player|opponent|any target|target)"?\b/gi, "");
+
+  return normalizeWhitespace(updated);
+}
+
+function normalizeBounceCounterspellOr(naturalQuery: string, query: string): string {
+  const wantsBounce = /\bbounce\b/i.test(naturalQuery);
+  const wantsCounter = /\bcounter\s*spells?\b|\bcounterspells?\b/i.test(naturalQuery);
+  const wantsEither = /\b(either|or)\b/i.test(naturalQuery);
+
+  if (!wantsBounce || !wantsCounter || !wantsEither) {
+    return query;
+  }
+
+  let updated = query;
+  if (/\bfunction:counterspell-bounce\b/i.test(updated)) {
+    updated = updated.replace(
+      /\bfunction:counterspell-bounce\b/gi,
+      "(function:bounce OR function:counterspell)"
+    );
+  }
+
+  return normalizeWhitespace(updated);
+}
+
+function normalizeOrphanedOr(query: string): string {
+  let updated = query;
+  // Remove empty OR branches inside parentheses.
+  updated = updated.replace(/\(\s*OR\s+([^)]+)\)/gi, "($1)");
+  updated = updated.replace(/\(\s*([^)]+)\s+OR\s*\)/gi, "($1)");
+  return normalizeWhitespace(updated);
+}
+
 function pickLandTutorTag(
   naturalQuery: string,
   tagContext?: TaggerTagContext
@@ -321,6 +435,10 @@ export function finalizeScryfallQuery(args: {
 
   normalizedQuery = normalizeCounterspellIntent(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeNotRedRequirement(naturalQuery, normalizedQuery);
+  normalizedQuery = normalizeManaCostSymbolIntent(naturalQuery, normalizedQuery);
+  normalizedQuery = normalizeBurnIntent(naturalQuery, normalizedQuery, tagContext);
+  normalizedQuery = normalizeBounceCounterspellOr(naturalQuery, normalizedQuery);
+  normalizedQuery = normalizeOrphanedOr(normalizedQuery);
   normalizedQuery = dedupeTokens(normalizedQuery);
 
   if (!normalizedQuery) {

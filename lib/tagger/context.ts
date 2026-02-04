@@ -12,6 +12,45 @@ const BLACKLISTED_FUNCTION_TAGS = new Set([
   "create-multiple-tokens", // Only used by one card
 ]);
 
+const KEYWORD_ABILITIES = [
+  "flying",
+  "trample",
+  "vigilance",
+  "lifelink",
+  "haste",
+  "deathtouch",
+  "hexproof",
+  "indestructible",
+  "reach",
+  "first strike",
+  "double strike",
+  "menace",
+  "prowess",
+  "flash",
+  "ward",
+  "disturb",
+  "storm",
+  "suspend",
+];
+
+function getKeywordMatches(naturalQuery: string): string[] {
+  const text = naturalQuery.toLowerCase();
+  const matches: string[] = [];
+  for (const keyword of KEYWORD_ABILITIES) {
+    const pattern = keyword.includes(" ")
+      ? new RegExp(`\\b${keyword.replace(/\s+/g, "\\s+")}\\b`, "i")
+      : new RegExp(`\\b${keyword}\\b`, "i");
+    if (pattern.test(text)) {
+      matches.push(keyword);
+    }
+  }
+  return matches;
+}
+
+function hasKeywordGrantIntent(naturalQuery: string): boolean {
+  return /\b(give|gives|giving|grant|grants|granting)\b/i.test(naturalQuery);
+}
+
 function extractTaggerKeywords(naturalQuery: string): string[] {
   const stopwords = new Set([
     "a",
@@ -65,6 +104,10 @@ function extractTaggerKeywords(naturalQuery: string): string[] {
     stopwords.add("cmc");
     stopwords.add("cost");
     stopwords.add("converted");
+  }
+  if (/\b(burn|direct damage|deal(s|t)? damage)\b/.test(normalized)) {
+    // Surface burn-related function tags for direct damage intents.
+    keywords.add("burn");
   }
   if (/\+1\s*\/\s*\+1/.test(normalized)) {
     // Tagger uses "pp" for +1/+1 counter tags.
@@ -216,6 +259,7 @@ export async function getTaggerTagContext(
     return { art: [], function: [] };
   }
 
+  const keywordMatches = getKeywordMatches(naturalQuery);
   const keywords = extractTaggerKeywords(naturalQuery);
   const artKeywords = extractArtKeywords(naturalQuery);
   if (keywords.length === 0 && artKeywords.length === 0) {
@@ -259,6 +303,20 @@ export async function getTaggerTagContext(
       );
       if (withoutCycles.length > 0) {
         filtered = withoutCycles;
+      }
+
+      if (keywordMatches.length > 0 && !hasKeywordGrantIntent(naturalQuery)) {
+        const keywordTokens = keywordMatches.map((keyword) =>
+          keyword.replace(/\s+/g, "-").toLowerCase()
+        );
+        filtered = filtered.filter((entry) => {
+          const tag = entry.tag.toLowerCase();
+          const isGrantTag = /^(gains|grant|grants|gives|giving)-/.test(tag);
+          if (!isGrantTag) {
+            return true;
+          }
+          return !keywordTokens.some((token) => tag.includes(token));
+        });
       }
 
       // Keep more specific tags when their scores are higher; do not auto-filter by hyphen count.

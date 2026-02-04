@@ -26,6 +26,7 @@ const BASE: PackDefinition = {
   rules: `Output: ONLY the query string. No markdown, no surrounding quotes, no explanations. Max 388 chars (400 with "prefer:best " prefix).
 
 CRITICAL RULES:
+- LANGUAGE: If the query is not in English, translate it to English before doing any analysis.
 - NO STRAY WORDS: Use fielded tokens (id:, c:, t:, o:, art:) only. No bare words unless name text.
 - SIMPLICITY: Prefer single tags (art:zombie) over long OR lists unless explicitly requested.
 - PARENTHESES: Always balance. Count opening/closing.
@@ -63,6 +64,7 @@ FUNCTION TAGS FIRST: Check available function tags before using o:. If uncertain
 PREFIX: When using function tags, include the full prefix exactly as shown (e.g., function:discount-self).
 FUNCTION TAG SPECIFICITY: If a more specific function tag exists in the available list that matches the user’s intent, prefer it over a broader tag (e.g., "tutor for lands" -> function:land-tutor if available, not just function:tutor).
 NO REDUNDANT COMBINATIONS: If a function tag covers the concept, don't also add oracle text unless filtering by specific details (e.g., token size). "Cards that make tokens" -> function:token-creator (NOT function:token-creator o:token). "Cards that make 1/1 tokens" -> function:token-creator o:/1\\/1/ (use regex for sizes, escape slashes).
+BURN: If the user asks for cards that deal direct damage, use function:burn. If the target is specified (players, opponents, any target, creatures, planeswalkers), use the most specific burn child-tag available.
 CARDS LIKE X: If the user asks for "cards like X"/"similar to X", treat X as a card name. Only use a function tag if X EXACTLY matches a function tag name after normalizing spaces/hyphens (no fuzzy matching). Otherwise, use an oracle regex capturing the primary effect of the named card (e.g., "Cards like Lightning Bolt" -> o:/deals [0-9]+ damage to any target/). Do NOT map "Lightning Bolt" to function:boltland.
 Keep it minimal: Use ONE function tag unless the user explicitly requests multiple distinct functions. Do NOT stack many related counter tags together.
 "Counters" can mean counterspells (function:counterspell) or counters that are put on permanents (function:counters-matter) - choose based on context. If the query is about countering spells, ALWAYS use function:counterspell (NOT o:counter, NOT function:ability-counter). Only use function:ability-counter if the user explicitly asks to counter abilities. For +1/+1 counters, use function tags containint "pp-counters". For -1/-1 counters, use function tags containint "mm-counters".
@@ -70,6 +72,7 @@ COST REDUCTION: For "discount"/"reduce cost", use oracle text with a mana-cost w
 Counterspells: use function:counterspell, not o:counter/o:"counterspell". If the user specifically requests free counterspells, use (function:counterspell-free or (function:counterspell and function:potentially-free)). Do NOT add t:instant unless explicitly requested.
 CAST FOR FREE: If the user asks for a card that can be cast for free, use function:potentially-free. Exception: if it's a counterspell, use the counterspell rule instead.
 MANA VALUE FILTERS: For mana cost thresholds (e.g., "under 3 mana", "3 mana or less", "at most 4"), use mv comparisons (mv<3, mv<=3, mv<=4). Do NOT use cost-reduction regex unless discounting is explicitly requested.
+MANA COST SYMBOLS: If the user asks for cards with a specific mana cost symbol or pattern in the printed cost (e.g., "with X in the mana cost", "with two green pips"), use m: (mana cost) like m:X, m:{G}{G}. This is NOT mv.
 STRATEGY TAGS: If the query asks for a common MTG strategy, use the placeholder tag strategy:NAME and DO NOT expand to oracletag/function tags. Valid strategy names: ${STRATEGY_TAG_NAMES.join(
     ", "
   )}. Use quotes for multiword names (e.g., strategy:"Cost Reduction").
@@ -96,7 +99,7 @@ If the query is "TYPE with [art]" (e.g., "equipment with sword art"), use t:TYPE
 
 // Keywords module
 const PACK_KEYWORDS: PackDefinition = {
-  rules: `Keywords: kw: for keyword abilities (flying, trample, vigilance, lifelink, haste, deathtouch, hexproof, ward, disturb, storm, etc.).
+  rules: `Keywords: kw: for keyword abilities (flying, trample, vigilance, lifelink, haste, deathtouch, hexproof, ward, disturb, storm, suspend, etc.).
 USE kw: ONLY when the cards themselves have the keyword (e.g., "cards with flying", "has deathtouch"). If the request is about cards that GIVE/GRANT a keyword to other permanents/players, do NOT use kw:; use the related function tag if available, otherwise o:.
 PRIORITY: If the user explicitly asks for cards WITH a keyword (or that HAVE it), use kw: even if the wording also mentions giving.`,
   examples: [
@@ -179,7 +182,7 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
   );
   const hasSimilarityQuery = /\b(cards? like|similar to)\b/.test(query);
   const hasKeywordQuery =
-    /\b(flying|trample|vigilance|lifelink|haste|deathtouch|hexproof|indestructible|reach|first strike|double strike|menace|prowess|flash|ward|disturb|storm|keyword|keywords)\b/.test(
+    /\b(flying|trample|vigilance|lifelink|haste|deathtouch|hexproof|indestructible|reach|first strike|double strike|menace|prowess|flash|ward|disturb|storm|suspend|keyword|keywords)\b/.test(
       query
     );
   const hasKeywordGrantQuery =
@@ -199,7 +202,7 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
 
   // FUNCTION_TAGS: removal, ramp, tutor, counterspell, board wipe, token, treasure, clue, food, sacrifice, lifegain, mill, synergy, package, discount
   if (
-    /\b(removal|ramp|tutor|counterspell|counter spell|counters|board wipe|boardwipe|wipes|token|tokens|treasure|treasures|clue|clues|food|sacrifice|sacrificing|lifegain|life gain|mill|milling|synergy|synergies|package|packages|draw|drawing|card advantage|discount|discounts|discounted|reduce cost|reduces cost|reduced cost|cost reduction|cost reducer|cost reducers|cost reducing|cost less|costs less|cheaper|less to cast|control)\b/.test(
+    /\b(removal|ramp|tutor|counterspell|counter spell|counters|board wipe|boardwipe|wipes|token|tokens|treasure|treasures|clue|clues|food|sacrifice|sacrificing|lifegain|life gain|mill|milling|synergy|synergies|package|packages|draw|drawing|card advantage|discount|discounts|discounted|reduce cost|reduces cost|reduced cost|cost reduction|cost reducer|cost reducers|cost reducing|cost less|costs less|cheaper|less to cast|control|burn|direct damage|deal(?:s|t)? damage)\b/.test(
       query
     ) ||
     hasStrategyName ||
@@ -245,7 +248,7 @@ export function selectPacks(naturalQuery: string): PromptPack[] {
 
   // ADVANCED: foil, borderless, frame, rarity, banned, restricted, reserved, arena, mtgo, paper, power, toughness, mana value, mv
   if (
-    /\b(foil|borderless|frame|rarity|banned|restricted|reserved|arena|mtgo|paper|power|toughness|mana value|mv|cmc|converted mana cost|p\/t|pt|loyalty|split|flip|transform|meld|dfc|mdfc|spell|permanent|historic|party|outlaw|modal|vanilla|french vanilla|bear|manland|digital|alchemy|rebalanced|promo|spotlight|scryfall preview|reprint|unique|prints|sets|paperprints|papersets|language|japanese|russian|chinese|korean|spanish|french|german|italian|portuguese|dual|fetchland|shockland|fastland|checkland|painland|filterland|bounceland|canopyland|scryland|surveilland|shadowland|slowland|tangoland|tricycleland|triland|masterpiece|colorshifted|universes beyond|universes-beyond|universesbeyond)\b/.test(
+    /\b(foil|borderless|frame|rarity|banned|restricted|reserved|arena|mtgo|paper|power|toughness|mana value|mana cost|mv|cmc|converted mana cost|p\/t|pt|loyalty|split|flip|transform|meld|dfc|mdfc|spell|permanent|historic|party|outlaw|modal|vanilla|french vanilla|bear|manland|digital|alchemy|rebalanced|promo|spotlight|scryfall preview|reprint|unique|prints|sets|paperprints|papersets|language|japanese|russian|chinese|korean|spanish|french|german|italian|portuguese|dual|fetchland|shockland|fastland|checkland|painland|filterland|bounceland|canopyland|scryland|surveilland|shadowland|slowland|tangoland|tricycleland|triland|masterpiece|colorshifted|universes beyond|universes-beyond|universesbeyond)\b/.test(
       query
     )
   ) {

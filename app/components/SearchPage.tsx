@@ -12,6 +12,7 @@ import { fetchSymbolData } from "@/lib/scryfall/symbols";
 import useAdBlockDetection from "@/app/hooks/useAdBlockDetection";
 import CardCard from "@/app/components/CardCard";
 import AdBanner from "@/app/components/AdBanner";
+import QueryTokenPreview from "@/app/components/QueryTokenPreview";
 
 type SearchOptions = {
   updateUrl?: boolean;
@@ -54,6 +55,7 @@ export default function SearchPage() {
   const searchParams = useSearchParams();
   const params = useParams<{ slug?: string | string[] }>();
   const lastUrlQueryRef = useRef("");
+  const editableInputRef = useRef<HTMLInputElement | null>(null);
 
   const [query, setQuery] = useState("");
   const [editableQuery, setEditableQuery] = useState("");
@@ -64,6 +66,8 @@ export default function SearchPage() {
   const [pageInput, setPageInput] = useState("1");
   const [exampleQueries, setExampleQueries] = useState<string[]>([]);
   const [proTip, setProTip] = useState("");
+  const [sourceQuery, setSourceQuery] = useState("");
+  const [isEditingQuery, setIsEditingQuery] = useState(false);
   const adBlockDetected = useAdBlockDetection();
 
   const getQueryFromUrl = useCallback(() => {
@@ -101,6 +105,7 @@ export default function SearchPage() {
       if (page === 1) {
         setResults(null);
         setEditableQuery(""); // Clear query on new search, will be set from response
+        setSourceQuery(searchQuery);
       }
 
       try {
@@ -177,6 +182,21 @@ export default function SearchPage() {
     setCurrentPage(1);
     setPageInput("1");
     handleSearch(editableQuery, 1, { updateUrl: false });
+  };
+
+  const handleEditableQueryFocus = () => {
+    setIsEditingQuery(true);
+  };
+
+  const handleEditableQueryBlur = () => {
+    setIsEditingQuery(false);
+  };
+
+  const handleTokenOverlayClick = () => {
+    setIsEditingQuery(true);
+    requestAnimationFrame(() => {
+      editableInputRef.current?.focus();
+    });
   };
 
   const handlePageChange = (newPage: number) => {
@@ -385,20 +405,40 @@ export default function SearchPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
                 <span className="text-sm text-gray-500 whitespace-nowrap">Query:</span>
-                <input
-                  type="text"
-                  value={editableQuery}
-                  onChange={(e) => setEditableQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleEditableQuerySearch();
-                    }
-                  }}
-                  className="flex-1 bg-transparent text-base text-blue-400 focus:outline-none font-mono"
-                  disabled={loading}
-                  placeholder="Edit Scryfall query..."
-                />
+                <div className="relative flex-1">
+                  <input
+                    ref={editableInputRef}
+                    type="text"
+                    value={editableQuery}
+                    onChange={(e) => setEditableQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleEditableQuerySearch();
+                      }
+                    }}
+                    onFocus={handleEditableQueryFocus}
+                    onBlur={handleEditableQueryBlur}
+                    className={`w-full bg-transparent text-base text-blue-400 focus:outline-none font-mono ${
+                      isEditingQuery ? "opacity-100" : "opacity-0 pointer-events-none"
+                    }`}
+                    disabled={loading}
+                    placeholder="Edit Scryfall query..."
+                  />
+                  {!isEditingQuery && (
+                    <div
+                      className="absolute inset-0 flex items-center text-blue-300"
+                      onClick={handleTokenOverlayClick}
+                    >
+                      <QueryTokenPreview
+                        scryfallQuery={editableQuery}
+                        sourceQuery={sourceQuery || query}
+                        variant="inline"
+                        className="gap-1.5"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="flex gap-2">
                 <button
