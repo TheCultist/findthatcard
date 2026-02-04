@@ -1,4 +1,14 @@
+import { promises as fs } from "fs";
+import path from "path";
+
 const TAGGER_USER_AGENT = "find-that-card/1.0 (+https://findthat.card)";
+const TAGGER_CACHE_PATH = path.join(process.cwd(), "data", "tagger-tags.json");
+
+type TaggerCacheFile = {
+  updatedAt: string;
+  art: string[];
+  function: string[];
+};
 
 /**
  * In-memory cache for Scryfall Tagger tags
@@ -6,6 +16,56 @@ const TAGGER_USER_AGENT = "find-that-card/1.0 (+https://findthat.card)";
  */
 let taggerTagCache: Map<'art' | 'function', Set<string>> | null = null;
 let cacheInitializationPromise: Promise<void> | null = null;
+
+let cacheUpdatedAt: string | null = null;
+
+function formatTodayStamp(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function compareDateStamp(a: string, b: string): number {
+  if (!a && !b) return 0;
+  if (!a) return -1;
+  if (!b) return 1;
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
+function shouldSkipUpdate(fileStamp: string | null, todayStamp: string): boolean {
+  if (!fileStamp) {
+    return false;
+  }
+  return compareDateStamp(fileStamp, todayStamp) >= 0;
+}
+
+async function readTaggerCacheFile(): Promise<TaggerCacheFile | null> {
+  try {
+    const raw = await fs.readFile(TAGGER_CACHE_PATH, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+    const updatedAt = typeof parsed.updatedAt === "string" ? parsed.updatedAt : "";
+    const art = Array.isArray(parsed.art)
+      ? parsed.art.filter((tag: string) => typeof tag === "string")
+      : [];
+    const func = Array.isArray(parsed.function)
+      ? parsed.function.filter((tag: string) => typeof tag === "string")
+      : [];
+    return { updatedAt, art, function: func };
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return null;
+    }
+    console.warn("[Tagger Cache] Failed to read cache file:", error);
+    return null;
+  }
+}
+
+async function writeTaggerCacheFile(payload: TaggerCacheFile): Promise<void> {
+  await fs.mkdir(path.dirname(TAGGER_CACHE_PATH), { recursive: true });
+  await fs.writeFile(TAGGER_CACHE_PATH, JSON.stringify(payload, null, 2), "utf-8");
+}
 
 /**
  * Fetches and parses the Scryfall Tagger Tags documentation page
@@ -16,12 +76,32 @@ async function initializeTaggerTagCache(): Promise<void> {
     return; // Cache already initialized
   }
 
-  const artTags = new Set<string>();
-  const functionTags = new Set<string>();
+  const existing = await readTaggerCacheFile();
+  if (existing) {
+    taggerTagCache = new Map([
+      ["art", new Set(existing.art)],
+      ["function", new Set(existing.function)],
+    ]);
+    cacheUpdatedAt = existing.updatedAt || null;
+  }
+
+  const todayStamp = formatTodayStamp();
+  if (existing && shouldSkipUpdate(existing.updatedAt, todayStamp)) {
+    console.log(
+      `[Tagger Cache] Cache already refreshed (${existing.updatedAt}), skipping update`
+    );
+    return;
+  }
+
+  const artTags = new Set<string>(existing?.art ?? []);
+  const functionTags = new Set<string>(existing?.function ?? []);
   const artOperators = new Set<string>(["art", "atag", "arttag"]);
   const functionOperators = new Set<string>(["function", "otag", "oracletag"]);
 
   try {
+    console.log(
+      `[Tagger Cache] Performing cache update (file date: ${existing?.updatedAt || "none"}, today: ${todayStamp})`
+    );
     const response = await fetch("https://scryfall.com/docs/tagger-tags", {
       headers: {
         "User-Agent": TAGGER_USER_AGENT,
@@ -138,14 +218,65 @@ async function initializeTaggerTagCache(): Promise<void> {
       }
     }
 
+    const fetchedArt = new Set(artTags);
+    const fetchedFunction = new Set(functionTags);
+
+    const addedArt: string[] = [];
+    const removedArt: string[] = [];
+    const addedFunction: string[] = [];
+    const removedFunction: string[] = [];
+
+    for (const tag of fetchedArt) {
+      if (!existing?.art?.includes(tag)) {
+        addedArt.push(tag);
+      }
+    }
+    for (const tag of existing?.art ?? []) {
+      if (!fetchedArt.has(tag)) {
+        removedArt.push(tag);
+      }
+    }
+    for (const tag of fetchedFunction) {
+      if (!existing?.function?.includes(tag)) {
+        addedFunction.push(tag);
+      }
+    }
+    for (const tag of existing?.function ?? []) {
+      if (!fetchedFunction.has(tag)) {
+        removedFunction.push(tag);
+      }
+    }
+
     taggerTagCache = new Map([
-      ["art", artTags],
-      ["function", functionTags],
+      ["art", fetchedArt],
+      ["function", fetchedFunction],
     ]);
+    cacheUpdatedAt = todayStamp;
+    await writeTaggerCacheFile({
+      updatedAt: cacheUpdatedAt,
+      art: Array.from(fetchedArt),
+      function: Array.from(fetchedFunction),
+    });
 
     console.log(
-      `[Tagger Cache] Initialized with ${artTags.size} art tags and ${functionTags.size} function tags`
+      `[Tagger Cache] Cache updated (${cacheUpdatedAt}): ${fetchedArt.size} art tags and ${fetchedFunction.size} function tags`
     );
+    if (addedArt.length || removedArt.length || addedFunction.length || removedFunction.length) {
+      if (addedArt.length) {
+        console.log(`[Tagger Cache] Added art tags: ${addedArt.join(", ")}`);
+      }
+      if (removedArt.length) {
+        console.log(`[Tagger Cache] Removed art tags: ${removedArt.join(", ")}`);
+      }
+      if (addedFunction.length) {
+        console.log(`[Tagger Cache] Added function tags: ${addedFunction.join(", ")}`);
+      }
+      if (removedFunction.length) {
+        console.log(`[Tagger Cache] Removed function tags: ${removedFunction.join(", ")}`);
+      }
+    } else {
+      console.log("[Tagger Cache] No tag content changes detected");
+    }
   } catch (error) {
     console.error("[Tagger Cache] Failed to initialize cache:", error);
     // Initialize with empty sets to prevent repeated failed attempts
@@ -181,3 +312,7 @@ export async function ensureTaggerTagCache(): Promise<void> {
 export function getTaggerTagCache(): Map<"art" | "function", Set<string>> | null {
   return taggerTagCache;
 }
+
+ensureTaggerTagCache().catch((error) => {
+  console.warn("[Tagger Cache] Warm-up failed:", error);
+});

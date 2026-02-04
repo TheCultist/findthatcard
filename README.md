@@ -16,6 +16,7 @@ A single-page web application that converts natural language queries into Scryfa
   - Function tags: `function:`, `otag:`, `oracletag:` (e.g., `function:removal`, `function:card-advantage`)
 - **Query Transparency**: See the generated Scryfall query for learning purposes
 - **View on Scryfall**: Open search results directly on Scryfall.com with one click
+- **Buy Links**: Optional CardTrader and TCGPlayer affiliate buttons per card
 - **Responsive Design**: Works beautifully on desktop, tablet, and mobile
 - **Fast & Clean**: Minimal dependencies, optimized for performance
 
@@ -61,7 +62,15 @@ A single-page web application that converts natural language queries into Scryfa
    OPENAI_MODEL=gpt-4.1-mini
    ```
 
-4. **Run the development server**:
+4. **(Optional) Configure affiliate links**:
+   ```env
+   # CardTrader share code (used for CardTrader buttons)
+   NEXT_PUBLIC_CARDTRADER_SHARE_CODE=thecultist
+   # TCGPlayer partner link (used for TCGPlayer buttons)
+   TCG_PLAYER_PARTNER_LINK=https://partner.tcgplayer.com/XXXXXXXX
+   ```
+
+5. **Run the development server**:
    ```bash
    npm run dev
    # or
@@ -70,7 +79,7 @@ A single-page web application that converts natural language queries into Scryfa
    pnpm dev
    ```
 
-5. **Open your browser**:
+6. **Open your browser**:
    
    Navigate to [http://localhost:3000](http://localhost:3000)
 
@@ -81,6 +90,16 @@ A single-page web application that converts natural language queries into Scryfa
 | `OPENAI_API_KEY` | Yes | - | Your OpenAI API key |
 | `SCRYFALL_USER_AGENT` | No | `find-that-card/1.0` | User-Agent string for Scryfall API requests |
 | `OPENAI_MODEL` | No | `gpt-4.1-mini` | OpenAI model to use for query conversion |
+| `NEXT_PUBLIC_CARDTRADER_SHARE_CODE` | No | `thecultist` | CardTrader share code used for buy links |
+| `TCG_PLAYER_PARTNER_LINK` | No | - | TCGPlayer partner link base URL |
+| `NEXT_PUBLIC_TCG_PLAYER_PARTNER_LINK` | No | - | Client-exposed TCGPlayer partner link (optional) |
+
+## Testing
+
+```bash
+npm run test:queries
+npm run lint
+```
 
 ## Deployment to Vercel
 

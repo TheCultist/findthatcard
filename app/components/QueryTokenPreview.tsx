@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { getTokenMetadata, tokenizeQuery, TokenMetadata } from "@/lib/query-tokens";
 
 type QueryTokenPreviewProps = {
@@ -7,6 +8,13 @@ type QueryTokenPreviewProps = {
   sourceQuery: string;
   variant?: "panel" | "inline";
   className?: string;
+};
+
+const SET_FIELDS = new Set(["set", "s", "e", "edition"]);
+
+const normalizeSetCode = (value?: string) => {
+  if (!value) return "";
+  return value.replace(/^"|"$/g, "").toLowerCase();
 };
 
 const getTokenClassName = (token: TokenMetadata) => {
@@ -25,36 +33,101 @@ export default function QueryTokenPreview({
   variant = "panel",
   className = "",
 }: QueryTokenPreviewProps) {
+  const [setNames, setSetNames] = useState<Record<string, string>>({});
   const tokenMetadata = scryfallQuery
     ? tokenizeQuery(scryfallQuery).map((token) => getTokenMetadata(token, sourceQuery))
     : [];
 
-  if (tokenMetadata.length === 0) {
-    return null;
-  }
+  const setCodes = useMemo(() => {
+    const codes = new Set<string>();
+    for (const token of tokenMetadata) {
+      if (token.type !== "field") {
+        continue;
+      }
+      const field = token.field?.toLowerCase();
+      if (!field || !SET_FIELDS.has(field)) {
+        continue;
+      }
+      const code = normalizeSetCode(token.value);
+      if (code) {
+        codes.add(code);
+      }
+    }
+    return Array.from(codes);
+  }, [tokenMetadata]);
+
+  useEffect(() => {
+    if (setCodes.length === 0) {
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const loadSetNames = async () => {
+      try {
+        const response = await fetch("/api/sets", { signal: controller.signal });
+        if (!response.ok) {
+          return;
+        }
+        const payload = (await response.json()) as { sets?: Record<string, string> };
+        if (!cancelled && payload.sets) {
+          setSetNames(payload.sets);
+        }
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          console.warn("[QueryTokenPreview] Failed to load set names:", error);
+        }
+      }
+    };
+
+    loadSetNames();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [setCodes.join("|")]);
+
+  const isEmpty = tokenMetadata.length === 0;
 
   const tokens = (
-    <div className={`flex flex-wrap gap-2 font-mono text-sm text-blue-200 ${className}`}>
-      {tokenMetadata.map((token, index) => (
-        <span
-          key={`${token.raw}-${index}`}
-          className={`group relative cursor-help rounded border px-2 py-1 bg-gray-900/70 ${getTokenClassName(
-            token
-          )}`}
-        >
-          {token.raw}
-          <span className="absolute left-1/2 top-full z-20 mt-2 w-80 -translate-x-1/2 rounded-xl border border-gray-700/70 bg-gray-950/95 px-4 py-3 text-xs text-gray-200 opacity-0 shadow-xl transition duration-200 group-hover:opacity-100">
-            <div className="text-sm font-semibold text-white">{token.title}</div>
-            <div className="mt-2 text-gray-300">{token.description}</div>
-            {token.tip && (
-              <div className="mt-3 text-gray-400">
-                <span className="font-semibold text-gray-200">Tip</span>
-                <div className="mt-1">{token.tip}</div>
-              </div>
-            )}
-          </span>
+    <div className={`isolate flex flex-wrap gap-2 font-mono text-sm text-blue-200 ${className}`}>
+      {isEmpty ? (
+        <span className="rounded border border-gray-800/70 bg-gray-900/60 px-2 py-1 text-xs text-gray-500">
+          No query tokens yet.
         </span>
-      ))}
+      ) : (
+        tokenMetadata.map((token, index) => (
+          <span
+            key={`${token.raw}-${index}`}
+            className={`group relative z-0 inline-flex items-center cursor-help rounded border bg-gray-900/70 px-2 py-1 leading-none hover:z-30 ${getTokenClassName(
+              token
+            )}`}
+          >
+            {token.raw}
+            <span className="pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-80 -translate-x-1/2 rounded-xl border border-gray-700/70 bg-gray-950/95 px-4 py-3 text-xs text-gray-200 opacity-0 shadow-xl transition duration-200 group-hover:opacity-100">
+              <div className="text-sm font-semibold text-white">{token.title}</div>
+              <div className="mt-2 text-gray-300">{token.description}</div>
+              {token.type === "field" &&
+                token.field &&
+                SET_FIELDS.has(token.field.toLowerCase()) && (
+                  <div className="mt-3 text-gray-400">
+                    <span className="font-semibold text-gray-200">Set name</span>
+                    <div className="mt-1">
+                      {setNames[normalizeSetCode(token.value)] || "Unknown set"}
+                    </div>
+                  </div>
+                )}
+              {token.tip && (
+                <div className="mt-3 text-gray-400">
+                  <span className="font-semibold text-gray-200">Tip</span>
+                  <div className="mt-1">{token.tip}</div>
+                </div>
+              )}
+            </span>
+          </span>
+        ))
+      )}
     </div>
   );
 

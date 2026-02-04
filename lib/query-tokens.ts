@@ -325,7 +325,8 @@ export const getTokenMetadata = (token: QueryToken, sourceQuery: string): TokenM
         ...token,
         title: FIELD_DESCRIPTIONS.game.title,
         description: FIELD_DESCRIPTIONS.game.description,
-        reason:
+        reason: buildReason(token, sourceQuery),
+        tip:
           "Defaulted to paper. Remove this to include all platforms or change it to the platform(s) you want.",
       };
     }

@@ -400,12 +400,12 @@ export default function SearchPage() {
         )}
 
         {/* Query Display - Editable */}
-        {editableQuery && (
+        {(editableQuery || sourceQuery || results) && !loading && (
           <div id="query-display" className="mb-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
                 <span className="text-sm text-gray-500 whitespace-nowrap">Query:</span>
-                <div className="relative flex-1">
+                <div className="relative flex-1 min-w-0">
                   <input
                     ref={editableInputRef}
                     type="text"
@@ -420,14 +420,16 @@ export default function SearchPage() {
                     onFocus={handleEditableQueryFocus}
                     onBlur={handleEditableQueryBlur}
                     className={`w-full bg-transparent text-base text-blue-400 focus:outline-none font-mono ${
-                      isEditingQuery ? "opacity-100" : "opacity-0 pointer-events-none"
+                      isEditingQuery
+                        ? "relative z-10 opacity-100"
+                        : "absolute inset-0 opacity-0 pointer-events-none"
                     }`}
                     disabled={loading}
                     placeholder="Edit Scryfall query..."
                   />
                   {!isEditingQuery && (
                     <div
-                      className="absolute inset-0 flex items-center text-blue-300"
+                      className="text-blue-300 cursor-text"
                       onClick={handleTokenOverlayClick}
                     >
                       <QueryTokenPreview
@@ -458,11 +460,6 @@ export default function SearchPage() {
                 </a>
               </div>
             </div>
-            {trimmedQuery && (
-              <p className="mt-3 text-sm text-gray-500">
-                {`This search shows Magic: The Gathering cards matching "${trimmedQuery}".`}
-              </p>
-            )}
           </div>
         )}
 

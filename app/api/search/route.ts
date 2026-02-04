@@ -16,6 +16,7 @@ import {
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
 import { CARDS_PER_PAGE, searchScryfall } from "@/lib/scryfall/client";
+import { applySetFiltersFromNaturalQuery } from "@/lib/scryfall/sets";
 
 const DEFAULT_GAME_FILTER = "game:paper";
 
@@ -77,6 +78,12 @@ export async function POST(request: NextRequest) {
     try {
       tagContext = isDirectScryfallQuery ? undefined : await getTaggerTagContext(body.naturalQuery);
       scryfallQuery = await convertToScryfallQuery(body.naturalQuery, undefined, tagContext);
+      if (!isDirectScryfallQuery) {
+        scryfallQuery = await applySetFiltersFromNaturalQuery(
+          body.naturalQuery,
+          scryfallQuery
+        );
+      }
       scryfallQuery = applyDefaultGameFilter(scryfallQuery);
       
       // Validate and truncate Scryfall query length (accounting for prefer:best prefix)

@@ -3,9 +3,9 @@ import { Suspense } from "react";
 import SearchPage from "../components/SearchPage";
 
 type SearchPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     q?: string | string[];
-  };
+  }>;
 };
 
 const buildMetadata = (query: string): Metadata => {
@@ -24,8 +24,11 @@ const buildMetadata = (query: string): Metadata => {
   };
 };
 
-export function generateMetadata({ searchParams }: SearchPageProps): Metadata {
-  const rawQuery = searchParams?.q;
+export async function generateMetadata({
+  searchParams,
+}: SearchPageProps): Promise<Metadata> {
+  const resolvedParams = await searchParams;
+  const rawQuery = resolvedParams?.q;
   const query = Array.isArray(rawQuery) ? rawQuery[0] ?? "" : rawQuery ?? "";
   return buildMetadata(query);
 }
