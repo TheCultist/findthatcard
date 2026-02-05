@@ -132,6 +132,7 @@ export default function CardCard({ card }: { card: CardResult }) {
             alt="CardTrader"
             width={120}
             height={24}
+            unoptimized
             className="h-6 w-auto"
           />
         </a>
@@ -154,6 +155,7 @@ export default function CardCard({ card }: { card: CardResult }) {
             alt="TCGPlayer"
             width={120}
             height={24}
+            unoptimized
             className="h-6 w-auto"
           />
         </a>
