@@ -24,6 +24,10 @@ export default function RootLayout({
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1161939859067558"
           crossOrigin="anonymous"
         />
+        <meta
+          name="impact-site-verification"
+          content="fe0d142c-1e97-427f-9abb-35dd9ed1c38f"
+        />
       </head>
       <body className="min-h-screen bg-gray-950 text-gray-100 antialiased">
         {children}
