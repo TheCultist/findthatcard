@@ -44,9 +44,20 @@ export const STRATEGY_ORACLETAGS: StrategyOracletagGroup[] = [
     ],
   },
   {
-    strategy: "Cost Reduction",
-    oracletags: ["oracletag:discount-self", "oracletag:discount-tap-creature"],
-    aliases: ["cost reduction", "discount", "cost reducer", "cost reducers"],
+    strategy: "Spellslinger",
+    oracletags: [
+      "oracletag:copy-spell",
+      "oracletag:affinity-for-spells",
+      "oracletag:second-spell-matters",
+      "oracletag:prowess-anthem",
+      "oracletag:gains-prowess",
+      "oracletag:gives-prowess",
+      "oracletag:grants-prowess",
+      "o:\"whenever you cast an instant or sorcery\"",
+      "o:\"whenever you cast an instant\"",
+      "o:\"whenever you cast a sorcery\"",
+      "kw:prowess",
+    ],
   },
 ];
 

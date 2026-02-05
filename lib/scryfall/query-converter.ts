@@ -60,13 +60,118 @@ function normalizeWhitespace(query: string): string {
   return query.replace(/\s{2,}/g, " ").trim();
 }
 
+function splitQueryTokens(query: string): string[] {
+  const tokens: string[] = [];
+  let buffer = "";
+  let inQuotes = false;
+
+  const pushBuffer = () => {
+    const trimmed = buffer.trim();
+    if (trimmed) {
+      tokens.push(trimmed);
+    }
+    buffer = "";
+  };
+
+  for (let index = 0; index < query.length; index += 1) {
+    const char = query[index];
+
+    if (char === '"') {
+      buffer += char;
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (!inQuotes && (char === "(" || char === ")")) {
+      pushBuffer();
+      tokens.push(char);
+      continue;
+    }
+
+    if (!inQuotes && /\s/.test(char)) {
+      pushBuffer();
+      continue;
+    }
+
+    buffer += char;
+  }
+
+  pushBuffer();
+  return tokens;
+}
+
+function quoteOracleTextPhrases(query: string): string {
+  const tokens = splitQueryTokens(query);
+  const result: string[] = [];
+
+  const isFieldToken = (token: string) => /^-?[a-z]+:/i.test(token);
+  const oracleMatch = (token: string) => token.match(/^(-?)(o|oracle):(.+)$/i);
+
+  let index = 0;
+  while (index < tokens.length) {
+    const token = tokens[index];
+    const match = oracleMatch(token);
+    if (!match) {
+      result.push(token);
+      index += 1;
+      continue;
+    }
+
+    const prefix = `${match[1]}${match[2]}:`;
+    const value = match[3];
+    if (value.startsWith('"') || value.startsWith("/")) {
+      result.push(token);
+      index += 1;
+      continue;
+    }
+
+    const phraseParts = [value];
+    let lookahead = index + 1;
+    while (lookahead < tokens.length) {
+      const next = tokens[lookahead];
+      const lowerNext = next.toLowerCase();
+      if (next === "(" || next === ")") {
+        break;
+      }
+      if (lowerNext === "or" || lowerNext === "and" || lowerNext === "not") {
+        break;
+      }
+      if (isFieldToken(next)) {
+        break;
+      }
+      phraseParts.push(next);
+      lookahead += 1;
+    }
+
+    if (phraseParts.length > 1) {
+      result.push(`${prefix}"${phraseParts.join(" ")}"`);
+      index = lookahead;
+      continue;
+    }
+
+    result.push(token);
+    index += 1;
+  }
+
+  return normalizeWhitespace(result.join(" "));
+}
+
 function dedupeTokens(query: string): string {
   const seen = new Set<string>();
-  const tokens = query.split(/\s+/).filter(Boolean);
+  const tokens = splitQueryTokens(query);
   const result: string[] = [];
+  const nonDedupedTokens = new Set(["or", "and", "not"]);
 
   for (const token of tokens) {
     const key = token.toLowerCase();
+    if (token === "(" || token === ")") {
+      result.push(token);
+      continue;
+    }
+    if (nonDedupedTokens.has(key)) {
+      result.push(token);
+      continue;
+    }
     if (seen.has(key)) {
       continue;
     }
@@ -229,6 +334,10 @@ function normalizeOrphanedOr(query: string): string {
   // Remove empty OR branches inside parentheses.
   updated = updated.replace(/\(\s*OR\s+([^)]+)\)/gi, "($1)");
   updated = updated.replace(/\(\s*([^)]+)\s+OR\s*\)/gi, "($1)");
+  // Drop parentheses that only contain ORs.
+  updated = updated.replace(/\(\s*(?:OR\s*)+\)/gi, "");
+  // Collapse repeated OR tokens that can be introduced by removals.
+  updated = updated.replace(/\bOR(?:\s+OR)+\b/gi, "OR");
   return normalizeWhitespace(updated);
 }
 
@@ -438,6 +547,7 @@ export function finalizeScryfallQuery(args: {
   normalizedQuery = normalizeManaCostSymbolIntent(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeBurnIntent(naturalQuery, normalizedQuery, tagContext);
   normalizedQuery = normalizeBounceCounterspellOr(naturalQuery, normalizedQuery);
+  normalizedQuery = quoteOracleTextPhrases(normalizedQuery);
   normalizedQuery = normalizeOrphanedOr(normalizedQuery);
   normalizedQuery = dedupeTokens(normalizedQuery);
 
