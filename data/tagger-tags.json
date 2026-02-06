@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-02-05",
+  "updatedAt": "2026-02-06",
   "art": [
     "squirrel",
     "1st-place",
@@ -11445,7 +11445,11 @@
     "avengers",
     "duskmourn-overlord",
     "mechan",
-    "strahd-von-zarovich"
+    "strahd-von-zarovich",
+    "ark-ffix",
+    "cid-highwind",
+    "cidolfus-telamon",
+    "viridian-elf"
   ],
   "function": [
     "removal",
@@ -16454,6 +16458,7 @@
     "zombie-lord",
     "zombify",
     "zone-card",
-    "zoo"
+    "zoo",
+    "cycle-woe-u-2c-adventurer"
   ]
 }
