@@ -27,7 +27,7 @@ function getOpenAIClient(): OpenAI {
 }
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
-const MAX_SCRYFALL_QUERY_LENGTH = 600;
+const MAX_SCRYFALL_QUERY_LENGTH = 1200;
 export const PREFER_BEST_PREFIX = "prefer:best "; // 12 characters
 export const EFFECTIVE_MAX_QUERY_LENGTH =
   MAX_SCRYFALL_QUERY_LENGTH - PREFER_BEST_PREFIX.length; // 588 characters
