@@ -53,6 +53,7 @@ export const STRATEGY_ORACLETAGS: StrategyOracletagGroup[] = [
       "oracletag:gains-prowess",
       "oracletag:gives-prowess",
       "oracletag:grants-prowess",
+      "oracletag:storm-like",
       "o:\"whenever you cast an instant or sorcery\"",
       "o:\"whenever you cast an instant\"",
       "o:\"whenever you cast a sorcery\"",
@@ -85,22 +86,32 @@ function buildOracletagReplacement(oracletags: string[]): string {
   return `(${oracletags.join(" or ")})`;
 }
 
+function buildNegatedOracletagReplacement(oracletags: string[]): string {
+  const negated = oracletags.map((tag) => (tag.startsWith("-") ? tag : `-${tag}`));
+  if (negated.length === 1) {
+    return `(${negated[0]})`;
+  }
+  return `(${negated.join(" AND ")})`;
+}
+
 /**
  * Replaces strategy: tags with their corresponding oracletag groups.
  */
 export function expandStrategyTags(query: string): string {
   const map = buildStrategyTagMap();
-  const strategyPattern = /(^|\s)strategy:("([^"]+)"|[^\s()]+)/gi;
+  const strategyPattern = /(^|\s)(-)?strategy:("([^"]+)"|[^\s()]+)/gi;
 
-  return query.replace(strategyPattern, (match, leading, rawValue, quotedValue) => {
+  return query.replace(strategyPattern, (match, leading, negation, rawValue, quotedValue) => {
     const value = (quotedValue || rawValue || "").replace(/^"|"$/g, "");
     const entry = map.get(normalizeStrategyName(value));
     if (!entry) {
       return match;
     }
-    const replacement = buildOracletagReplacement(entry.oracletags);
+    const replacement = negation
+      ? buildNegatedOracletagReplacement(entry.oracletags)
+      : buildOracletagReplacement(entry.oracletags);
     console.log(
-      `[Strategy Tags] Replacing strategy:${value} -> ${replacement}`
+      `[Strategy Tags] Replacing ${negation ? "-" : ""}strategy:${value} -> ${replacement}`
     );
     return `${leading}${replacement}`;
   });

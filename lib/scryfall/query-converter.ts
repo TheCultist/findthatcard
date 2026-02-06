@@ -27,10 +27,10 @@ function getOpenAIClient(): OpenAI {
 }
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
-const MAX_SCRYFALL_QUERY_LENGTH = 400;
+const MAX_SCRYFALL_QUERY_LENGTH = 600;
 export const PREFER_BEST_PREFIX = "prefer:best "; // 12 characters
 export const EFFECTIVE_MAX_QUERY_LENGTH =
-  MAX_SCRYFALL_QUERY_LENGTH - PREFER_BEST_PREFIX.length; // 388 characters
+  MAX_SCRYFALL_QUERY_LENGTH - PREFER_BEST_PREFIX.length; // 588 characters
 const FORMAT_NAMES = [
   "legacy",
   "modern",
@@ -58,6 +58,26 @@ function normalizeFormatFunctionTags(query: string): string {
 
 function normalizeWhitespace(query: string): string {
   return query.replace(/\s{2,}/g, " ").trim();
+}
+
+function normalizeLeadingStrayToken(query: string): string {
+  const tokens = splitQueryTokens(query);
+  if (tokens.length < 2) {
+    return query;
+  }
+
+  const hasFieldToken = tokens.some((token) => /^-?[a-z]+[:=]/i.test(token));
+  if (!hasFieldToken) {
+    return query;
+  }
+
+  const firstToken = tokens[0];
+  if (!/^[iI]$/.test(firstToken)) {
+    return query;
+  }
+
+  const remaining = tokens.slice(1).join(" ");
+  return normalizeWhitespace(remaining);
 }
 
 function splitQueryTokens(query: string): string[] {
@@ -239,6 +259,45 @@ function normalizeManaCostSymbolIntent(naturalQuery: string, query: string): str
   updated = updated.replace(/\bfunction:converted-mana-cost-matters\b/gi, "");
 
   return normalizeWhitespace(updated);
+}
+
+function normalizeCommanderIntent(naturalQuery: string, query: string): string {
+  const lower = naturalQuery.toLowerCase();
+  const wantsCommanderFormat = /\b(commander[-\s]?legal|legal\s+in\s+commander|for\s+commander|commander\s+format|in\s+commander|edh[-\s]?legal|legal\s+in\s+edh|for\s+edh|edh\s+format|in\s+edh)\b/i.test(
+    lower
+  );
+  const wantsCommanders =
+    /\b(commanders?|commander cards?|commander creatures?|can be commanders?)\b/i.test(lower) &&
+    !wantsCommanderFormat;
+
+  let updated = query;
+
+  if (wantsCommanderFormat) {
+    updated = updated.replace(/\bis:commander\b/gi, "");
+    if (!/\bf:commander\b/i.test(updated)) {
+      updated = `${updated} f:commander`;
+    }
+    return normalizeWhitespace(updated);
+  }
+
+  if (wantsCommanders) {
+    if (/\bf:commander\b/i.test(updated) && !/\bis:commander\b/i.test(updated)) {
+      updated = updated.replace(/\bf:commander\b/gi, "is:commander");
+    }
+    if (!/\bis:commander\b/i.test(updated)) {
+      updated = `${updated} is:commander`;
+    }
+    return normalizeWhitespace(updated);
+  }
+
+  return updated;
+}
+
+function normalizeCommanderIdentity(query: string): string {
+  if (!/\bis:commander\b/i.test(query)) {
+    return query;
+  }
+  return query.replace(/\bid:([wubrgc]{1,5})\b/gi, "id=$1");
 }
 
 function pickBurnFunctionTag(
@@ -432,6 +491,42 @@ function detectStrategies(naturalQuery: string): string[] {
   return Array.from(resolved);
 }
 
+function detectNegatedStrategies(naturalQuery: string): string[] {
+  const query = naturalQuery.toLowerCase();
+  const found = new Set<string>();
+  for (const candidate of buildStrategyCandidates()) {
+    const normalized = candidate.toLowerCase();
+    const isWordy = /^[a-z0-9 ]+$/.test(normalized);
+    const escaped = escapeRegex(normalized).replace(/ +/g, "\\s+");
+    const negationPattern = new RegExp(
+      `\\b(?:not|non|without|excluding|exclude|no)\\b[\\s\\w-]{0,20}\\b${escaped}\\b`,
+      "i"
+    );
+    const nonPrefixPattern = new RegExp(`\\bnon[-\\s]?${escaped}\\b`, "i");
+
+    if (isWordy) {
+      if (negationPattern.test(naturalQuery) || nonPrefixPattern.test(naturalQuery)) {
+        found.add(candidate);
+      }
+    } else if (
+      query.includes(`not ${normalized}`) ||
+      query.includes(`without ${normalized}`) ||
+      query.includes(`exclude ${normalized}`) ||
+      query.includes(`non-${normalized}`)
+    ) {
+      found.add(candidate);
+    }
+  }
+
+  const resolved = new Set<string>();
+  for (const entry of found) {
+    const canonical = resolveStrategyName(entry) || entry;
+    resolved.add(canonical);
+  }
+
+  return Array.from(resolved);
+}
+
 function appendStrategyTags(query: string, naturalQuery: string): string {
   const detected = detectStrategies(naturalQuery);
   if (detected.length === 0) {
@@ -439,8 +534,11 @@ function appendStrategyTags(query: string, naturalQuery: string): string {
   }
 
   const queryLower = query.toLowerCase();
+  const negated = new Set(detectNegatedStrategies(naturalQuery).map((entry) => entry.toLowerCase()));
   const missing = detected.filter(
-    (strategy) => !queryLower.includes(`strategy:${strategy.toLowerCase()}`)
+    (strategy) =>
+      !queryLower.includes(`strategy:${strategy.toLowerCase()}`) &&
+      !queryLower.includes(`-strategy:${strategy.toLowerCase()}`)
   );
 
   if (missing.length === 0) {
@@ -448,9 +546,9 @@ function appendStrategyTags(query: string, naturalQuery: string): string {
   }
 
   const strategyTokens = missing.map((strategy) => {
-    return /[^\w]/.test(strategy)
-      ? `strategy:"${strategy}"`
-      : `strategy:${strategy}`;
+    const value = /[^\w]/.test(strategy) ? `"${strategy}"` : strategy;
+    const prefix = negated.has(strategy.toLowerCase()) ? "-strategy:" : "strategy:";
+    return `${prefix}${value}`;
   });
 
   return `${query} ${strategyTokens.join(" ")}`.trim();
@@ -545,10 +643,13 @@ export function finalizeScryfallQuery(args: {
   normalizedQuery = normalizeCounterspellIntent(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeNotRedRequirement(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeManaCostSymbolIntent(naturalQuery, normalizedQuery);
+  normalizedQuery = normalizeCommanderIntent(naturalQuery, normalizedQuery);
+  normalizedQuery = normalizeCommanderIdentity(normalizedQuery);
   normalizedQuery = normalizeBurnIntent(naturalQuery, normalizedQuery, tagContext);
   normalizedQuery = normalizeBounceCounterspellOr(naturalQuery, normalizedQuery);
   normalizedQuery = quoteOracleTextPhrases(normalizedQuery);
   normalizedQuery = normalizeOrphanedOr(normalizedQuery);
+  normalizedQuery = normalizeLeadingStrayToken(normalizedQuery);
   normalizedQuery = dedupeTokens(normalizedQuery);
 
   if (!normalizedQuery) {
