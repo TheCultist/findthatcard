@@ -60,6 +60,8 @@ export const STRATEGY_ORACLETAGS: StrategyOracletagGroup[] = [
       "o:\"whenever a player casts an instant\"",
       "o:\"whenever you cast a sorcery\"",
       "o:\"whenever a player casts a sorcery\"",
+      "o:\"whenever a player casts a spell\"",
+      "o:\"whenever you cast a spell\"",
       "kw:prowess",
     ],
   },
