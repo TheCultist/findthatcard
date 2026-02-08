@@ -330,6 +330,26 @@ export async function ensureScryfallSetCache(): Promise<void> {
   await setCachePromise;
 }
 
+export async function getSetCodeMap(): Promise<{
+  updatedAt?: string;
+  sets: Record<string, string>;
+}> {
+  await ensureScryfallSetCache();
+  const map: Record<string, string> = {};
+  if (setCache) {
+    for (const entry of setCache) {
+      if (!entry || !entry.code || !entry.name) {
+        continue;
+      }
+      map[entry.code.toLowerCase()] = entry.name;
+    }
+  }
+  return {
+    updatedAt: setCacheUpdatedAt || undefined,
+    sets: map,
+  };
+}
+
 async function getSetIndex(): Promise<SetIndex> {
   await ensureScryfallSetCache();
   if (!setIndex) {
