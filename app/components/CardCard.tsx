@@ -73,6 +73,7 @@ export default function CardCard({ card }: { card: CardResult }) {
             alt={card.name}
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+            unoptimized
             className="object-cover transition-transform group-hover:scale-105"
             onError={() => {
               if (card.image_uris.small && imageSrc !== card.image_uris.small) {
