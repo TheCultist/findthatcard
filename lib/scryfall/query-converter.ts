@@ -3,7 +3,7 @@ import {
   getUserPrompt,
 } from "@/lib/prompts";
 import { buildSystemPrompt, selectPacks } from "@/lib/prompts/promptModules";
-import { TaggerTagContext } from "@/lib/tagger/context";
+import { TaggerTagContext, extractArtKeywords } from "@/lib/tagger/context";
 import {
   expandStrategyTags,
   resolveStrategyName,
@@ -368,6 +368,65 @@ function normalizeBurnIntent(
   return normalizeWhitespace(updated);
 }
 
+function normalizeArtIntent(
+  naturalQuery: string,
+  query: string,
+  tagContext?: TaggerTagContext
+): string {
+  const hasArtIntent =
+    /\b(in the art|art|depicts|depicting|illustration|illustrations|featuring|shows|showing|artwork|art work|picture|pictured)\b/i.test(
+      naturalQuery
+    );
+  if (!hasArtIntent) {
+    return query;
+  }
+
+  const hasArtToken = /\b-?(?:art|atag|arttag):/i.test(query);
+  if (hasArtToken) {
+    return query;
+  }
+
+  const artKeywords = extractArtKeywords(naturalQuery);
+  if (artKeywords.length === 0) {
+    return query;
+  }
+
+  const normalizedContextTags =
+    tagContext?.art?.map((tag) => tag.toLowerCase()) || [];
+  const hasContext = normalizedContextTags.length > 0;
+
+  const eligibleKeywords = artKeywords.filter((keyword) => {
+    if (!hasContext) {
+      return true;
+    }
+    return normalizedContextTags.includes(keyword.toLowerCase());
+  });
+
+  if (eligibleKeywords.length === 0) {
+    return query;
+  }
+
+  let updated = query;
+
+  for (const keyword of eligibleKeywords) {
+    const escapedKeyword = escapeRegex(keyword);
+    const oraclePattern = new RegExp(
+      `\\b(o|oracle):(?:"${escapedKeyword}"|${escapedKeyword})\\b`,
+      "gi"
+    );
+    if (oraclePattern.test(updated)) {
+      updated = updated.replace(oraclePattern, `art:${keyword}`);
+    }
+  }
+
+  if (!/\b-?(?:art|atag|arttag):/i.test(updated)) {
+    const additions = eligibleKeywords.slice(0, 3).map((keyword) => `art:${keyword}`);
+    updated = `${updated} ${additions.join(" ")}`.trim();
+  }
+
+  return normalizeWhitespace(updated);
+}
+
 function normalizeBounceCounterspellOr(naturalQuery: string, query: string): string {
   const wantsBounce = /\bbounce\b/i.test(naturalQuery);
   const wantsCounter = /\bcounter\s*spells?\b|\bcounterspells?\b/i.test(naturalQuery);
@@ -646,6 +705,7 @@ export function finalizeScryfallQuery(args: {
   normalizedQuery = normalizeCommanderIntent(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeCommanderIdentity(normalizedQuery);
   normalizedQuery = normalizeBurnIntent(naturalQuery, normalizedQuery, tagContext);
+  normalizedQuery = normalizeArtIntent(naturalQuery, normalizedQuery, tagContext);
   normalizedQuery = normalizeBounceCounterspellOr(naturalQuery, normalizedQuery);
   normalizedQuery = quoteOracleTextPhrases(normalizedQuery);
   normalizedQuery = normalizeOrphanedOr(normalizedQuery);

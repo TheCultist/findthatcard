@@ -128,7 +128,7 @@ function extractTaggerKeywords(naturalQuery: string): string[] {
   return Array.from(keywords);
 }
 
-function extractArtKeywords(naturalQuery: string): string[] {
+export function extractArtKeywords(naturalQuery: string): string[] {
   const stopwords = new Set([
     "a",
     "an",
