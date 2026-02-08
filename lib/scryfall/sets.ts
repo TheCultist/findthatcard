@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { getCacheDir } from "@/lib/cache-paths";
 
 type ScryfallSetEntry = {
   name: string;
@@ -33,7 +34,7 @@ export type SetFilter = {
 const SCRYFALL_SETS_URL = "https://api.scryfall.com/sets";
 const SCRYFALL_USER_AGENT =
   process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthat.card)";
-const SETS_FILE_PATH = path.join(process.cwd(), "data", "scryfall-sets.json");
+const SETS_FILE_PATH = path.join(getCacheDir(), "scryfall-sets.json");
 
 let setCache: ScryfallSetEntry[] | null = null;
 let setCacheUpdatedAt: string | null = null;

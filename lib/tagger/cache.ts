@@ -1,8 +1,9 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { getCacheDir } from "@/lib/cache-paths";
 
 const TAGGER_USER_AGENT = "find-that-card/1.0 (+https://findthat.card)";
-const TAGGER_CACHE_PATH = path.join(process.cwd(), "data", "tagger-tags.json");
+const TAGGER_CACHE_PATH = path.join(getCacheDir(), "tagger-tags.json");
 
 type TaggerCacheFile = {
   updatedAt: string;
