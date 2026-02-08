@@ -427,8 +427,30 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
     return [];
   }
 
-  const filters = new Map<string, SetFilter>();
+  const wantsCommanderFormat =
+    /\b(commander[-\s]?legal|legal\s+in\s+commander|for\s+commander|commander\s+format|in\s+commander|edh[-\s]?legal|legal\s+in\s+edh|for\s+edh|edh\s+format|in\s+edh)\b/i.test(
+      naturalQuery
+    );
+  const hasSetContext =
+    /\b(set|sets|edition|editions|printing|printings)\b/i.test(naturalQuery);
   const queryTokens = normalizedQuery.split(" ").filter(Boolean);
+  const queryTokenSet = new Set(queryTokens);
+
+  const shouldSkipCommanderSetMatch = (entry: { normalized: string }) => {
+    if (!wantsCommanderFormat || hasSetContext) {
+      return false;
+    }
+    const tokens = entry.normalized
+      .split(" ")
+      .filter(Boolean)
+      .filter((token) => token !== "commander");
+    if (tokens.length === 0) {
+      return true;
+    }
+    return !tokens.some((token) => queryTokenSet.has(token));
+  };
+
+  const filters = new Map<string, SetFilter>();
   const anySetPattern =
     /\bany\s+([a-z0-9 ]{2,})\s+(set|sets|edition|editions|printing|printings)\b/gi;
   let anyMatch: RegExpExecArray | null;
@@ -442,6 +464,9 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
     }
 
     for (const entry of byName) {
+      if (shouldSkipCommanderSetMatch(entry)) {
+        continue;
+      }
       const isMatch = phraseTokens.every((token) =>
         new RegExp(`\\b${escapeRegex(token)}\\b`, "i").test(entry.normalized)
       );
@@ -462,6 +487,9 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
   }
 
   for (const entry of byName) {
+    if (shouldSkipCommanderSetMatch(entry)) {
+      continue;
+    }
     const pattern = new RegExp(
       `\\b${escapeRegex(entry.normalized).replace(/ +/g, "\\s+")}\\b`,
       "i"
@@ -482,9 +510,10 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
   }
 
   if (queryTokens.length > 0) {
-    const queryTokenSet = new Set(queryTokens);
-
     for (const entry of byName) {
+      if (shouldSkipCommanderSetMatch(entry)) {
+        continue;
+      }
       const nameTokens = entry.normalized.split(" ").filter(Boolean);
       if (nameTokens.length === 0) {
         continue;
