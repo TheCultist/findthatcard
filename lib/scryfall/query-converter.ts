@@ -311,6 +311,33 @@ function normalizeGameChangerIntent(naturalQuery: string, query: string): string
   return normalizeWhitespace(updated);
 }
 
+/**
+ * When the user asks for banned or restricted cards in a format, the query must not
+ * also require legality in that same format (f:X / legal:X). Remove those conflicting filters.
+ */
+function removeFormatLegalityWhenBannedOrRestricted(query: string): string {
+  const bannedRestrictedFormats = new Set<string>();
+  const banRestrictRegex = /\b(?:banned|restricted):([a-z]+)\b/gi;
+  let match: RegExpExecArray | null;
+  while ((match = banRestrictRegex.exec(query)) !== null) {
+    bannedRestrictedFormats.add(match[1].toLowerCase());
+  }
+  if (bannedRestrictedFormats.size === 0) {
+    return query;
+  }
+  let updated = query;
+  for (const format of bannedRestrictedFormats) {
+    const escaped = escapeRegex(format);
+    // Remove f:format, legal:format, format:format and their negated forms
+    const legalityPattern = new RegExp(
+      `\\s*-?(?:f|legal|format):${escaped}\\b\\s*`,
+      "gi"
+    );
+    updated = updated.replace(legalityPattern, " ").trim();
+  }
+  return normalizeWhitespace(updated);
+}
+
 function normalizeCommanderIdentity(query: string): string {
   if (!/\bis:commander\b/i.test(query)) {
     return query;
@@ -722,6 +749,7 @@ export function finalizeScryfallQuery(args: {
   normalizedQuery = normalizeManaCostSymbolIntent(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeCommanderIntent(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeGameChangerIntent(naturalQuery, normalizedQuery);
+  normalizedQuery = removeFormatLegalityWhenBannedOrRestricted(normalizedQuery);
   normalizedQuery = normalizeCommanderIdentity(normalizedQuery);
   normalizedQuery = normalizeBurnIntent(naturalQuery, normalizedQuery, tagContext);
   normalizedQuery = normalizeArtIntent(naturalQuery, normalizedQuery, tagContext);

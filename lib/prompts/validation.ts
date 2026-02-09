@@ -26,7 +26,7 @@ export function buildValidationPrompt(
 Generated query: "${generatedQuery}"${invalidTagsSection}
 
 CRITICAL RULES:
-- "f:" is FORMAT (f:commander, f:modern, f:legacy), NOT function tags. Function tags use "function:", "otag:", or "oracletag:".
+- "f:" and "legal:" are FORMAT/legality (f:commander, f:modern, legal:legacy). banned:FORMAT and restricted:FORMAT are valid (e.g. banned:modern, restricted:vintage). "f:" is NOT function tags; those use "function:", "otag:", or "oracletag:".
 - NEVER use non-existent tags. If a FUNCTION tag doesn't exist, use oracle text (o:) instead. For ART tags, fix to a valid art tag or remove it (never replace art intent with o:).
 - Keyword abilities MUST use kw: (e.g., kw:surveil, kw:flying). Do NOT replace kw: with o:.
 - Art intent MUST use art:/atag:/arttag: (e.g., art:demon, art:"dragon rider"). Do NOT replace art filters with o:.

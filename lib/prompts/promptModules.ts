@@ -48,7 +48,10 @@ NO REDUNDANT COLOR NICKNAMES: When using id:/c: for colors, NEVER add the nickna
 Comparisons: c>=uw, id<=esper, c=2.
 Types: t:/type: (partial words: t:merfolk). If the query names a creature type as the card's type (e.g., "legendary spirits"), use t:spirit (NOT o:"spirit").
 TYPE VS TARGETING: Use t: only when the user wants the cards themselves to be that type. If the user wants cards that affect a creature type (e.g., "discount elementals", "destroy dragons"), use o:"elemental"/o:"dragon" and DO NOT add t: unless explicitly requested.
-Formats: f:/format: (standard, pioneer, modern, legacy, vintage, commander, pauper). Commander format: f:commander. Commanders (cards that can be your commander): is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner. Game changer list: is:gamechanger. NEVER use function: for formats.
+Formats: f:/format: and legal: filter by constructed-format legality. Use f:FORMAT or legal:FORMAT (standard, pioneer, modern, legacy, vintage, commander/edh, pauper, brawl). f: and legal: both return cards currently legal in that format (banned cards are excluded). Prefer f: for "legal in X" (e.g. f:modern, f:commander, f:pauper). Commander format: f:commander. Commanders (cards that can be your commander): is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner. Game changer list: is:gamechanger. NEVER use function: for formats.
+BANNED/RESTRICTED: banned:FORMAT finds cards forbidden in that format (e.g. banned:modern). restricted:FORMAT finds cards limited to one copy (e.g. restricted:vintage). "Not legal" = never in the format's pool; "banned" = was legal, then forbidden. Use banned: or restricted: only when the user asks for banned/restricted cards. When using banned: or restricted: for a format, do NOT add f: or legal: for that same format (they are mutually exclusive).
+MULTIPLE FORMATS: Combine with spaces for cards legal in both (e.g. f:modern f:pauper). f:future = cards that will be legal after next rotation.
+PAPER VS DIGITAL: For paper/MTGO legality without Arena-only cards, add (game:paper or game:mtgo) or game:paper when relevant.
 COMMANDERS VS COMMANDER FORMAT: If the user asks for commanders/commander cards (or "can be commanders"), use is:commander. If they ask for cards for Commander / commander legal / in Commander / EDH legal, use f:commander. Do NOT use is:commander for commander-legal queries.
 GAME CHANGER LIST: If the user asks for cards in the "game changer" list (or "game changer list", "gamechanger"), use is:gamechanger.
 FORMAT WORDING VARIANTS: Treat leading format adjectives as f:FORMAT even if not explicitly "legal in". "legacy free counterspells" and "legacy-legal free counterspells" -> f:legacy function:counterspell-free (no o:counterspell).
@@ -146,7 +149,7 @@ Name: name:/^Lightning/ (starts), name:/hero/ (contains), name:/\\bhero\\b/ (who
 // Advanced filters module
 const PACK_ADVANCED: PackDefinition = {
   rules: `Advanced filters:
-- Banned/Restricted: banned:legacy, restricted:vintage, is:reserved
+- Banned/Restricted: banned:FORMAT (cards forbidden in that format, e.g. banned:modern, banned:legacy), restricted:FORMAT (one copy per deck, e.g. restricted:vintage), is:reserved
 - Foil/Frame: is:foil/nonfoil/etched/glossy, border:black/white/silver/borderless, frame:1993/1997/2003/2015/future, frame:legendary/colorshifted/tombstone, is:full, new:frame
 - Power/Toughness: power:/pow:, toughness:/tou:, pt:/powtou:, loyalty:/loy: (comparisons: pow>=8, pow>tou)
 - Mana value: mv:/manavalue: (mv=5, mv>=3)

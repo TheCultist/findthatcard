@@ -14,7 +14,7 @@ const proTips = [
   "You can tweak the Scryfall query by editing the text in the query box.",
   "id:g means the card contains green; id=g means the card is exactly green.",
   "Use quotes for exact phrases, like \"enter the battlefield\".",
-  "Add \"is:commander\" to find commanders, or \"legal:modern\" for formats.",
+  "Add \"is:commander\" to find commanders, or \"f:modern\" / \"f:commander\" for format-legal cards.",
   "Use \"type:\" to filter types, like type:dragon or type:artifact.",
   "Combine filters with AND by default, like \"type:creature cmc<=3\".",
   "Use \"o:\" to search rules text, like o:\"draw a card\".",
