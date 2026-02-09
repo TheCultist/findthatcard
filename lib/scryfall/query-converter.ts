@@ -293,6 +293,24 @@ function normalizeCommanderIntent(naturalQuery: string, query: string): string {
   return updated;
 }
 
+function normalizeGameChangerIntent(naturalQuery: string, query: string): string {
+  const lower = naturalQuery.toLowerCase();
+  const wantsGameChangerList =
+    /\b(game\s*changer\s*(list)?|gamechanger\s*(list)?|cards?\s+in\s+the\s+game\s*changer\s*(list)?)\b/i.test(
+      lower
+    );
+
+  if (!wantsGameChangerList) {
+    return query;
+  }
+
+  let updated = query;
+  if (!/\bis:gamechanger\b/i.test(updated)) {
+    updated = `${updated} is:gamechanger`;
+  }
+  return normalizeWhitespace(updated);
+}
+
 function normalizeCommanderIdentity(query: string): string {
   if (!/\bis:commander\b/i.test(query)) {
     return query;
@@ -703,6 +721,7 @@ export function finalizeScryfallQuery(args: {
   normalizedQuery = normalizeNotRedRequirement(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeManaCostSymbolIntent(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeCommanderIntent(naturalQuery, normalizedQuery);
+  normalizedQuery = normalizeGameChangerIntent(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeCommanderIdentity(normalizedQuery);
   normalizedQuery = normalizeBurnIntent(naturalQuery, normalizedQuery, tagContext);
   normalizedQuery = normalizeArtIntent(naturalQuery, normalizedQuery, tagContext);
