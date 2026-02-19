@@ -44,9 +44,10 @@ function parseColorIdentityFromPhrase(phrase: string): string | null {
   const normalized = normalizeForColorMatch(phrase);
   const words = normalized.split(/\s+/).filter(Boolean);
 
-  // Check guild/shard/wedge nicknames first
+  // Check guild/shard/wedge nicknames first (multi-color only—skip white, green, etc.)
+  const singleColors = new Set(["white", "blue", "black", "red", "green"]);
   for (const [name, id] of Object.entries(COLOR_WORDS)) {
-    if (name.length <= 3) continue; // Skip single letters
+    if (name.length <= 3 || singleColors.has(name)) continue;
     if (normalized.includes(name)) {
       return id;
     }
@@ -68,13 +69,17 @@ function parseColorIdentityFromPhrase(phrase: string): string | null {
  */
 export function resolveCommanderColorIdentity(naturalQuery: string): string | null {
   const lower = naturalQuery.toLowerCase();
-  if (!/\bmy\s+commander\b|\bcommander\s+is\b|\bmy\s+general\b/i.test(lower)) {
+  if (
+    !/\bmy\s+commander\b|\bcommander\s+is\b|\bcommander\s+being\b|\bthe\s+commander\b|\bmy\s+general\b/i.test(
+      lower
+    )
+  ) {
     return null;
   }
 
-  // "my commander is green and white" / "commander is green white"
+  // "my commander is green and white" / "commander is green white" / "commander being green white"
   const colorMatch = lower.match(
-    /\b(?:my\s+)?commander\s+is\s+([^.]+?)(?:\.|,|and\s+I|$)/i
+    /\b(?:my\s+|the\s+)?commander\s+(?:is|being)\s+([^.]+?)(?:\.|,|and\s+(?:I|i)|$)/i
   );
   if (colorMatch) {
     const phrase = colorMatch[1] || "";
@@ -111,7 +116,9 @@ export function resolveCommanderColorIdentity(naturalQuery: string): string | nu
  */
 export function hasCommanderDeckContext(naturalQuery: string): boolean {
   return (
-    /\bmy\s+commander\b|\bcommander\s+is\b|\bmy\s+general\b/i.test(naturalQuery) ||
+    /\bmy\s+commander\b|\bcommander\s+is\b|\bcommander\s+being\b|\bthe\s+commander\b|\bmy\s+general\b/i.test(
+      naturalQuery
+    ) ||
     /\b(?:have|run|play|use)\s+(?:a\s+)?[^.]+?\s+commander\b/i.test(naturalQuery)
   );
 }
@@ -139,15 +146,15 @@ export function applyCommanderContextFromNaturalQuery(
 
   const colorId = resolveCommanderColorIdentity(naturalQuery);
   if (colorId) {
-    const idPattern = new RegExp(`\\bid(?:entity)?:<?=?[wubrgc]+\\b`, "i");
-    if (!idPattern.test(result)) {
-      result = `${result} id:<=${colorId}`.trim();
-    }
+    // Replace id= or id: with id:<= for deck building (cards legal in this deck)
+    const idPattern = /\bid(?:entity)?[:=]<?=?\s*[wubrgc]+\b/gi;
+    result = result.replace(idPattern, "");
+    result = `${result.trim()} id:<=${colorId}`.trim();
   }
 
-  // Remove Commander precon set filters—user wants deck cards, not from a specific product
+  // Remove Commander precon/set filters—user wants deck cards, not from a specific product
   const commanderPreconCodes =
-    "c13|c14|c15|c16|c17|c18|c19|c20|c21|cmd|m21|dbl|mic";
+    "c13|c14|c15|c16|c17|c18|c19|c20|c21|cmd|m21|dbl|mic|cmr|clb";
   result = result.replace(
     new RegExp(
       `-?(?:set|s|e|edition):(?:${commanderPreconCodes})\\b`,

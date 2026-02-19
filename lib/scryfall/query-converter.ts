@@ -62,6 +62,12 @@ function normalizeWhitespace(query: string): string {
 }
 
 function normalizeLeadingStrayToken(query: string): string {
+  // Strip leading stray "i" or "I" (often from "I need" leaking into AI output)
+  let updated = query.replace(/^\s*[iI]\s+/i, "").trim();
+  if (updated !== query) {
+    return normalizeWhitespace(updated);
+  }
+
   const tokens = splitQueryTokens(query);
   if (tokens.length < 2) {
     return query;

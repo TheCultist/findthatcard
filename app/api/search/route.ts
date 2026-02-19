@@ -99,7 +99,10 @@ export async function POST(request: NextRequest) {
       if (!isDirectScryfallQuery) {
         scryfallQuery = applyDefaultGameFilter(scryfallQuery);
       }
-      
+
+      // Strip leading stray "i" (from "I need" leaking into AI output)
+      scryfallQuery = scryfallQuery.replace(/^\s*[iI]\s+/i, "").trim();
+
       // Validate and truncate Scryfall query length (accounting for prefer:best prefix)
       if (scryfallQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
         console.warn(`[Search] Scryfall query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${scryfallQuery.length}), truncating...`);
@@ -127,12 +130,13 @@ export async function POST(request: NextRequest) {
             body.naturalQuery,
             scryfallQuery
           );
-          scryfallQuery = applyCommanderContextFromNaturalQuery(
-            body.naturalQuery,
-            scryfallQuery
-          );
-          scryfallQuery = applyDefaultGameFilter(scryfallQuery);
+        scryfallQuery = applyCommanderContextFromNaturalQuery(
+          body.naturalQuery,
+          scryfallQuery
+        );
+        scryfallQuery = applyDefaultGameFilter(scryfallQuery);
         }
+        scryfallQuery = scryfallQuery.replace(/^\s*[iI]\s+/i, "").trim();
 
         // Validate and truncate regenerated query length (accounting for prefer:best prefix)
         if (scryfallQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {

@@ -614,6 +614,11 @@ export async function applySetFiltersFromNaturalQuery(
   naturalQuery: string,
   scryfallQuery: string
 ): Promise<string> {
+  const { hasCommanderDeckContext } = await import("@/lib/commander-context");
+  if (hasCommanderDeckContext(naturalQuery)) {
+    return scryfallQuery;
+  }
+
   const filters = await resolveSetFilters(naturalQuery);
   if (filters.length === 0) {
     return scryfallQuery;
