@@ -34,9 +34,13 @@ export default function QueryTokenPreview({
   className = "",
 }: QueryTokenPreviewProps) {
   const [setNames, setSetNames] = useState<Record<string, string>>({});
-  const tokenMetadata = scryfallQuery
-    ? tokenizeQuery(scryfallQuery).map((token) => getTokenMetadata(token, sourceQuery))
-    : [];
+  const tokenMetadata = useMemo(
+    () =>
+      scryfallQuery
+        ? tokenizeQuery(scryfallQuery).map((token) => getTokenMetadata(token, sourceQuery))
+        : [],
+    [scryfallQuery, sourceQuery]
+  );
 
   const setCodes = useMemo(() => {
     const codes = new Set<string>();
@@ -55,9 +59,10 @@ export default function QueryTokenPreview({
     }
     return Array.from(codes);
   }, [tokenMetadata]);
+  const hasSetCodes = setCodes.length > 0;
 
   useEffect(() => {
-    if (setCodes.length === 0) {
+    if (!hasSetCodes) {
       return;
     }
     let cancelled = false;
@@ -86,7 +91,7 @@ export default function QueryTokenPreview({
       cancelled = true;
       controller.abort();
     };
-  }, [setCodes.join("|")]);
+  }, [hasSetCodes]);
 
   const isEmpty = tokenMetadata.length === 0;
 

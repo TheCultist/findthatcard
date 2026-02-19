@@ -58,12 +58,16 @@ function normalizeFormatFunctionTags(query: string): string {
 }
 
 function normalizeWhitespace(query: string): string {
-  return query.replace(/\s{2,}/g, " ").trim();
+  return query
+    .replace(/\s{2,}/g, " ")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .trim();
 }
 
 function normalizeLeadingStrayToken(query: string): string {
   // Strip leading stray "i" or "I" (often from "I need" leaking into AI output)
-  let updated = query.replace(/^\s*[iI]\s+/i, "").trim();
+  const updated = query.replace(/^\s*[iI]\s+/i, "").trim();
   if (updated !== query) {
     return normalizeWhitespace(updated);
   }
@@ -206,7 +210,7 @@ function dedupeTokens(query: string): string {
     result.push(token);
   }
 
-  return result.join(" ");
+  return normalizeWhitespace(result.join(" "));
 }
 
 function normalizeCounterspellIntent(naturalQuery: string, query: string): string {

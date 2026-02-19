@@ -375,7 +375,8 @@ function normalizeOrphanedOr(query: string): string {
   let updated = query;
   updated = updated.replace(/\(\s*OR\s+([^)]+)\)/gi, "($1)");
   updated = updated.replace(/\(\s*([^)]+)\s+OR\s*\)/gi, "($1)");
-  updated = updated.replace(/\(\s*OR\s*\)/gi, "");
+  // Remove parenthesized branches that contain only OR tokens.
+  updated = updated.replace(/\(\s*(?:OR\s*)+\)/gi, "");
   updated = updated.replace(/\(\s*OR\s+/gi, "(");
   updated = updated.replace(/\s+OR\s*\)/gi, ")");
   updated = updated.replace(/\bOR\b\s+\bOR\b/gi, "OR");
@@ -414,6 +415,88 @@ function buildSetFilterTokens(filters: SetFilter[]): string {
   }
 
   return tokens.join(" ").trim();
+}
+
+function addFranchiseSetFilters(
+  naturalQuery: string,
+  normalizedQuery: string,
+  byName: Array<{ normalized: string; entry: ScryfallSetEntry }>,
+  filters: Map<string, SetFilter>
+): void {
+  const hasSetContext =
+    /\b(set|sets|edition|editions|printing|printings)\b/i.test(naturalQuery);
+  if (!hasSetContext) {
+    return;
+  }
+
+  const phrasePattern =
+    /\b([a-z0-9]{3,}(?:\s+[a-z0-9]{3,}){0,3})\s+(set|sets|edition|editions|printing|printings)\b/gi;
+  const ignored = new Set([
+    "commander",
+    "commanders",
+    "from",
+    "for",
+    "in",
+    "of",
+    "the",
+    "my",
+  ]);
+
+  const phrases = new Set<string>();
+  let phraseMatch: RegExpExecArray | null;
+  while ((phraseMatch = phrasePattern.exec(normalizedQuery)) !== null) {
+    const raw = (phraseMatch[1] || "").trim();
+    if (!raw) continue;
+    const cleanedTokens = raw
+      .split(" ")
+      .filter(Boolean)
+      .filter((token) => !ignored.has(token));
+    if (cleanedTokens.length === 0) continue;
+    phrases.add(cleanedTokens.join(" "));
+  }
+
+  const franchiseHints: Array<{ match: RegExp; phrases: string[] }> = [
+    { match: /\b(avatar|airbender)\b/i, phrases: ["avatar", "airbender", "last airbender"] },
+    { match: /\b(fallout)\b/i, phrases: ["fallout"] },
+    { match: /\b(doctor\s*who)\b/i, phrases: ["doctor who"] },
+    { match: /\b(final\s*fantasy)\b/i, phrases: ["final fantasy"] },
+    {
+      match: /\b(lotr|lord\s*of\s*the\s*rings|middle\s*earth)\b/i,
+      phrases: ["lord of the rings", "middle earth", "lotr"],
+    },
+    { match: /\b(marvel)\b/i, phrases: ["marvel"] },
+  ];
+
+  for (const hint of franchiseHints) {
+    if (hint.match.test(naturalQuery)) {
+      for (const phrase of hint.phrases) {
+        phrases.add(phrase);
+      }
+    }
+  }
+
+  for (const phrase of phrases) {
+    const phraseTokens = phrase
+      .split(" ")
+      .filter((token) => token.length >= 3);
+    if (phraseTokens.length === 0) continue;
+
+    for (const entry of byName) {
+      const isMatch = phraseTokens.every((token) =>
+        new RegExp(`\\b${escapeRegex(token)}\\b`, "i").test(entry.normalized)
+      );
+      if (!isMatch) continue;
+      const code = entry.entry.code.toLowerCase();
+      if (filters.has(code)) continue;
+      const negated = detectNegation(normalizedQuery, phrase);
+      filters.set(code, {
+        code,
+        name: entry.entry.name,
+        negated,
+        source: "name",
+      });
+    }
+  }
 }
 
 export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter[]> {
@@ -549,12 +632,12 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
         }
       }
 
-      const maxAllowed = entry.normalized.length <= 8 ? 0.25 : 0.3;
+      const maxAllowed = entry.normalized.length <= 8 ? 0.32 : 0.38;
       const allowWithoutAnchor =
         !hasAnchorToken &&
-        queryTokens.length <= 3 &&
-        entry.normalized.length >= 6 &&
-        bestScore <= 0.2;
+        queryTokens.length <= 4 &&
+        entry.normalized.length >= 5 &&
+        bestScore <= 0.28;
 
       if (bestScore <= maxAllowed && (hasAnchorToken || allowWithoutAnchor)) {
         const code = entry.entry.code.toLowerCase();
@@ -570,6 +653,8 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
       }
     }
   }
+
+  addFranchiseSetFilters(naturalQuery, normalizedQuery, byName, filters);
 
   const codeContextPattern = /\b(set|edition|printing)\b/i.test(naturalQuery);
   const directCodePattern = /\b(?:set|edition)\s*[:#]?\s*([a-z0-9]{1,6})\b/gi;
@@ -611,7 +696,7 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
   // precon sets—they want commanders FROM that franchise, not from Commander products
   const COMMANDER_PRECON_CODES = new Set([
     "c13", "c14", "c15", "c16", "c17", "c18", "c19", "c20", "c21",
-    "cmd", "cmr", "clb", "m21", "dbl", "mic",
+    "cmd", "cm1", "cm2", "cmr", "clb", "m21", "dbl", "mic",
   ]);
   const hasCommanderPrecons = [...filters.keys()].some((code) =>
     COMMANDER_PRECON_CODES.has(code)
@@ -619,15 +704,32 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
   const hasThemeFranchiseSets = [...filters.keys()].some(
     (code) => !COMMANDER_PRECON_CODES.has(code)
   );
+  const hasCommanderFromSetIntent =
+    /\bcommanders?\s+from\b/i.test(naturalQuery);
   const mentionsFranchise =
     /\b(avatar|airbender|fallout|lotr|lord\s*of\s*the\s*rings|doctor\s*who|final\s*fantasy)\b/i.test(
       naturalQuery
     );
+  // If a franchise set is requested, never keep Commander precon/product sets
+  // that might be fuzzy-matched from "commanders".
+  if (mentionsFranchise) {
+    for (const code of COMMANDER_PRECON_CODES) {
+      filters.delete(code);
+    }
+  }
   if (
     hasCommanderPrecons &&
     hasThemeFranchiseSets &&
     mentionsFranchise
   ) {
+    for (const code of COMMANDER_PRECON_CODES) {
+      filters.delete(code);
+    }
+  }
+
+  // "commanders from <set>" usually asks for commander-eligible cards printed in those sets,
+  // not Commander product sets accidentally matched by "commanders".
+  if (hasCommanderPrecons && hasThemeFranchiseSets && hasCommanderFromSetIntent) {
     for (const code of COMMANDER_PRECON_CODES) {
       filters.delete(code);
     }

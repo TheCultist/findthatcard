@@ -23,15 +23,22 @@ function calculateScryfallPage(ourPage: number): { scryfallPage: number; offset:
 }
 
 function buildQueryWithPrefer(query: string): string {
-  let queryWithPrefer = `${PREFER_BEST_PREFIX}${query}`;
-  const queryLower = query.toLowerCase();
+  const trimmed = query.trim();
+  const hasPreferBest = /^prefer:best\s+/i.test(trimmed);
+  const queryBody = hasPreferBest
+    ? trimmed.replace(/^prefer:best\s+/i, "").trim()
+    : trimmed;
+  let queryWithPrefer = hasPreferBest
+    ? `prefer:best ${queryBody}`
+    : `${PREFER_BEST_PREFIX}${queryBody}`;
+  const queryLower = queryBody.toLowerCase();
   if (
     queryLower.includes("is:dfc") &&
     !queryLower.includes("-is:art") &&
     !queryLower.includes("is:art") &&
     !queryLower.includes("t:art")
   ) {
-    queryWithPrefer = `${PREFER_BEST_PREFIX}${query} -is:art`;
+    queryWithPrefer = `prefer:best ${queryBody} -is:art`;
   }
   return queryWithPrefer;
 }

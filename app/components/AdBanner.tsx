@@ -10,11 +10,10 @@ type Props = {
 const SHOW_ADS = process.env.NEXT_PUBLIC_SHOW_ADS === "true";
 
 export default function AdBanner({ slot, className }: Props) {
-  if (!SHOW_ADS) return null;
-
   const loaded = useRef(false);
 
   useEffect(() => {
+    if (!SHOW_ADS) return;
     if (loaded.current) return;
     loaded.current = true;
 
@@ -25,6 +24,8 @@ export default function AdBanner({ slot, className }: Props) {
       console.warn("AdSense error", e);
     }
   }, []);
+
+  if (!SHOW_ADS) return null;
 
   return (
     <div className={className}>

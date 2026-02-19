@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test:queries": "tsx lib/scryfall/query-converter.test.ts"
+    "test:queries": "tsx lib/scryfall/query-converter.test.ts && tsx lib/search-pipeline/search-pipeline.test.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

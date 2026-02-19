@@ -30,6 +30,10 @@ let keywordCacheUpdatedAt: string | null = null;
 let keywordCachePromise: Promise<void> | null = null;
 let keywordIndex: MtgKeywordIndex | null = null;
 
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
+
 function formatTodayStamp(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -119,7 +123,7 @@ async function readKeywordFile(): Promise<MtgKeywordCacheFile | null> {
 
     return { updatedAt, keywords };
   } catch (error) {
-    if (error instanceof Error && "code" in error && (error as any).code === "ENOENT") {
+    if (isErrnoException(error) && error.code === "ENOENT") {
       return null;
     }
     console.warn("[MTG Keywords] Failed to read cached keywords file:", error);

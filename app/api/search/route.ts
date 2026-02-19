@@ -3,55 +3,10 @@ import {
   validateNaturalQuery,
   transformScryfallResponse,
   formatErrorMessage,
-  validateTaggerTags,
-  getTaggerTagContext,
-  TaggerTagContext
 } from "@/lib/utils";
 import { SearchRequest, SearchResponse, ErrorResponse } from "@/types/scryfall";
-import { getRegenerationPrompt } from "@/lib/prompts";
-import {
-  convertToScryfallQuery,
-  EFFECTIVE_MAX_QUERY_LENGTH,
-  isScryfallQuery,
-  truncateScryfallQuery,
-} from "@/lib/scryfall/query-converter";
 import { CARDS_PER_PAGE, searchScryfall } from "@/lib/scryfall/client";
-import { applySetFiltersFromNaturalQuery } from "@/lib/scryfall/sets";
-import {
-  applyKeywordFiltersFromNaturalQuery,
-} from "@/lib/mtg-keywords";
-import {
-  applyCommanderContextFromNaturalQuery,
-  hasCommanderDeckContext,
-} from "@/lib/commander-context";
-
-const DEFAULT_GAME_FILTER = "game:paper";
-
-function ensureCommanderCreatureFilter(
-  naturalQuery: string,
-  scryfallQuery: string
-): string {
-  if (hasCommanderDeckContext(naturalQuery)) return scryfallQuery;
-  if (/\bis:commander\b/i.test(scryfallQuery)) return scryfallQuery;
-  const wantsCommanderCreature =
-    /\b(?:a\s+)?(?:easy\s+)?commander\b|\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b|\bcan\s+be\s+commanders?\b/i.test(
-      naturalQuery
-    );
-  if (!wantsCommanderCreature) return scryfallQuery;
-  return `${scryfallQuery.trim()} is:commander`.trim();
-}
-
-function applyDefaultGameFilter(query: string): string {
-  const lower = query.toLowerCase();
-  const hasGameFilter = /\b(game|in):(paper|arena|mtgo)\b/.test(lower);
-  const hasDigitalFilter = /\b-?is:(digital|alchemy|rebalanced)\b/.test(lower);
-
-  if (hasGameFilter || hasDigitalFilter) {
-    return query;
-  }
-
-  return `${query} ${DEFAULT_GAME_FILTER}`.trim();
-}
+import { runSearchPipeline } from "@/lib/search-pipeline/runSearchPipeline";
 
 /**
  * POST /api/search
@@ -88,107 +43,16 @@ export async function POST(request: NextRequest) {
     // Get page number (default to 1)
     const page = Math.max(1, body.page || 1);
 
-    // Convert natural language to Scryfall query
     let scryfallQuery: string | undefined;
-    let tagValidationError: string | undefined;
-    let tagContext: TaggerTagContext | undefined;
-    
-    // Check if the user entered a direct Scryfall query
-    const isDirectScryfallQuery = isScryfallQuery(body.naturalQuery);
-    
     try {
-      tagContext = isDirectScryfallQuery ? undefined : await getTaggerTagContext(body.naturalQuery);
-      scryfallQuery = await convertToScryfallQuery(body.naturalQuery, undefined, tagContext);
-      if (!isDirectScryfallQuery) {
-        scryfallQuery = await applySetFiltersFromNaturalQuery(
-          body.naturalQuery,
-          scryfallQuery
-        );
-        scryfallQuery = await applyKeywordFiltersFromNaturalQuery(
-          body.naturalQuery,
-          scryfallQuery
-        );
-        scryfallQuery = applyCommanderContextFromNaturalQuery(
-          body.naturalQuery,
-          scryfallQuery
-        );
-        scryfallQuery = ensureCommanderCreatureFilter(
-          body.naturalQuery,
-          scryfallQuery
-        );
-      }
-      if (!isDirectScryfallQuery) {
-        scryfallQuery = applyDefaultGameFilter(scryfallQuery);
-      }
-
-      // Strip leading stray "i" (from "I need" leaking into AI output)
-      scryfallQuery = scryfallQuery.replace(/^\s*[iI]\s+/i, "").trim();
-
-      // Validate and truncate Scryfall query length (accounting for prefer:best prefix)
-      if (scryfallQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
-        console.warn(`[Search] Scryfall query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${scryfallQuery.length}), truncating...`);
-        scryfallQuery = truncateScryfallQuery(scryfallQuery, EFFECTIVE_MAX_QUERY_LENGTH);
-      }
-      
-      console.log(`[Search] Natural query: "${body.naturalQuery}" -> Scryfall query: "${scryfallQuery}" (page ${page})`);
-      
-      // Only validate Tagger tags for AI-generated queries, not direct Scryfall queries
-      // If user entered a Scryfall query directly (like "oracletag:reanimate"), trust their syntax
-      const invalidTags = isDirectScryfallQuery ? [] : await validateTaggerTags(scryfallQuery);
-      
-      if (invalidTags.length > 0) {
-        console.log(`[Search] Found ${invalidTags.length} invalid tag(s), regenerating query...`);
-        
-        // Regenerate query without invalid tags
-        const regenerationPrompt = getRegenerationPrompt(body.naturalQuery, invalidTags, tagContext);
-        scryfallQuery = await convertToScryfallQuery(body.naturalQuery, regenerationPrompt, tagContext);
-        if (!isDirectScryfallQuery) {
-          scryfallQuery = await applySetFiltersFromNaturalQuery(
-            body.naturalQuery,
-            scryfallQuery
-          );
-          scryfallQuery = await applyKeywordFiltersFromNaturalQuery(
-            body.naturalQuery,
-            scryfallQuery
-          );
-        scryfallQuery = applyCommanderContextFromNaturalQuery(
-          body.naturalQuery,
-          scryfallQuery
-        );
-        scryfallQuery = ensureCommanderCreatureFilter(
-          body.naturalQuery,
-          scryfallQuery
-        );
-        scryfallQuery = applyDefaultGameFilter(scryfallQuery);
-        }
-        scryfallQuery = scryfallQuery.replace(/^\s*[iI]\s+/i, "").trim();
-
-        // Validate and truncate regenerated query length (accounting for prefer:best prefix)
-        if (scryfallQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
-          console.warn(`[Search] Regenerated Scryfall query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${scryfallQuery.length}), truncating...`);
-          scryfallQuery = truncateScryfallQuery(scryfallQuery, EFFECTIVE_MAX_QUERY_LENGTH);
-        }
-        
-        console.log(`[Search] Regenerated query: "${scryfallQuery}"`);
-        
-        // Validate again (only once to avoid infinite loops)
-        const stillInvalidTags = await validateTaggerTags(scryfallQuery);
-        
-        if (stillInvalidTags.length > 0) {
-          const invalidTagList = stillInvalidTags
-            .map(({ type, tag }) => `${type}:${tag}`)
-            .join(', ');
-          tagValidationError = `The generated query still includes invalid Tagger tags: ${invalidTagList}. Continuing with best-effort search.`;
-        }
-      }
+      const pipelineResult = await runSearchPipeline(body.naturalQuery);
+      scryfallQuery = pipelineResult.queryForScryfall;
+      console.log(
+        `[Search] Natural query "${body.naturalQuery}" -> "${pipelineResult.queryForLogs}" (batch=${pipelineResult.debug.aiBatchCalls}, sequential=${pipelineResult.debug.aiSequentialCalls}, unresolved=${pipelineResult.debug.unresolvedFragments}, invalidRemoved=${pipelineResult.debug.invalidTagsRemoved})`
+      );
     } catch (conversionError) {
-      // If conversion fails, we can't include the query
       console.error("Query conversion error:", conversionError);
       throw conversionError;
-    }
-    
-    if (tagValidationError) {
-      console.warn(`[Search] ${tagValidationError}`);
     }
 
     // Execute Scryfall search
