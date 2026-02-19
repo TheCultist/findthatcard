@@ -355,6 +355,15 @@ function hasKeywordGrantIntent(naturalQuery: string): boolean {
   return /\b(give|gives|giving|grant|grants|granting)\b/i.test(naturalQuery);
 }
 
+function hasKeywordSynergyIntent(naturalQuery: string): boolean {
+  // "synergize with X", "synergy with X", "work well with X" (incl. typos: synergyze, synergise)
+  return (
+    /\b(synergiz(?:e|es)|synergyz(?:e|es)|synergis(?:e|es)|synergy)\s+with\b/i.test(naturalQuery) ||
+    /\bwork(?:\s+well)?\s+with\b/i.test(naturalQuery) ||
+    /\bworks?\s+well\s+with\b/i.test(naturalQuery)
+  );
+}
+
 function hasKeywordExcludeIntent(naturalQuery: string, keyword: string): boolean {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
@@ -407,6 +416,15 @@ function hasKeywordPositiveIntent(naturalQuery: string, keyword: string): boolea
   if (new RegExp(`\\bthat\\s+${kwEscaped(kwLower)}s?\\b`, "i").test(lower)) {
     return true;
   }
+  // Synergy intent: "work well with X", "synergize with X" - add kw: to OR chain with function tags
+  if (
+    new RegExp(
+      `\\b(?:work(?:\\s+well)?|synergiz(?:e|es)|synergyz(?:e|es)|synergis(?:e|es)|synergy)\\s+with\\s+${kwEscaped(kwLower)}s?\\b`,
+      "i"
+    ).test(lower)
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -425,6 +443,20 @@ function getExistingKwInQuery(scryfallQuery: string): Set<string> {
   while ((match = kwPattern.exec(scryfallQuery)) !== null) {
     const value = (match[1] ?? match[2] ?? "").trim().toLowerCase();
     if (value) existing.add(value);
+  }
+  return existing;
+}
+
+function getExistingFunctionTagsForSlug(scryfallQuery: string, slug: string): Set<string> {
+  const existing = new Set<string>();
+  const fnPattern = new RegExp(
+    `(?:^|\\s)function:(gains|gives|synergy)-${escapeRegex(slug)}\\b`,
+    "gi"
+  );
+  let match: RegExpExecArray | null;
+  while ((match = fnPattern.exec(scryfallQuery)) !== null) {
+    const type = (match[1] ?? "").toLowerCase();
+    if (type) existing.add(type);
   }
   return existing;
 }
@@ -477,12 +509,46 @@ export async function resolveKeywordFilters(naturalQuery: string): Promise<strin
   return matched;
 }
 
+function removeGrantFunctionTags(
+  scryfallQuery: string,
+  keywordNames: string[],
+  isSynergyIntent: boolean
+): string {
+  if (isSynergyIntent) {
+    // Synergy intent: keep all function tags (gains, gives, synergy), just add kw: to OR chain
+    return scryfallQuery;
+  }
+  let result = scryfallQuery;
+  for (const name of keywordNames) {
+    const slug = normalizeKeywordName(name);
+    if (!slug) continue;
+    // "cards with X" = have keyword → remove gains/gives/synergy (cards that GIVE X)
+    const grantPattern = new RegExp(
+      `\\s*(?:or\\s+)?function:(?:gains|gives|synergy)-${escapeRegex(slug)}\\b`,
+      "gi"
+    );
+    result = result.replace(grantPattern, " ");
+  }
+  return result
+    .replace(/\s*\(\s*\)\s*/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+or\s+or\s+/gi, " or ")
+    .replace(/^\s*or\s+/i, "")
+    .replace(/\s+or\s*$/i, "")
+    .trim();
+}
+
+
+function removeEmptyBrackets(q: string): string {
+  return q.replace(/\s*\(\s*\)\s*/g, " ").replace(/\s{2,}/g, " ").trim();
+}
+
 export async function applyKeywordFiltersFromNaturalQuery(
   naturalQuery: string,
   scryfallQuery: string
 ): Promise<string> {
   const keywords = await resolveKeywordFilters(naturalQuery);
-  if (keywords.length === 0) return scryfallQuery;
+  if (keywords.length === 0) return removeEmptyBrackets(scryfallQuery);
 
   const existingKw = getExistingKwInQuery(scryfallQuery);
   const toAdd = keywords.filter((name) => {
@@ -490,12 +556,39 @@ export async function applyKeywordFiltersFromNaturalQuery(
     return !existingKw.has(normalized) && !existingKw.has(normalized.replace(/\s+/g, "-"));
   });
 
-  if (toAdd.length === 0) return scryfallQuery;
+  if (toAdd.length === 0) return removeEmptyBrackets(scryfallQuery);
 
-  const tokens = toAdd.map(toKwToken);
-  const hasOrChain = /\s+or\s+/i.test(scryfallQuery);
-  const joiner = hasOrChain ? " or " : " ";
-  return `${scryfallQuery}${joiner}${tokens.join(joiner)}`.trim().replace(/\s{2,}/g, " ");
+  const isSynergyIntent = hasKeywordSynergyIntent(naturalQuery);
+  let query = removeEmptyBrackets(removeGrantFunctionTags(scryfallQuery, toAdd, isSynergyIntent));
+
+  let tokens: string[];
+  if (isSynergyIntent) {
+    // Inject full set: function:gains-X, function:gives-X, function:synergy-X, kw:X (only missing ones)
+    const allTokens: string[] = [];
+    for (const name of toAdd) {
+      const slug = normalizeKeywordName(name);
+      if (!slug) continue;
+      const existingFn = getExistingFunctionTagsForSlug(query, slug);
+      const existingKw = getExistingKwInQuery(query);
+      const kwNorm = name.toLowerCase();
+      const kwExists =
+        existingKw.has(kwNorm) || existingKw.has(kwNorm.replace(/\s+/g, "-"));
+
+      if (!existingFn.has("gains")) allTokens.push(`function:gains-${slug}`);
+      if (!existingFn.has("gives")) allTokens.push(`function:gives-${slug}`);
+      if (!existingFn.has("synergy")) allTokens.push(`function:synergy-${slug}`);
+      if (!kwExists) allTokens.push(toKwToken(name));
+    }
+    tokens = allTokens;
+  } else {
+    tokens = toAdd.map(toKwToken);
+  }
+
+  const hasOrChain = /\s+or\s+/i.test(query);
+  const joiner = hasOrChain || isSynergyIntent ? " or " : " ";
+  let result = `${query}${joiner}${tokens.join(joiner)}`.trim().replace(/\s{2,}/g, " ");
+  result = result.replace(/^\s*or\s+/i, "").trim();
+  return removeEmptyBrackets(result);
 }
 
 ensureMtgKeywordCache().catch((error) => {
