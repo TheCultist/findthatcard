@@ -17,6 +17,9 @@ import {
 } from "@/lib/scryfall/query-converter";
 import { CARDS_PER_PAGE, searchScryfall } from "@/lib/scryfall/client";
 import { applySetFiltersFromNaturalQuery } from "@/lib/scryfall/sets";
+import {
+  applyKeywordFiltersFromNaturalQuery,
+} from "@/lib/mtg-keywords";
 
 const DEFAULT_GAME_FILTER = "game:paper";
 
@@ -83,6 +86,10 @@ export async function POST(request: NextRequest) {
           body.naturalQuery,
           scryfallQuery
         );
+        scryfallQuery = await applyKeywordFiltersFromNaturalQuery(
+          body.naturalQuery,
+          scryfallQuery
+        );
       }
       if (!isDirectScryfallQuery) {
         scryfallQuery = applyDefaultGameFilter(scryfallQuery);
@@ -107,9 +114,17 @@ export async function POST(request: NextRequest) {
         const regenerationPrompt = getRegenerationPrompt(body.naturalQuery, invalidTags, tagContext);
         scryfallQuery = await convertToScryfallQuery(body.naturalQuery, regenerationPrompt, tagContext);
         if (!isDirectScryfallQuery) {
+          scryfallQuery = await applySetFiltersFromNaturalQuery(
+            body.naturalQuery,
+            scryfallQuery
+          );
+          scryfallQuery = await applyKeywordFiltersFromNaturalQuery(
+            body.naturalQuery,
+            scryfallQuery
+          );
           scryfallQuery = applyDefaultGameFilter(scryfallQuery);
         }
-        
+
         // Validate and truncate regenerated query length (accounting for prefer:best prefix)
         if (scryfallQuery.length > EFFECTIVE_MAX_QUERY_LENGTH) {
           console.warn(`[Search] Regenerated Scryfall query exceeds ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${scryfallQuery.length}), truncating...`);
