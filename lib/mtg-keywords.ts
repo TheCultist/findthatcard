@@ -370,6 +370,8 @@ function hasKeywordSynergyIntent(naturalQuery: string): boolean {
     naturalQuery
   ))
     return true;
+  // "cards for a X deck", "best cards for X deck" = typal deck, synergy
+  if (/\bfor\s+(?:a\s+)?\w+(\s+\w+)?\s+deck\b/i.test(naturalQuery)) return true;
   return false;
 }
 
@@ -429,6 +431,16 @@ function hasKeywordPositiveIntent(
   if (new RegExp(`\\bthat\\s+${kwEscaped(kwLower)}s?\\b`, "i").test(lower)) {
     return true;
   }
+  // "for a X deck", "X deck" = typal deck building
+  if (
+    new RegExp(
+      `\\bfor\\s+(?:a\\s+)?${kwEscaped(kwLower)}s?\\s+deck\\b`,
+      "i"
+    ).test(lower)
+  )
+    return true;
+  if (new RegExp(`\\b${kwEscaped(kwLower)}s?\\s+deck\\b`, "i").test(lower))
+    return true;
   // Synergy intent: "work well with X", "synergize with X" - add kw: to OR chain with function tags
   if (
     new RegExp(
@@ -560,6 +572,32 @@ function removeEmptyBrackets(q: string): string {
   return q.replace(/\s*\(\s*\)\s*/g, " ").replace(/\s{2,}/g, " ").trim();
 }
 
+/**
+ * Converts AND'd related function tags to OR chain for synergy/typal deck queries.
+ * e.g. "function:synergy-changeling function:changeling" -> "(function:synergy-changeling or function:changeling)"
+ */
+function convertSynergyFunctionTagsToOrChain(
+  query: string,
+  slugs: string[]
+): string {
+  let result = query;
+  for (const slug of slugs) {
+    if (!slug) continue;
+    const escaped = escapeRegex(slug);
+    const oneTag =
+      `function:(?:synergy|gains|gives)-${escaped}|function:${escaped}\\b`;
+    const pattern = new RegExp(
+      `(${oneTag})(\\s+(?:${oneTag}))+`,
+      "gi"
+    );
+    result = result.replace(pattern, (match) => {
+      const tokens = match.trim().split(/\s+/);
+      return `(${tokens.join(" or ")})`;
+    });
+  }
+  return removeEmptyBrackets(result);
+}
+
 export async function applyKeywordFiltersFromNaturalQuery(
   naturalQuery: string,
   scryfallQuery: string
@@ -577,6 +615,13 @@ export async function applyKeywordFiltersFromNaturalQuery(
 
   const isSynergyIntent = hasKeywordSynergyIntent(naturalQuery);
   let query = removeEmptyBrackets(removeGrantFunctionTags(scryfallQuery, toAdd, isSynergyIntent));
+
+  if (isSynergyIntent) {
+    const slugs = toAdd
+      .map((name) => normalizeKeywordName(name))
+      .filter((s): s is string => !!s);
+    query = convertSynergyFunctionTagsToOrChain(query, slugs);
+  }
 
   let tokens: string[];
   if (isSynergyIntent) {
