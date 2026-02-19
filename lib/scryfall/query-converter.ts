@@ -536,6 +536,44 @@ function normalizeTokenGenerationIntent(
   return normalizeWhitespace(updated);
 }
 
+function normalizeEtbOracleText(query: string): string {
+  return query.replace(
+    /\b(?:o|oracle):\s*"enters the battlefield"/gi,
+    "o:enters"
+  );
+}
+
+function stripFranchiseCreatureTypeConfusion(
+  naturalQuery: string,
+  query: string
+): string {
+  const isAvatarFranchise =
+    /\bavatar\s+the\s+last\s+airbender\b|\bairbender\b|\blikes\s+avatar\b|\bfrom\s+avatar\b/i.test(
+      naturalQuery
+    );
+  if (!isAvatarFranchise) return query;
+  const updated = query.replace(/\s*-?t:avatar\b/gi, " ");
+  return normalizeWhitespace(updated);
+}
+
+function stripSubjectiveQualifierTags(
+  naturalQuery: string,
+  query: string
+): string {
+  const hasSubjectiveQualifier =
+    /\b(easy|simple|accessible|beginner|new\s+player|for\s+(?:a\s+)?new\s+player)\b/i.test(
+      naturalQuery
+    );
+  if (!hasSubjectiveQualifier) {
+    return query;
+  }
+  const updated = query.replace(
+    /\s*-?function:any-player-ability\b/gi,
+    " "
+  );
+  return normalizeWhitespace(updated);
+}
+
 function normalizeBounceCounterspellOr(naturalQuery: string, query: string): string {
   const wantsBounce = /\bbounce\b/i.test(naturalQuery);
   const wantsCounter = /\bcounter\s*spells?\b|\bcounterspells?\b/i.test(naturalQuery);
@@ -825,6 +863,12 @@ export function finalizeScryfallQuery(args: {
   normalizedQuery = normalizeBounceCounterspellOr(naturalQuery, normalizedQuery);
   normalizedQuery = quoteOracleTextPhrases(normalizedQuery);
   normalizedQuery = normalizeOrphanedOr(normalizedQuery);
+  normalizedQuery = normalizeEtbOracleText(normalizedQuery);
+  normalizedQuery = stripFranchiseCreatureTypeConfusion(
+    naturalQuery,
+    normalizedQuery
+  );
+  normalizedQuery = stripSubjectiveQualifierTags(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeLeadingStrayToken(normalizedQuery);
   normalizedQuery = dedupeTokens(normalizedQuery);
 

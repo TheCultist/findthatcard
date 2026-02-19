@@ -33,7 +33,8 @@ CRITICAL RULES:
 - NO REPETITION: Each parameter/set code appears once.
 - TAG LIMIT: For any single purpose (art, function, keyword, type), use at most 3 related tags; if more are needed, simplify to the most representative ones.
 - QUOTES: Any multiword search term must be quoted (e.g., a:"Kev Walker", o:"any target", name:"Lightning Bolt").
-- OR/Nesting: Alternatives MUST use OR, not spaces. t:fish or t:bird, t:legendary (t:goblin or t:elf).`,
+- OR/Nesting: Alternatives MUST use OR, not spaces. t:fish or t:bird, t:legendary (t:goblin or t:elf).
+- IGNORE NON-SEARCHABLE QUALIFIERS: Do NOT add filters for subjective/descriptive phrases with no Scryfall equivalent: "easy", "for a new player", "beginner-friendly", "simple", "accessible", "good for beginners". These are context only—output only filters for searchable criteria (types, sets, colors, keywords).`,
   examples: [
     `Azorius blink for Commander -> f:commander id:wu function:blink (NOT f:commander id:wu function:blink azorius)`,
     `Dimir spells under 3 mana for Commander -> f:commander id:ub t:instant t:sorcery mv<3`,
@@ -48,6 +49,7 @@ NO REDUNDANT COLOR NICKNAMES: When using id:/c: for colors, NEVER add the nickna
 Comparisons: c>=uw, id<=esper, c=2.
 Types: t:/type: (partial words: t:merfolk). If the query names a creature type as the card's type (e.g., "legendary spirits"), use t:spirit (NOT o:"spirit").
 TYPE VS TARGETING: Use t: only when the user wants the cards themselves to be that type. If the user wants cards that affect a creature type (e.g., "discount elementals", "destroy dragons"), use o:"elemental"/o:"dragon" and DO NOT add t: unless explicitly requested.
+FRANCHISE VS CREATURE TYPE: "Avatar" in "Avatar: The Last Airbender" is a franchise/set name, NOT the creature type Avatar. Do NOT add t:avatar when the query references the show/franchise (e.g., "likes avatar the last airbender", "from avatar"). Use set: filters for the franchise sets instead. Only use t:avatar when the user explicitly wants Avatar creature type.
 Formats: f:/format: and legal: filter by constructed-format legality. Use f:FORMAT or legal:FORMAT (standard, pioneer, modern, legacy, vintage, commander/edh, pauper, brawl). f: and legal: both return cards currently legal in that format (banned cards are excluded). Prefer f: for "legal in X" (e.g. f:modern, f:commander, f:pauper). Commander format: f:commander. Commanders (cards that can be your commander): is:commander. Brawl: is:brawler. Companion: is:companion. Partners: is:partner. Game changer list: is:gamechanger. NEVER use function: for formats.
 BANNED/RESTRICTED: banned:FORMAT finds cards forbidden in that format (e.g. banned:modern). restricted:FORMAT finds cards limited to one copy (e.g. restricted:vintage). "Not legal" = never in the format's pool; "banned" = was legal, then forbidden. Use banned: or restricted: only when the user asks for banned/restricted cards. When using banned: or restricted: for a format, do NOT add f: or legal: for that same format (they are mutually exclusive).
 MULTIPLE FORMATS: Combine with spaces for cards legal in both (e.g. f:modern f:pauper). f:future = cards that will be legal after next rotation.
@@ -81,6 +83,8 @@ Counterspells: use function:counterspell, not o:counter/o:"counterspell". If the
 CAST FOR FREE: If the user asks for a card that can be cast for free, use function:potentially-free. Exception: if it's a counterspell, use the counterspell rule instead.
 MANA VALUE FILTERS: For mana cost thresholds (e.g., "under 3 mana", "3 mana or less", "at most 4"), use mv comparisons (mv<3, mv<=3, mv<=4). Do NOT use cost-reduction regex unless discounting is explicitly requested.
 MANA COST SYMBOLS: If the user asks for cards with a specific mana cost symbol or pattern in the printed cost (e.g., "with X in the mana cost", "with two green pips"), use m: (mana cost) like m:X, m:{G}{G}. This is NOT mv.
+IGNORE SUBJECTIVE QUALIFIERS: "Easy", "for new players", "beginner-friendly", "simple", "accessible" have no reliable Scryfall/function equivalent. Do NOT add function:any-player-ability or similar for these—omit such filters entirely.
+ETB (enters the battlefield): Oracle text now uses "enters" (e.g., "When this creature enters"). Use o:enters, NOT o:"enters the battlefield".
 STRATEGY TAGS: If the query asks for a common MTG strategy, use the placeholder tag strategy:NAME and DO NOT expand to oracletag/function tags. Valid strategy names: ${STRATEGY_TAG_NAMES.join(
     ", "
   )}. Use quotes for multiword names (e.g., strategy:"Cost Reduction"). If the user asks to EXCLUDE a strategy, use -strategy:NAME (or -strategy:"Multi Word").

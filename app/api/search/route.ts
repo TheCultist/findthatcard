@@ -20,9 +20,26 @@ import { applySetFiltersFromNaturalQuery } from "@/lib/scryfall/sets";
 import {
   applyKeywordFiltersFromNaturalQuery,
 } from "@/lib/mtg-keywords";
-import { applyCommanderContextFromNaturalQuery } from "@/lib/commander-context";
+import {
+  applyCommanderContextFromNaturalQuery,
+  hasCommanderDeckContext,
+} from "@/lib/commander-context";
 
 const DEFAULT_GAME_FILTER = "game:paper";
+
+function ensureCommanderCreatureFilter(
+  naturalQuery: string,
+  scryfallQuery: string
+): string {
+  if (hasCommanderDeckContext(naturalQuery)) return scryfallQuery;
+  if (/\bis:commander\b/i.test(scryfallQuery)) return scryfallQuery;
+  const wantsCommanderCreature =
+    /\b(?:a\s+)?(?:easy\s+)?commander\b|\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b|\bcan\s+be\s+commanders?\b/i.test(
+      naturalQuery
+    );
+  if (!wantsCommanderCreature) return scryfallQuery;
+  return `${scryfallQuery.trim()} is:commander`.trim();
+}
 
 function applyDefaultGameFilter(query: string): string {
   const lower = query.toLowerCase();
@@ -95,6 +112,10 @@ export async function POST(request: NextRequest) {
           body.naturalQuery,
           scryfallQuery
         );
+        scryfallQuery = ensureCommanderCreatureFilter(
+          body.naturalQuery,
+          scryfallQuery
+        );
       }
       if (!isDirectScryfallQuery) {
         scryfallQuery = applyDefaultGameFilter(scryfallQuery);
@@ -131,6 +152,10 @@ export async function POST(request: NextRequest) {
             scryfallQuery
           );
         scryfallQuery = applyCommanderContextFromNaturalQuery(
+          body.naturalQuery,
+          scryfallQuery
+        );
+        scryfallQuery = ensureCommanderCreatureFilter(
           body.naturalQuery,
           scryfallQuery
         );

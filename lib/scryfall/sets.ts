@@ -607,6 +607,32 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
     }
   }
 
+  // When user asks for "commander from [franchise] sets" (e.g. Avatar, Fallout), drop Commander
+  // precon sets—they want commanders FROM that franchise, not from Commander products
+  const COMMANDER_PRECON_CODES = new Set([
+    "c13", "c14", "c15", "c16", "c17", "c18", "c19", "c20", "c21",
+    "cmd", "cmr", "clb", "m21", "dbl", "mic",
+  ]);
+  const hasCommanderPrecons = [...filters.keys()].some((code) =>
+    COMMANDER_PRECON_CODES.has(code)
+  );
+  const hasThemeFranchiseSets = [...filters.keys()].some(
+    (code) => !COMMANDER_PRECON_CODES.has(code)
+  );
+  const mentionsFranchise =
+    /\b(avatar|airbender|fallout|lotr|lord\s*of\s*the\s*rings|doctor\s*who|final\s*fantasy)\b/i.test(
+      naturalQuery
+    );
+  if (
+    hasCommanderPrecons &&
+    hasThemeFranchiseSets &&
+    mentionsFranchise
+  ) {
+    for (const code of COMMANDER_PRECON_CODES) {
+      filters.delete(code);
+    }
+  }
+
   return Array.from(filters.values());
 }
 

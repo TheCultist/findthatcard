@@ -72,6 +72,18 @@ export async function searchScryfall(
         details: response.statusText,
       }));
 
+      if (response.status === 404) {
+        return {
+          response: {
+            object: "list",
+            total_cards: 0,
+            has_more: false,
+            data: [],
+          },
+          offset: 0,
+        };
+      }
+
       throw new Error(errorData.details || `Scryfall API error: ${response.statusText}`);
     }
 
