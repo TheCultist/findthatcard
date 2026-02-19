@@ -356,12 +356,21 @@ function hasKeywordGrantIntent(naturalQuery: string): boolean {
 }
 
 function hasKeywordSynergyIntent(naturalQuery: string): boolean {
-  // "synergize with X", "synergy with X", "work well with X" (incl. typos: synergyze, synergise)
-  return (
-    /\b(synergiz(?:e|es)|synergyz(?:e|es)|synergis(?:e|es)|synergy)\s+with\b/i.test(naturalQuery) ||
-    /\bwork(?:\s+well)?\s+with\b/i.test(naturalQuery) ||
-    /\bworks?\s+well\s+with\b/i.test(naturalQuery)
-  );
+  // "synergize with X", "synergy with X", "work well with X" (incl. typos)
+  if (
+    /\b(synergiz(?:e|es)|synergyz(?:e|es)|synergis(?:e|es)|synergy)\s+with\b/i.test(
+      naturalQuery
+    )
+  )
+    return true;
+  if (/\bwork(?:\s+well)?\s+with\b/i.test(naturalQuery)) return true;
+  if (/\bworks?\s+well\s+with\b/i.test(naturalQuery)) return true;
+  // "my commander synergizes with X" = deck context, same as synergy with X
+  if (/\bmy\s+commander\s+(?:synergiz(?:e|es)|synergyz(?:e|es)|synergis(?:e|es)|synergy|works?)\s+(?:well\s+)?with\b/i.test(
+    naturalQuery
+  ))
+    return true;
+  return false;
 }
 
 function hasKeywordExcludeIntent(naturalQuery: string, keyword: string): boolean {
@@ -373,10 +382,14 @@ function hasKeywordExcludeIntent(naturalQuery: string, keyword: string): boolean
   return pattern.test(naturalQuery);
 }
 
-function hasKeywordPositiveIntent(naturalQuery: string, keyword: string): boolean {
-  const lower = naturalQuery.toLowerCase();
+function hasKeywordPositiveIntent(
+  naturalQuery: string,
+  keyword: string,
+  expandedQuery?: string
+): boolean {
+  const lower = (expandedQuery ?? naturalQuery).toLowerCase();
   const kwLower = keyword.toLowerCase();
-  // Explicit "cards with/have X" patterns
+  // Explicit "cards with/have X" patterns (use expanded query for keyword presence)
   if (
     /\b(with|has|have|featuring|that have|that has)\b/i.test(naturalQuery) &&
     lower.includes(kwLower)
@@ -483,6 +496,10 @@ export async function resolveKeywordFilters(naturalQuery: string): Promise<strin
 
   const matched: string[] = [];
   const lowerQuery = naturalQuery.toLowerCase();
+  // Expand common synonyms (e.g. "flyers" = creatures with flying)
+  const queryForMatch = lowerQuery
+    .replace(/\bflyers?\b/gi, "flying")
+    .replace(/\btramplers?\b/gi, "trample");
 
   for (const entry of byLength) {
     const name = entry.name;
@@ -493,9 +510,9 @@ export async function resolveKeywordFilters(naturalQuery: string): Promise<strin
       ? new RegExp(`\\b${base.replace(/\s+/g, "\\s+")}(s)?\\b`, "i")
       : new RegExp(`\\b${base}s?\\b`, "i");
 
-    if (!pattern.test(lowerQuery)) continue;
+    if (!pattern.test(queryForMatch)) continue;
     if (hasKeywordExcludeIntent(naturalQuery, name)) continue;
-    if (!hasKeywordPositiveIntent(naturalQuery, name)) continue;
+    if (!hasKeywordPositiveIntent(naturalQuery, name, queryForMatch)) continue;
 
     // Avoid duplicates (e.g. "first strike" and "strike")
     const alreadyMatched = matched.some(

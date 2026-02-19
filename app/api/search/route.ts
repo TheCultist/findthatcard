@@ -20,6 +20,7 @@ import { applySetFiltersFromNaturalQuery } from "@/lib/scryfall/sets";
 import {
   applyKeywordFiltersFromNaturalQuery,
 } from "@/lib/mtg-keywords";
+import { applyCommanderContextFromNaturalQuery } from "@/lib/commander-context";
 
 const DEFAULT_GAME_FILTER = "game:paper";
 
@@ -90,6 +91,10 @@ export async function POST(request: NextRequest) {
           body.naturalQuery,
           scryfallQuery
         );
+        scryfallQuery = applyCommanderContextFromNaturalQuery(
+          body.naturalQuery,
+          scryfallQuery
+        );
       }
       if (!isDirectScryfallQuery) {
         scryfallQuery = applyDefaultGameFilter(scryfallQuery);
@@ -119,6 +124,10 @@ export async function POST(request: NextRequest) {
             scryfallQuery
           );
           scryfallQuery = await applyKeywordFiltersFromNaturalQuery(
+            body.naturalQuery,
+            scryfallQuery
+          );
+          scryfallQuery = applyCommanderContextFromNaturalQuery(
             body.naturalQuery,
             scryfallQuery
           );

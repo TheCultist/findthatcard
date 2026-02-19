@@ -9,6 +9,7 @@ import {
   resolveStrategyName,
   STRATEGY_ORACLETAGS,
 } from "@/lib/strategies/oracletagStrategies";
+import { hasCommanderDeckContext } from "@/lib/commander-context";
 
 let openaiClient: OpenAI | null = null;
 
@@ -266,9 +267,11 @@ function normalizeCommanderIntent(naturalQuery: string, query: string): string {
   const wantsCommanderFormat = /\b(commander[-\s]?legal|legal\s+in\s+commander|for\s+commander|commander\s+format|in\s+commander|edh[-\s]?legal|legal\s+in\s+edh|for\s+edh|edh\s+format|in\s+edh)\b/i.test(
     lower
   );
+  const myCommanderDeck = hasCommanderDeckContext(naturalQuery);
   const wantsCommanders =
     /\b(commanders?|commander cards?|commander creatures?|can be commanders?)\b/i.test(lower) &&
-    !wantsCommanderFormat;
+    !wantsCommanderFormat &&
+    !myCommanderDeck;
 
   let updated = query;
 
@@ -469,6 +472,61 @@ function normalizeArtIntent(
     updated = `${updated} ${additions.join(" ")}`.trim();
   }
 
+  return normalizeWhitespace(updated);
+}
+
+/** Function tags that create/make tokens. Used to expand "make tokens" to OR chain. */
+const TOKEN_GENERATION_FUNCTION_TAGS = [
+  "repeatable-token-generator",
+  "repeatable-creature-tokens",
+  "repeatable-artifact-tokens",
+  "repeatable-noncreature-tokens",
+  "create-multiple-tokens",
+  "creates-token-of-a-card",
+  "creates-oracle-token",
+  "creates-card-token",
+  "create-land-tokens",
+] as const;
+
+function normalizeTokenGenerationIntent(
+  naturalQuery: string,
+  query: string,
+  tagContext?: TaggerTagContext
+): string {
+  const wantsTokenGeneration =
+    /\b(?:make|create|generat|produc)(?:e|es|ed|ing)?\s+tokens?\b|\btoken\s+makers?\b|\btoken\s+generators?\b|\bcards?\s+that\s+(?:make|create)\s+tokens?\b/i.test(
+      naturalQuery
+    );
+  if (!wantsTokenGeneration) {
+    return query;
+  }
+
+  const availableTags = tagContext?.function?.map((t) => t.toLowerCase()) || [];
+  const eligibleTags = TOKEN_GENERATION_FUNCTION_TAGS.filter((tag) =>
+    availableTags.includes(tag.toLowerCase())
+  );
+  if (eligibleTags.length <= 1) {
+    return query;
+  }
+
+  const orChain = `(${eligibleTags.map((t) => `function:${t}`).join(" or ")})`;
+
+  let updated = query;
+  const hasAnyTokenTag = TOKEN_GENERATION_FUNCTION_TAGS.some((tag) =>
+    new RegExp(`\\bfunction:${escapeRegex(tag)}\\b`, "i").test(updated)
+  );
+  if (!hasAnyTokenTag) {
+    return query;
+  }
+
+  for (const tag of TOKEN_GENERATION_FUNCTION_TAGS) {
+    updated = updated.replace(
+      new RegExp(`\\s*-?function:${escapeRegex(tag)}\\b`, "gi"),
+      " "
+    );
+  }
+
+  updated = `${updated.trim()} ${orChain}`.trim();
   return normalizeWhitespace(updated);
 }
 
@@ -752,6 +810,11 @@ export function finalizeScryfallQuery(args: {
   normalizedQuery = removeFormatLegalityWhenBannedOrRestricted(normalizedQuery);
   normalizedQuery = normalizeCommanderIdentity(normalizedQuery);
   normalizedQuery = normalizeBurnIntent(naturalQuery, normalizedQuery, tagContext);
+  normalizedQuery = normalizeTokenGenerationIntent(
+    naturalQuery,
+    normalizedQuery,
+    tagContext
+  );
   normalizedQuery = normalizeArtIntent(naturalQuery, normalizedQuery, tagContext);
   normalizedQuery = normalizeBounceCounterspellOr(naturalQuery, normalizedQuery);
   normalizedQuery = quoteOracleTextPhrases(normalizedQuery);

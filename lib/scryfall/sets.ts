@@ -430,6 +430,9 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
   const wantsCommanderFormat =
     /\b(commander[-\s]?legal|legal\s+in\s+commander|for\s+commander|commander\s+format|in\s+commander|edh[-\s]?legal|legal\s+in\s+edh|for\s+edh|edh\s+format|in\s+edh)\b/i.test(
       naturalQuery
+    ) ||
+    /\bmy\s+commander\b|\bcommander\s+is\b|\b(?:have|run|play|use)\s+(?:a\s+)?[^.]+?\s+commander\b/i.test(
+      naturalQuery
     );
   const hasSetContext =
     /\b(set|sets|edition|editions|printing|printings)\b/i.test(naturalQuery);
