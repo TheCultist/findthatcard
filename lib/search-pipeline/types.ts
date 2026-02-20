@@ -3,6 +3,7 @@ export type ClauseSource =
   | "phase1:color"
   | "phase1:commander"
   | "phase1:type"
+  | "phase1:function"
   | "phase1:set"
   | "phase1:keyword"
   | "phase1:strategy"

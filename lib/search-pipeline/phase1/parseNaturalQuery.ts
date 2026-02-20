@@ -3,6 +3,7 @@ import { getMtgKeywordList, resolveKeywordFilters } from "@/lib/mtg-keywords";
 import { isScryfallQuery } from "@/lib/scryfall/query-converter";
 import { resolveSetFilters } from "@/lib/scryfall/sets";
 import { resolveStrategyName, STRATEGY_ORACLETAGS } from "@/lib/strategies/oracletagStrategies";
+import { ensureTaggerTagCache, getTaggerTagCache } from "@/lib/tagger/cache";
 import { Phase1Result, QueryClause, ResolverCategory, UnresolvedFragment } from "@/lib/search-pipeline/types";
 
 const FORMAT_TOKENS = [
@@ -451,9 +452,96 @@ function detectStrategyClauses(
   return { clauses, strippedTerms };
 }
 
+function singularizeSubject(subject: string): string {
+  const normalized = normalizeFuzzyToken(subject);
+  if (normalized.endsWith("ies") && normalized.length > 4) {
+    return `${normalized.slice(0, -3)}y`;
+  }
+  if (normalized.endsWith("es") && normalized.length > 4) {
+    return normalized.slice(0, -2);
+  }
+  if (normalized.endsWith("s") && normalized.length > 3) {
+    return normalized.slice(0, -1);
+  }
+  return normalized;
+}
+
+function extractSynergySubjects(naturalQuery: string): Set<string> {
+  const subjects = new Set<string>();
+  const lower = naturalQuery.toLowerCase();
+  const patterns = [
+    /\b([a-z][a-z-]{2,})\s+synerg(?:y|ies)\b/gi,
+    /\bsynerg(?:ize|izes|izing|y|ies)\s+with\s+([a-z][a-z-]{2,})\b/gi,
+    /\bwork(?:s)?(?:\s+well)?\s+with\s+([a-z][a-z-]{2,})\b/gi,
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(lower)) !== null) {
+      const raw = (match[1] || "").trim();
+      if (!raw) continue;
+      const singular = singularizeSubject(raw);
+      if (singular.length >= 3) {
+        subjects.add(singular);
+      }
+    }
+  }
+
+  return subjects;
+}
+
+function tagContainsSubject(tag: string, subject: string): boolean {
+  const tokens = tag.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  if (tokens.includes(subject)) return true;
+  if (tokens.includes(`${subject}s`)) return true;
+  return false;
+}
+
+async function resolveSynergyFunctionClauses(
+  synergySubjects: Set<string>
+): Promise<{ clauses: QueryClause[]; strippedTerms: string[] }> {
+  if (synergySubjects.size === 0) {
+    return { clauses: [], strippedTerms: [] };
+  }
+
+  await ensureTaggerTagCache();
+  const functionTags = getTaggerTagCache()?.get("function");
+  if (!functionTags || functionTags.size === 0) {
+    return { clauses: [], strippedTerms: [] };
+  }
+
+  const available = Array.from(functionTags);
+  const clauses: QueryClause[] = [];
+  const strippedTerms: string[] = ["synergy", "synergies"];
+
+  for (const subject of synergySubjects) {
+    strippedTerms.push(subject, `${subject}s`);
+
+    const preferred = [`synergy-${subject}`, `${subject}-synergy`].filter((tag) =>
+      functionTags.has(tag)
+    );
+    const related = available
+      .filter((tag) => tag.toLowerCase().includes("synergy"))
+      .filter((tag) => tagContainsSubject(tag, subject))
+      .sort((a, b) => a.length - b.length);
+
+    const selected = [...new Set([...preferred, ...related])].slice(0, 4);
+    if (selected.length === 0) continue;
+
+    const tagChain = selected.map((tag) => `function:${tag}`);
+    clauses.push({
+      value: tagChain.length === 1 ? tagChain[0] : `(${tagChain.join(" OR ")})`,
+      source: "phase1:function",
+    });
+  }
+
+  return { clauses, strippedTerms };
+}
+
 export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Result> {
   const tokenizedQuery = tokenizeNaturalQuery(naturalQuery);
   const strippedTerms: string[] = [];
+  const synergySubjects = extractSynergySubjects(naturalQuery);
 
   if (isScryfallQuery(naturalQuery)) {
     return {
@@ -487,6 +575,10 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   }
 
   for (const type of TYPE_TOKENS) {
+    if (synergySubjects.has(type)) {
+      strippedTerms.push(type);
+      continue;
+    }
     if (new RegExp(`\\b${type}s?\\b`, "i").test(naturalQuery)) {
       mustClauses.push({ value: `t:${type}`, source: "phase1:type" });
       strippedTerms.push(type);
@@ -572,6 +664,10 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   const strategyResult = detectStrategyClauses(correctedQuery);
   mustClauses.push(...strategyResult.clauses);
   strippedTerms.push(...strategyResult.strippedTerms);
+
+  const synergyResult = await resolveSynergyFunctionClauses(synergySubjects);
+  mustClauses.push(...synergyResult.clauses);
+  strippedTerms.push(...synergyResult.strippedTerms);
 
   applyOracleIntentHeuristics(naturalQuery, mustClauses, strippedTerms);
 

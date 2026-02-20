@@ -133,6 +133,23 @@ async function testPhase1FuzzyStrategyTypo() {
   console.log("[PASS] phase1: fuzzy strategy typo maps aristocarts -> strategy:Aristocrats");
 }
 
+async function testPhase1SynergyIntentUsesFunctionTagsForMentionedSubject() {
+  const parsed = await parseNaturalQuery("esper artifact synergies for commander");
+  const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
+  assert.ok(mustValues.includes("f:commander"));
+  assert.ok(mustValues.includes("id:wub") || mustValues.includes("id:<=wub"));
+  assert.ok(!mustValues.includes("t:artifact"));
+  assert.ok(
+    mustValues.some(
+      (value) =>
+        /\bfunction:synergy-artifact\b/.test(value) || /\bfunction:artifact-synergy\b/.test(value)
+    )
+  );
+  console.log(
+    "[PASS] phase1: synergy intent maps mentioned subject to related function tags"
+  );
+}
+
 async function testPhase1CommanderFromFranchiseSetsAvoidsNoise() {
   const parsed = await parseNaturalQuery("commanders from avatar sets");
   const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
@@ -243,6 +260,7 @@ async function run() {
   await testPhase1FuzzyColorIdentityTypo();
   await testPhase1FuzzyKeywordTypo();
   await testPhase1FuzzyStrategyTypo();
+  await testPhase1SynergyIntentUsesFunctionTagsForMentionedSubject();
   await testPhase1CommanderFromFranchiseSetsAvoidsNoise();
   await testPhase1CommanderFromLorwynAvoidsCommanderProductSetNoise();
   await testPhase3DoesNotForceCommanderCreatureForFormatIntent();

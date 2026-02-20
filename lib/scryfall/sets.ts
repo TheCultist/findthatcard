@@ -519,6 +519,14 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
     );
   const hasSetContext =
     /\b(set|sets|edition|editions|printing|printings)\b/i.test(naturalQuery);
+  const hasCommanderFromSetHint =
+    /\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b/i.test(naturalQuery);
+  const hasFranchiseSetHint =
+    /\b(avatar|airbender|fallout|lotr|lord\s*of\s*the\s*rings|doctor\s*who|final\s*fantasy)\b/i.test(
+      naturalQuery
+    );
+  const allowSetFuzzyWithoutAnchorContext =
+    hasSetContext || hasCommanderFromSetHint || hasFranchiseSetHint;
   const queryTokens = normalizedQuery.split(" ").filter(Boolean);
   const queryTokenSet = new Set(queryTokens);
 
@@ -639,7 +647,11 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
         entry.normalized.length >= 5 &&
         bestScore <= 0.28;
 
-      if (bestScore <= maxAllowed && (hasAnchorToken || allowWithoutAnchor)) {
+      if (
+        allowSetFuzzyWithoutAnchorContext &&
+        bestScore <= maxAllowed &&
+        (hasAnchorToken || allowWithoutAnchor)
+      ) {
         const code = entry.entry.code.toLowerCase();
         if (!filters.has(code)) {
           const negated = detectNegation(normalizedQuery, entry.normalized);
