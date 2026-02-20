@@ -466,12 +466,71 @@ function singularizeSubject(subject: string): string {
   return normalized;
 }
 
+function getTermForms(term: string): string[] {
+  const singular = term.toLowerCase();
+  if (singular.endsWith("y") && singular.length > 2) {
+    return [singular, `${singular.slice(0, -1)}ies`];
+  }
+  if (singular.endsWith("s")) {
+    return [singular];
+  }
+  return [singular, `${singular}s`];
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildTermFormsPattern(forms: string[]): RegExp {
+  const escaped = forms.map((form) => escapeRegex(form));
+  return new RegExp(`\\b(?:${escaped.join("|")})\\b`, "i");
+}
+
+function addSynergySubjectsFromPhrase(phrase: string, subjects: Set<string>): void {
+  const parts = phrase
+    .toLowerCase()
+    .split(/\s+(?:or|and)\s+/i)
+    .map((part) => singularizeSubject(part))
+    .filter((part) => part.length >= 3);
+  for (const part of parts) {
+    subjects.add(part);
+  }
+}
+
+function extractTypeListSynergySubjects(lower: string, subjects: Set<string>): void {
+  const typePattern = TYPE_TOKENS.join("|");
+  const listPattern = new RegExp(
+    `\\b((?:(?:${typePattern})s?\\s+)+(?:or|and)\\s+(?:${typePattern})s?)\\s+synerg(?:y|ies)\\b`,
+    "gi"
+  );
+
+  let match: RegExpExecArray | null;
+  while ((match = listPattern.exec(lower)) !== null) {
+    const phrase = (match[1] || "").trim();
+    if (!phrase) continue;
+    const pieces = phrase
+      .split(/\s+/)
+      .map((token) => token.trim().toLowerCase())
+      .filter((token) => token && token !== "or" && token !== "and");
+    for (const piece of pieces) {
+      const singular = singularizeSubject(piece);
+      if (TYPE_TOKENS.includes(singular as (typeof TYPE_TOKENS)[number])) {
+        subjects.add(singular);
+      }
+    }
+  }
+}
+
 function extractSynergySubjects(naturalQuery: string): Set<string> {
   const subjects = new Set<string>();
   const lower = naturalQuery.toLowerCase();
+  extractTypeListSynergySubjects(lower, subjects);
   const patterns = [
+    /\b([a-z][a-z-]{2,}(?:\s+(?:or|and)\s+[a-z][a-z-]{2,})+)\s+synerg(?:y|ies)\b/gi,
     /\b([a-z][a-z-]{2,})\s+synerg(?:y|ies)\b/gi,
+    /\bsynerg(?:ize|izes|izing|y|ies)\s+with\s+([a-z][a-z-]{2,}(?:\s+(?:or|and)\s+[a-z][a-z-]{2,})+)\b/gi,
     /\bsynerg(?:ize|izes|izing|y|ies)\s+with\s+([a-z][a-z-]{2,})\b/gi,
+    /\bwork(?:s)?(?:\s+well)?\s+with\s+([a-z][a-z-]{2,}(?:\s+(?:or|and)\s+[a-z][a-z-]{2,})+)\b/gi,
     /\bwork(?:s)?(?:\s+well)?\s+with\s+([a-z][a-z-]{2,})\b/gi,
   ];
 
@@ -480,10 +539,7 @@ function extractSynergySubjects(naturalQuery: string): Set<string> {
     while ((match = pattern.exec(lower)) !== null) {
       const raw = (match[1] || "").trim();
       if (!raw) continue;
-      const singular = singularizeSubject(raw);
-      if (singular.length >= 3) {
-        subjects.add(singular);
-      }
+      addSynergySubjectsFromPhrase(raw, subjects);
     }
   }
 
@@ -512,6 +568,7 @@ async function resolveSynergyFunctionClauses(
 
   const available = Array.from(functionTags);
   const clauses: QueryClause[] = [];
+  const groupedTags: string[] = [];
   const strippedTerms: string[] = ["synergy", "synergies"];
 
   for (const subject of synergySubjects) {
@@ -529,8 +586,13 @@ async function resolveSynergyFunctionClauses(
     if (selected.length === 0) continue;
 
     const tagChain = selected.map((tag) => `function:${tag}`);
+    groupedTags.push(...tagChain);
+  }
+
+  const dedupedTags = Array.from(new Set(groupedTags));
+  if (dedupedTags.length > 0) {
     clauses.push({
-      value: tagChain.length === 1 ? tagChain[0] : `(${tagChain.join(" OR ")})`,
+      value: dedupedTags.length === 1 ? dedupedTags[0] : `(${dedupedTags.join(" OR ")})`,
       source: "phase1:function",
     });
   }
@@ -575,13 +637,14 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   }
 
   for (const type of TYPE_TOKENS) {
+    const typeForms = getTermForms(type);
     if (synergySubjects.has(type)) {
-      strippedTerms.push(type);
+      strippedTerms.push(...typeForms);
       continue;
     }
-    if (new RegExp(`\\b${type}s?\\b`, "i").test(naturalQuery)) {
+    if (buildTermFormsPattern(typeForms).test(naturalQuery)) {
       mustClauses.push({ value: `t:${type}`, source: "phase1:type" });
-      strippedTerms.push(type);
+      strippedTerms.push(...typeForms);
     }
   }
 

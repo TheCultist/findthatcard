@@ -103,6 +103,30 @@ async function testPhase1EtbDrawUsesOracleFilters() {
   console.log("[PASS] phase1: resolves ETB draw intent to oracle filters");
 }
 
+async function testPhase1PluralTypeIsStrippedFromArtFragments() {
+  const parsed = await parseNaturalQuery("enchantments with moon art");
+  const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
+  assert.ok(mustValues.includes("t:enchantment"));
+  assert.ok(
+    parsed.unresolvedFragments.every((fragment) => !/\benchantments?\b/i.test(fragment.text)),
+    "type term should be stripped before unresolved fragment resolution"
+  );
+  assert.ok(parsed.unresolvedFragments.some((fragment) => /\bmoon\b/i.test(fragment.text)));
+  console.log("[PASS] phase1: strips plural type terms from art unresolved fragments");
+}
+
+async function testPhase1SorceryPluralKeepsTypeAndStripsFromArtFragment() {
+  const parsed = await parseNaturalQuery("sorceries with sword art");
+  const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
+  assert.ok(mustValues.includes("t:sorcery"));
+  assert.ok(
+    parsed.unresolvedFragments.every((fragment) => !/\bsorcer(?:y|ies)\b/i.test(fragment.text)),
+    "sorcery type terms should be stripped from unresolved fragments"
+  );
+  assert.ok(parsed.unresolvedFragments.some((fragment) => /\bsword\b/i.test(fragment.text)));
+  console.log("[PASS] phase1: sorceries query keeps t:sorcery and clean art fragment");
+}
+
 async function testPhase1FuzzyColorIdentityTypo() {
   const parsed = await parseNaturalQuery(
     "creature in dimira color identity that draws you cards when it enters the field"
@@ -148,6 +172,54 @@ async function testPhase1SynergyIntentUsesFunctionTagsForMentionedSubject() {
   console.log(
     "[PASS] phase1: synergy intent maps mentioned subject to related function tags"
   );
+}
+
+async function testPhase1SynergyIntentSupportsOrSubjectLists() {
+  const parsed = await parseNaturalQuery("esper instant or sorcery synergies for commander");
+  const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
+  assert.ok(mustValues.includes("f:commander"));
+  assert.ok(!mustValues.includes("t:instant"));
+  assert.ok(!mustValues.includes("t:sorcery"));
+  assert.ok(
+    mustValues.some((value) => /\bfunction:synergy-instant\b/.test(value)),
+    "expected instant synergy function tag"
+  );
+  assert.ok(
+    mustValues.some((value) => /\bfunction:synergy-sorcery\b/.test(value)),
+    "expected sorcery synergy function tag"
+  );
+  assert.ok(
+    mustValues.some(
+      (value) =>
+        /\bfunction:synergy-instant\b/.test(value) &&
+        /\bor\b/.test(value) &&
+        /\bfunction:synergy-sorcery\b/.test(value)
+    ),
+    "expected instant/sorcery synergy tags in a single OR chain"
+  );
+  console.log("[PASS] phase1: synergy intent supports 'X or Y synergies' subjects");
+}
+
+async function testPhase1SynergyIntentSupportsMixedTypeListBeforeOr() {
+  const parsed = await parseNaturalQuery(
+    "esper instant sorcery or artifacts synergies for commander"
+  );
+  const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
+  assert.ok(mustValues.includes("f:commander"));
+  assert.ok(!mustValues.includes("t:instant"));
+  assert.ok(!mustValues.includes("t:sorcery"));
+  assert.ok(!mustValues.includes("t:artifact"));
+  assert.ok(
+    mustValues.some(
+      (value) =>
+        /\bfunction:synergy-instant\b/.test(value) &&
+        /\bfunction:synergy-sorcery\b/.test(value) &&
+        /\bfunction:synergy-artifact\b/.test(value) &&
+        /\bor\b/.test(value)
+    ),
+    "expected instant/sorcery/artifact synergy tags in one OR chain"
+  );
+  console.log("[PASS] phase1: synergy intent supports mixed type list before OR");
 }
 
 async function testPhase1CommanderFromFranchiseSetsAvoidsNoise() {
@@ -257,10 +329,14 @@ async function run() {
   await testPipelineDirectEndToEnd();
   await testPhase1CommanderFormatColorExtraction();
   await testPhase1EtbDrawUsesOracleFilters();
+  await testPhase1PluralTypeIsStrippedFromArtFragments();
+  await testPhase1SorceryPluralKeepsTypeAndStripsFromArtFragment();
   await testPhase1FuzzyColorIdentityTypo();
   await testPhase1FuzzyKeywordTypo();
   await testPhase1FuzzyStrategyTypo();
   await testPhase1SynergyIntentUsesFunctionTagsForMentionedSubject();
+  await testPhase1SynergyIntentSupportsOrSubjectLists();
+  await testPhase1SynergyIntentSupportsMixedTypeListBeforeOr();
   await testPhase1CommanderFromFranchiseSetsAvoidsNoise();
   await testPhase1CommanderFromLorwynAvoidsCommanderProductSetNoise();
   await testPhase3DoesNotForceCommanderCreatureForFormatIntent();
