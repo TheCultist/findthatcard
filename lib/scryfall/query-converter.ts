@@ -358,6 +358,32 @@ function normalizeCommanderIdentity(query: string): string {
   return query.replace(/\bid:([wubrgc]{1,5})\b/gi, "id=$1");
 }
 
+function normalizeInstantSorceryTypeChain(query: string): string {
+  const instantPattern = /(^|\s)(t|type):instant\b/gi;
+  const sorceryPattern = /(^|\s)(t|type):sorcery\b/gi;
+  const hasInstant = instantPattern.test(query);
+  const hasSorcery = sorceryPattern.test(query);
+  if (!hasInstant || !hasSorcery) {
+    return query;
+  }
+
+  const hasNegatedInstantOrSorcery = /\s-(?:t|type):(instant|sorcery)\b/i.test(query);
+  if (hasNegatedInstantOrSorcery) {
+    return query;
+  }
+
+  const alreadyGrouped = /\((?:[^()]*\b(?:t|type):instant\b[^()]*)\bor\b(?:[^()]*\b(?:t|type):sorcery\b[^()]*)\)/i.test(
+    query
+  );
+  if (alreadyGrouped) {
+    return query;
+  }
+
+  let updated = query.replace(instantPattern, " ").replace(sorceryPattern, " ");
+  updated = normalizeWhitespace(updated);
+  return normalizeWhitespace(`(t:instant or t:sorcery) ${updated}`);
+}
+
 function pickBurnFunctionTag(
   naturalQuery: string,
   tagContext?: TaggerTagContext
@@ -397,31 +423,386 @@ function pickBurnFunctionTag(
   return best;
 }
 
+type DamageTarget = "opponent" | "creature" | "planeswalker" | "player" | "any" | "battle" | "general";
+
+const DAMAGE_TAG_FAMILIES: Record<DamageTarget, string[]> = {
+  opponent: [
+    "burn-player", "burn-player-each", "burn-any",
+    "opponent-loses-life", "life-drain", "drain-life", "lifegain-to-damage",
+  ],
+  creature: [
+    "burn-creature", "burn-any", "removal-creature-burn", "removal-burn",
+  ],
+  planeswalker: [
+    "burn-planeswalker", "burn-any", "removal-planeswalker-burn", "removal-burn",
+  ],
+  player: [
+    "burn-player", "burn-player-each", "burn-any",
+    "opponent-loses-life", "life-drain", "drain-life", "lifegain-to-damage",
+  ],
+  battle: [
+    "burn-battle", "burn-any", "removal-battle-burn", "removal-burn",
+  ],
+  any: [
+    "burn-any", "burn-creature", "burn-player", "burn-planeswalker",
+    "removal-burn", "opponent-loses-life",
+  ],
+  general: [
+    "burn", "burn-any", "burn-creature", "burn-player",
+    "removal-burn",
+  ],
+};
+
+const STRAY_DAMAGE_TAG_PATTERN = /\bfunction:(burn(?:-[a-z0-9-]+)?|opponent-loses-life|life-drain|drain-life|lifegain-to-damage|combat-neutral-damage-trigger|damage-[a-z0-9-]+|spite-damage|retaliate-(?:to-)?damage|fractional-life-damage|transcendental-life-damage|removal-(?:creature-)?burn|removal-(?:planeswalker-)?burn|removal-(?:battle-)?burn|single-target-spell)\b/gi;
+
+function detectDamageTarget(naturalQuery: string): DamageTarget | null {
+  const lower = naturalQuery.toLowerCase();
+  const hasDamageIntent =
+    /\b(direct damage|burn)\b/i.test(lower) ||
+    /\bdeal[st]?\s+.*?\bdamage\b/i.test(lower) ||
+    /\bdamage[sd]?\s+(?:target\s+)?(?:opponent|creature|player|planeswalker|battle|any|each)\b/i.test(lower) ||
+    /\bthat\s+damage[sd]?\b/i.test(lower) ||
+    /\bdamage[sd]?\s+(?:the|a|an|each|target)\b/i.test(lower);
+  if (!hasDamageIntent) return null;
+  const hasDisqualifier = /\b(prevent|prevention|redirect|redirection|multiply|multiplier)\b/i.test(lower);
+  if (hasDisqualifier) return null;
+
+  if (/\bany\s+target\b/i.test(lower)) return "any";
+  if (/\bopponents?\b/i.test(lower)) return "opponent";
+  if (/\bcreatures?\b/i.test(lower) && /\bdamage\b/i.test(lower)) return "creature";
+  if (/\bplaneswalkers?\b/i.test(lower)) return "planeswalker";
+  if (/\bplayers?\b/i.test(lower)) return "player";
+  if (/\bbattles?\b/i.test(lower)) return "battle";
+  return "general";
+}
+
 function normalizeBurnIntent(
   naturalQuery: string,
   query: string,
-  tagContext?: TaggerTagContext
+  _tagContext?: TaggerTagContext
 ): string {
-  const wantsDirectDamage =
-    /\b(direct damage|burn)\b/i.test(naturalQuery) ||
-    (/\bdeal(s|t)?\b/i.test(naturalQuery) && /\bdamage\b/i.test(naturalQuery));
-  const hasDisqualifier = /\b(prevent|prevention|redirect|redirection|multiply|multiplier)\b/i.test(
-    naturalQuery
-  );
-
-  if (!wantsDirectDamage || hasDisqualifier) {
-    return query;
-  }
+  const target = detectDamageTarget(naturalQuery);
+  if (!target) return query;
 
   let updated = query;
-  const burnTag = pickBurnFunctionTag(naturalQuery, tagContext);
-  if (!/\bfunction:burn\b/i.test(updated) && !/\bfunction:burn-\w+\b/i.test(updated)) {
-    updated = `${updated} function:${burnTag}`;
+  const desiredTags = DAMAGE_TAG_FAMILIES[target];
+
+  for (const tag of desiredTags) {
+    if (!new RegExp(`\\bfunction:${escapeRegex(tag)}\\b`, "i").test(updated)) {
+      updated = `${updated} function:${tag}`;
+    }
   }
-  updated = updated.replace(/\bfunction:damage-\w+\b/gi, "");
+
+  const desiredSet = new Set(desiredTags);
+  const chainTags: string[] = [];
+  let strayMatch: RegExpExecArray | null;
+  while ((strayMatch = STRAY_DAMAGE_TAG_PATTERN.exec(updated)) !== null) {
+    const slug = (strayMatch[1] || "").toLowerCase();
+    if (!slug) continue;
+    if (desiredSet.has(slug)) {
+      chainTags.push(`function:${slug}`);
+    }
+  }
+
+  const dedupedChainTags = Array.from(new Set(chainTags));
+  if (dedupedChainTags.length >= 2) {
+    updated = updated.replace(STRAY_DAMAGE_TAG_PATTERN, " ");
+    updated = normalizeWhitespace(updated);
+    updated = normalizeWhitespace(`${updated} (${dedupedChainTags.join(" or ")})`);
+  }
+
   updated = updated.replace(/\bo:"[^"]*damage[^"]*"\b/gi, "");
   updated = updated.replace(/\bo:damage\b/gi, "");
   updated = updated.replace(/\bo:"?(player|opponent|any target|target)"?\b/gi, "");
+
+  return normalizeWhitespace(updated);
+}
+
+type ArchetypeQualifier = {
+  name: string;
+  detect: RegExp;
+  tags: string[];
+  suppressTypes?: string[];
+};
+
+type ArchetypeEntry = {
+  name: string;
+  detect: RegExp;
+  disqualify?: RegExp;
+  defaultTags: string[];
+  qualifiers?: ArchetypeQualifier[];
+  strayPattern?: RegExp;
+};
+
+const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
+  {
+    name: "removal",
+    detect: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?|kill\s+spell|kill\s+spells)\b/i,
+    disqualify: /\b(graveyard|reanimate|return|recursion)\b/i,
+    defaultTags: ["removal", "spot-removal", "repeatable-removal"],
+    qualifiers: [
+      {
+        name: "creature",
+        detect: /\bcreature\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile|kill)\s+(?:target\s+|a\s+|the\s+)?creatures?\b/i,
+        tags: ["removal-creature", "removal-creature-burn", "removal-creature-fight", "removal-exile", "removal-destroy", "spot-removal"],
+        suppressTypes: ["creature"],
+      },
+      {
+        name: "enchantment",
+        detect: /\benchantment\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?enchantments?\b/i,
+        tags: ["removal-enchantment", "removal-exile", "removal-destroy", "removal-bounce"],
+        suppressTypes: ["enchantment"],
+      },
+      {
+        name: "artifact",
+        detect: /\bartifact\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?artifacts?\b/i,
+        tags: ["removal-artifact", "removal-exile", "removal-destroy", "removal-bounce"],
+        suppressTypes: ["artifact"],
+      },
+      {
+        name: "planeswalker",
+        detect: /\bplaneswalker\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?planeswalkers?\b/i,
+        tags: ["removal-planeswalker", "removal-planeswalker-burn", "removal-exile", "removal-destroy"],
+        suppressTypes: ["planeswalker"],
+      },
+      {
+        name: "land",
+        detect: /\bland\s+(removal|destroy)|(?:removal|remove|destroy)\s+(?:target\s+|a\s+|the\s+)?lands?\b/i,
+        tags: ["removal-land", "removal-destroy"],
+        suppressTypes: ["land"],
+      },
+      {
+        name: "permanent",
+        detect: /\bpermanent\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?permanents?\b/i,
+        tags: ["removal-permanent", "removal-exile", "removal-destroy", "removal-bounce"],
+      },
+      {
+        name: "noncreature",
+        detect: /\bnon-?creature\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?non-?creatures?\b/i,
+        tags: ["removal-noncreature", "removal-enchantment", "removal-artifact"],
+      },
+    ],
+    strayPattern: /\bfunction:(removal(?:-[a-z0-9-]+)?|spot-removal|repeatable-removal|swap-removal|mass-removal|multi-removal|creature-removal|artifact-removal|enchantment-removal|land-removal|planeswalker-removal)\b/gi,
+  },
+  {
+    name: "ramp",
+    detect: /\b(ramp|mana\s+ramp|mana\s+accel(?:eration)?|ramp\s+(?:spells?|cards?|effects?))\b/i,
+    defaultTags: ["ramp", "mana-ramp"],
+  },
+  {
+    name: "tokens",
+    detect: /\b(token\s+(?:generat(?:or|ion|e|es|ing)|creat(?:or|ion|e|es|ing)|mak(?:er?|es?|ing))|(?:make|create|generate|produce)s?\s+tokens?)\b/i,
+    defaultTags: ["repeatable-token-generator", "repeatable-creature-tokens"],
+    qualifiers: [
+      {
+        name: "treasure",
+        detect: /\btreasure\s+tokens?\b/i,
+        tags: ["repeatable-token-generator", "repeatable-artifact-tokens"],
+      },
+      {
+        name: "creature",
+        detect: /\bcreature\s+tokens?\b/i,
+        tags: ["repeatable-token-generator", "repeatable-creature-tokens"],
+      },
+      {
+        name: "artifact",
+        detect: /\bartifact\s+tokens?\b/i,
+        tags: ["repeatable-token-generator", "repeatable-artifact-tokens"],
+      },
+      {
+        name: "noncreature",
+        detect: /\bnon-?creature\s+tokens?\b/i,
+        tags: ["repeatable-token-generator", "repeatable-noncreature-tokens"],
+      },
+    ],
+    strayPattern: /\bfunction:(repeatable-(?:token-generator|creature-tokens|artifact-tokens|noncreature-tokens)|token-doubler|token-increaser|tokenfall)\b/gi,
+  },
+  {
+    name: "reanimator",
+    detect: /\b(reanimate[sd]?|reanimation|reanimate\s+(?:creature|artifact|permanent)|graveyard\s+(?:recursion|return|recur)|return(?:s|ed|ing)?\s+from\s+(?:the\s+)?graveyard|raise\s+dead)\b/i,
+    defaultTags: ["reanimate", "reanimate-creature", "reanimate-permanent", "reanimate-from-any"],
+    qualifiers: [
+      {
+        name: "creature",
+        detect: /\breanimate\s+creatures?\b|\bcreature\s+reanima/i,
+        tags: ["reanimate", "reanimate-creature", "reanimate-from-any"],
+      },
+      {
+        name: "artifact",
+        detect: /\breanimate\s+artifacts?\b|\bartifact\s+reanima/i,
+        tags: ["reanimate", "reanimate-artifact", "reanimate-from-any"],
+      },
+      {
+        name: "self",
+        detect: /\breanimate\s+(?:it)?self\b|\bself-reanimate\b|\breturn\s+(?:it)?self\s+from\s+(?:the\s+)?graveyard\b/i,
+        tags: ["reanimate-self", "self-reanimate"],
+      },
+    ],
+    strayPattern: /\bfunction:(reanimate(?:-[a-z0-9-]+)?|self-reanimate|graveyard-fuel(?:-[a-z0-9-]+)?)\b/gi,
+  },
+  {
+    name: "mill",
+    detect: /\b(mill(?:s|ed|ing)?)\b/i,
+    disqualify: /\b(windmill|sawmill|treadmill)\b/i,
+    defaultTags: ["mill", "mill-opponent", "mill-any"],
+    qualifiers: [
+      {
+        name: "self",
+        detect: /\bself[- ]?mill\b|\bmill\s+(?:your)?self\b|\bmill\s+(?:your\s+own\s+)?(?:library|deck)\b/i,
+        tags: ["mill-self", "self-mill", "mill"],
+      },
+      {
+        name: "opponent",
+        detect: /\bmill\s+(?:the\s+|your\s+)?opponents?\b|\bmill\s+(?:their|enemy)\b/i,
+        tags: ["mill-opponent", "mill", "mill-any"],
+      },
+      {
+        name: "each",
+        detect: /\bmill\s+each\b|\beveryone\s+mills?\b/i,
+        tags: ["mill-each", "mill", "mill-any"],
+      },
+    ],
+    strayPattern: /\bfunction:(mill(?:-[a-z0-9-]+)?|self-mill)\b/gi,
+  },
+  {
+    name: "blink",
+    detect: /\b(blink(?:s|ed|ing)?|flicker(?:s|ed|ing)?|exile\s+(?:and|then)\s+return)\b/i,
+    defaultTags: ["blink", "flicker", "flicker-creature", "flicker-permanent"],
+    qualifiers: [
+      {
+        name: "creature",
+        detect: /\b(?:blink|flicker)\s+creatures?\b|\bcreature\s+(?:blink|flicker)/i,
+        tags: ["blink", "flicker", "flicker-creature"],
+      },
+      {
+        name: "artifact",
+        detect: /\b(?:blink|flicker)\s+artifacts?\b/i,
+        tags: ["blink", "flicker", "flicker-artifact"],
+      },
+      {
+        name: "permanent",
+        detect: /\b(?:blink|flicker)\s+permanents?\b/i,
+        tags: ["blink", "flicker", "flicker-permanent", "flicker-nonland"],
+      },
+      {
+        name: "self",
+        detect: /\b(?:blink|flicker)\s+(?:it)?self\b|\bself[- ]?(?:blink|flicker)/i,
+        tags: ["flicker-self"],
+      },
+    ],
+    strayPattern: /\bfunction:(blink(?:-[a-z0-9-]+)?|flicker(?:-[a-z0-9-]+)?|graveflicker)\b/gi,
+  },
+  {
+    name: "discard",
+    detect: /\b(discard(?:s|ed|ing)?|hand\s+disruption|hand\s+attack)\b/i,
+    defaultTags: ["discard", "discard-outlet", "discard-matters"],
+    qualifiers: [
+      {
+        name: "self",
+        detect: /\bself[- ]?discard\b|\bdiscard\s+(?:your\s+own|your|my)\b|\bdiscard\s+outlet\b|\bloot(?:s|ed|ing)?\b/i,
+        tags: ["discard", "discard-outlet", "free-discard-outlet", "self-discard-matters"],
+      },
+      {
+        name: "opponent",
+        detect: /\b(?:discard|hand\s+disruption|hand\s+attack)\s+.*opponents?\b|\bopponents?\s+discards?\b|\bforced?\s+discard\b/i,
+        tags: ["discard", "opponent-discard-matters", "random-discard"],
+      },
+    ],
+    strayPattern: /\bfunction:(discard(?:-[a-z0-9-]+)?|free-discard-outlet|self-discard-matters|opponent-discard-matters|random-discard|discarded-type-matters)\b/gi,
+  },
+  {
+    name: "card-draw",
+    detect: /\b(card\s+draw|draw\s+(?:engine|cards?|spells?)|draw(?:ing)?\s+(?:a\s+)?(?:lot|tons?|extra)\b|card\s+advantage)\b/i,
+    disqualify: /\b(draw\s+(?:a\s+card\s+)?when\s+.*enters)\b/i,
+    defaultTags: ["draw-engine", "repeatable-draw", "pure-draw", "impulse-draw", "burst-draw"],
+    strayPattern: /\bfunction:(draw(?:-[a-z0-9-]+)?|repeatable-draw|pure-draw|repeatable-pure-draw|impulse-draw|impulsive-draw|repeatable-impulsive-draw|burst-draw|draw-engine|drawlink|force-draw)\b/gi,
+  },
+  {
+    name: "voltron",
+    detect: /\b(voltron|equipment\s+(?:matters?|synerg|deck|theme)|aura\s+(?:matters?|synerg|deck|theme))\b/i,
+    defaultTags: ["synergy-equipment", "synergy-aura", "sneak-equipment", "sneak-aura"],
+    strayPattern: /\bfunction:(synergy-equipment(?:-[a-z0-9-]+)?|synergy-aura|sneak-equipment|sneak-aura)\b/gi,
+  },
+  {
+    name: "stax",
+    detect: /\b(stax|tax\s+(?:effects?|spells?|cards?)|hatebears?|hate\s+bears?)\b/i,
+    defaultTags: ["tax", "tax-attack", "tax-block", "cast-tax"],
+    strayPattern: /\bfunction:(tax(?:-[a-z0-9-]+)?|cast-tax)\b/gi,
+  },
+  {
+    name: "landfall",
+    detect: /\b(landfall|lands?\s+matter|lands?\s+entering)\b/i,
+    defaultTags: ["landfall", "landfall-other"],
+    strayPattern: /\bfunction:(landfall(?:-[a-z0-9-]+)?|islandfall)\b/gi,
+  },
+  {
+    name: "infect",
+    detect: /\b(infect|poison(?:\s+counters?)?|toxic|poisonous)\b/i,
+    disqualify: /\b(poison\s+(?:ivy|dart|frog|breath))\b/i,
+    defaultTags: ["infect", "poison", "poison-opponents", "gives-infect", "synergy-infect", "synergy-poison"],
+    strayPattern: /\bfunction:(infect|poison(?:-[a-z0-9-]+)?|gives-infect|gives-poisonous|synergy-infect|synergy-poison|gains-infect)\b/gi,
+  },
+  {
+    name: "storm",
+    detect: /\b(storm(?:\s+(?:count|deck|off|cards?))?)\b/i,
+    disqualify: /\b(storm\s+(?:crow|herald|fleet|breath|entity|scale|seeker|sewer|the\s+vault))\b/i,
+    defaultTags: ["storm", "storm-like", "storm-count-matters", "gives-storm"],
+    strayPattern: /\bfunction:(storm(?:-[a-z0-9-]+)?|gives-storm|commander-storm)\b/gi,
+  },
+  {
+    name: "extra-combat",
+    detect: /\b(extra\s+combat|additional\s+combat|multiple\s+combats?)\b/i,
+    defaultTags: ["extra-combat", "extra-combat-phase"],
+    strayPattern: /\bfunction:(extra-combat(?:-[a-z0-9-]+)?)\b/gi,
+  },
+  {
+    name: "pillow-fort",
+    detect: /\b(pillow\s*fort|prevent(?:s|ed|ing)?\s+(?:players?\s+from\s+)?attack(?:s|ed|ing)?|stop\s+attack(?:s|ing)?|(?:tax|cost)\s+(?:to\s+)?attack(?:s|ing)?|can'?t\s+(?:be\s+)?attack(?:ed|ing)?|attack\s+(?:prevention|tax|cost|restrict))\b/i,
+    defaultTags: ["prevent-attack", "prevent-attacker", "tax-attack"],
+    strayPattern: /\bfunction:(prevent-attack(?:er)?|tax-attack)\b/gi,
+  },
+];
+
+function normalizeArchetypeIntents(
+  naturalQuery: string,
+  query: string
+): string {
+  const lower = naturalQuery.toLowerCase();
+  let updated = query;
+
+  for (const archetype of ARCHETYPE_REGISTRY) {
+    if (!archetype.detect.test(lower)) continue;
+    if (archetype.disqualify?.test(lower)) continue;
+
+    let desiredTags = archetype.defaultTags;
+
+    if (archetype.qualifiers) {
+      for (const qualifier of archetype.qualifiers) {
+        if (qualifier.detect.test(lower)) {
+          desiredTags = qualifier.tags;
+          break;
+        }
+      }
+    }
+
+    if (archetype.strayPattern) {
+      const cleanPattern = new RegExp(archetype.strayPattern.source, archetype.strayPattern.flags);
+      updated = updated.replace(cleanPattern, " ");
+    }
+
+    for (const tag of desiredTags) {
+      const tagPattern = new RegExp(`\\bfunction:${escapeRegex(tag)}\\b`, "gi");
+      updated = updated.replace(tagPattern, " ");
+    }
+    updated = normalizeWhitespace(updated);
+
+    const orChain = desiredTags.map((t) => `function:${t}`);
+    if (orChain.length >= 2) {
+      updated = `${updated} (${orChain.join(" or ")})`;
+    } else if (orChain.length === 1) {
+      updated = `${updated} ${orChain[0]}`;
+    }
+  }
 
   return normalizeWhitespace(updated);
 }
@@ -857,7 +1238,9 @@ export function finalizeScryfallQuery(args: {
   normalizedQuery = normalizeGameChangerIntent(naturalQuery, normalizedQuery);
   normalizedQuery = removeFormatLegalityWhenBannedOrRestricted(normalizedQuery);
   normalizedQuery = normalizeCommanderIdentity(normalizedQuery);
+  normalizedQuery = normalizeInstantSorceryTypeChain(normalizedQuery);
   normalizedQuery = normalizeBurnIntent(naturalQuery, normalizedQuery, tagContext);
+  normalizedQuery = normalizeArchetypeIntents(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeTokenGenerationIntent(
     naturalQuery,
     normalizedQuery,

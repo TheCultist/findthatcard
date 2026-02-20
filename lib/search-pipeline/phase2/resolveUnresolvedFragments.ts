@@ -57,11 +57,23 @@ function getOpenAIClient(): OpenAI {
   return openaiClient;
 }
 
+const KNOWN_TAG_PREFIXES = /^(?:function|oracletag|otag|art|atag|arttag|artist|kw|o|t|type|c|id|f|set|is|mv|cmc|pow|tou|loy|year|r|rarity|banned|restricted|legal|format|game|prefer|order|direction|unique|new|not|-):/i;
+
+function autoPrefix(tag: string): string | null {
+  if (KNOWN_TAG_PREFIXES.test(tag)) return tag;
+  if (/^"[^"]+"$/.test(tag)) return tag;
+  const slug = tag.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  if (!slug || slug.length < 3) return null;
+  return `function:${slug}`;
+}
+
 function sanitizeTags(tags: string[]): string[] {
   const compact = tags
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0)
-    .filter((tag) => !/[{}[\]]/.test(tag));
+    .filter((tag) => !/[{}[\]]/.test(tag))
+    .map((tag) => autoPrefix(tag))
+    .filter((tag): tag is string => tag !== null);
   const seen = new Set<string>();
   const deduped: string[] = [];
   for (const tag of compact) {

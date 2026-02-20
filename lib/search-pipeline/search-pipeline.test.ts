@@ -322,6 +322,79 @@ async function testPhase3RemovesAnyTokenTypeForGenerationIntent() {
   console.log("[PASS] phase3: strips generic token type filter for token generation intents");
 }
 
+async function testPhase3StripsDamageTargetCreatureTypeFilter() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "boros instants and sorceries that damage target creature",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "t:instant", source: "phase1:type" },
+      { value: "t:sorcery", source: "phase1:type" },
+      { value: "t:creature", source: "phase1:type" },
+      { value: "id:rw", source: "phase1:color" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+  };
+
+  const finalized = await finalizeQuery(ir);
+  assert.ok(!/\bt:creature\b/i.test(finalized.queryForLogs), "t:creature should be stripped for damage target");
+  assert.ok(/\bt:instant\b/i.test(finalized.queryForLogs) || /\(t:instant or t:sorcery\)/i.test(finalized.queryForLogs));
+  assert.ok(/\bfunction:burn-creature\b/i.test(finalized.queryForLogs));
+  console.log("[PASS] phase3: strips t:creature when creature is a damage target");
+}
+
+async function testPhase3StripsCreatureTypeForRemovalCreatureIntent() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "white creature removal spells for commander",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "f:commander", source: "phase1:format" },
+      { value: "t:creature", source: "phase1:type" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+  };
+
+  const finalized = await finalizeQuery(ir);
+  assert.ok(!/\bt:creature\b/i.test(finalized.queryForLogs), "t:creature should be stripped for removal-creature intent");
+  assert.ok(/\bfunction:removal-creature\b/i.test(finalized.queryForLogs));
+  console.log("[PASS] phase3: strips t:creature for creature removal intent");
+}
+
+async function testPhase3AddsBlinkTagsAndKeepsCreatureType() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "azorius blink creatures for commander",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "f:commander", source: "phase1:format" },
+      { value: "id:wu", source: "phase1:color" },
+      { value: "t:creature", source: "phase1:type" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+  };
+
+  const finalized = await finalizeQuery(ir);
+  assert.ok(/\bfunction:blink\b/i.test(finalized.queryForLogs) || /\bfunction:flicker\b/i.test(finalized.queryForLogs));
+  assert.ok(/\bt:creature\b/i.test(finalized.queryForLogs), "t:creature should remain for blink creatures (not blink target)");
+  console.log("[PASS] phase3: adds blink tags and keeps t:creature when creature is the card type");
+}
+
 async function run() {
   await testPhase1DirectQueryShortCircuit();
   testAssemblerBooleanComposition();
@@ -342,6 +415,9 @@ async function run() {
   await testPhase3DoesNotForceCommanderCreatureForFormatIntent();
   await testPhase3RemovesTreasureTypeForTokenGenerationIntent();
   await testPhase3RemovesAnyTokenTypeForGenerationIntent();
+  await testPhase3StripsDamageTargetCreatureTypeFilter();
+  await testPhase3StripsCreatureTypeForRemovalCreatureIntent();
+  await testPhase3AddsBlinkTagsAndKeepsCreatureType();
   console.log("search-pipeline tests passed");
 }
 

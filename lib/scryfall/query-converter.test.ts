@@ -78,6 +78,103 @@ const finalizeCases: FinalizeTestCase[] = [
     expected: "t:creature (kw:flying)",
   },
   {
+    name: "normalizes instant and sorcery type filters to OR chain",
+    naturalQuery: "prefer:best t:instant t:sorcery id:rw function:opponent-loses-life game:paper",
+    rawQuery: "t:instant t:sorcery id:rw function:opponent-loses-life game:paper",
+    expected: "(t:instant or t:sorcery) id:rw function:opponent-loses-life game:paper",
+  },
+  {
+    name: "adds burn and opponent damage function tags in OR chain",
+    naturalQuery: "boros instants and sorceries that damage opponents",
+    rawQuery: "t:instant t:sorcery id:rw",
+    expected:
+      "(t:instant or t:sorcery) id:rw (function:burn-player or function:burn-player-each or function:burn-any or function:opponent-loses-life or function:life-drain or function:drain-life or function:lifegain-to-damage)",
+  },
+  {
+    name: "adds creature burn tags for damage creature intent",
+    naturalQuery: "boros instants and sorceries that damage target creature",
+    rawQuery: "t:instant t:sorcery id:rw",
+    expected:
+      "(t:instant or t:sorcery) id:rw (function:burn-creature or function:burn-any or function:removal-creature-burn or function:removal-burn)",
+  },
+  {
+    name: "adds any-target burn tags for damage any target intent",
+    naturalQuery: "red spells that deal damage to any target",
+    rawQuery: "c:r",
+    expected:
+      "c:r (function:burn-any or function:burn-creature or function:burn-player or function:burn-planeswalker or function:removal-burn or function:opponent-loses-life)",
+  },
+  {
+    name: "adds creature removal tags for creature removal intent",
+    naturalQuery: "white creature removal spells",
+    rawQuery: "c:w",
+    expected:
+      "c:w (function:removal-creature or function:removal-creature-burn or function:removal-creature-fight or function:removal-exile or function:removal-destroy or function:spot-removal)",
+  },
+  {
+    name: "adds ramp tags for ramp intent",
+    naturalQuery: "green mana ramp for commander",
+    rawQuery: "c:g f:commander",
+    expected:
+      "c:g f:commander (function:ramp or function:mana-ramp)",
+  },
+  {
+    name: "adds mill-opponent tags for mill opponent intent",
+    naturalQuery: "dimir cards that mill opponents",
+    rawQuery: "id:ub",
+    expected:
+      "id:ub (function:mill-opponent or function:mill or function:mill-any)",
+  },
+  {
+    name: "adds blink tags for blink intent",
+    naturalQuery: "azorius blink effects",
+    rawQuery: "id:wu",
+    expected:
+      "id:wu (function:blink or function:flicker or function:flicker-creature or function:flicker-permanent)",
+  },
+  {
+    name: "adds card draw tags for card draw intent",
+    naturalQuery: "blue card draw engines",
+    rawQuery: "c:u",
+    expected:
+      "c:u (function:draw-engine or function:repeatable-draw or function:pure-draw or function:impulse-draw or function:burst-draw)",
+  },
+  {
+    name: "adds infect tags for infect intent",
+    naturalQuery: "green infect creatures",
+    rawQuery: "c:g t:creature",
+    expected:
+      "c:g t:creature (function:infect or function:poison or function:poison-opponents or function:gives-infect or function:synergy-infect or function:synergy-poison)",
+  },
+  {
+    name: "adds extra combat tags for extra combat intent",
+    naturalQuery: "red creatures with extra combat",
+    rawQuery: "c:r t:creature",
+    expected:
+      "c:r t:creature (function:extra-combat or function:extra-combat-phase)",
+  },
+  {
+    name: "adds stax tags for stax intent",
+    naturalQuery: "white stax pieces for commander",
+    rawQuery: "c:w f:commander",
+    expected:
+      "c:w f:commander (function:tax or function:tax-attack or function:tax-block or function:cast-tax)",
+  },
+  {
+    name: "adds landfall tags for landfall intent",
+    naturalQuery: "green landfall creatures",
+    rawQuery: "c:g t:creature",
+    expected:
+      "c:g t:creature (function:landfall or function:landfall-other)",
+  },
+  {
+    name: "adds reanimator tags for reanimate intent",
+    naturalQuery: "black reanimate spells",
+    rawQuery: "c:b",
+    expected:
+      "c:b (function:reanimate or function:reanimate-creature or function:reanimate-permanent or function:reanimate-from-any)",
+  },
+  {
     name: "truncates overly long query",
     naturalQuery: "long query",
     rawQuery: "a".repeat(30),

@@ -9,6 +9,7 @@ import {
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
 import { applySetFiltersFromNaturalQuery } from "@/lib/scryfall/sets";
+import { getTaggerTagContext } from "@/lib/tagger/context";
 import { validateTaggerTags } from "@/lib/tagger/validation";
 
 const DEFAULT_GAME_FILTER = "game:paper";
@@ -58,6 +59,96 @@ function extractTokenTypesFromGenerationIntent(naturalQuery: string): string[] {
   }
 
   return Array.from(matched);
+}
+
+const DAMAGE_TARGET_TYPES = new Set(["creature", "planeswalker", "player", "battle"]);
+
+function removeDamageTargetTypeFilters(
+  naturalQuery: string,
+  scryfallQuery: string
+): string {
+  const lower = naturalQuery.toLowerCase();
+  const hasDamageIntent =
+    /\b(direct damage|burn)\b/i.test(lower) ||
+    /\bdeal[st]?\s+.*?\bdamage\b/i.test(lower) ||
+    /\bdamage[sd]?\s+(?:target\s+)?(?:opponent|creature|player|planeswalker|battle|any|each)\b/i.test(lower) ||
+    /\bthat\s+damage[sd]?\b/i.test(lower) ||
+    /\bdamage[sd]?\s+(?:the|a|an|each|target)\b/i.test(lower);
+  if (!hasDamageIntent) return scryfallQuery;
+
+  let updated = scryfallQuery;
+  for (const typeName of DAMAGE_TARGET_TYPES) {
+    const mentionedAsTarget = new RegExp(
+      `\\b(?:damage[sd]?|burn|deal[st]?)\\s+(?:target\\s+|the\\s+|a\\s+|an\\s+|each\\s+)?${typeName}s?\\b`,
+      "i"
+    ).test(lower);
+    if (!mentionedAsTarget) continue;
+    const typePattern = new RegExp(`\\s*\\b(?:t|type):${typeName}\\b`, "gi");
+    updated = updated.replace(typePattern, " ");
+  }
+
+  return updated.replace(/\s{2,}/g, " ").trim();
+}
+
+type ArchetypeTypeSuppressionRule = {
+  intentPattern: RegExp;
+  targetPattern: RegExp;
+  suppressType: string;
+};
+
+const ARCHETYPE_TYPE_SUPPRESSIONS: ArchetypeTypeSuppressionRule[] = [
+  {
+    intentPattern: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?|kill\s+spells?)\b/i,
+    targetPattern: /\bcreature\s+(?:removal|destroy|exile)|(?:removal|remove|destroy|exile|kill)\s+(?:target\s+|a\s+|the\s+)?creatures?\b/i,
+    suppressType: "creature",
+  },
+  {
+    intentPattern: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?)\b/i,
+    targetPattern: /\benchantment\s+(?:removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?enchantments?\b/i,
+    suppressType: "enchantment",
+  },
+  {
+    intentPattern: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?)\b/i,
+    targetPattern: /\bartifact\s+(?:removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?artifacts?\b/i,
+    suppressType: "artifact",
+  },
+  {
+    intentPattern: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?)\b/i,
+    targetPattern: /\bplaneswalker\s+(?:removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?planeswalkers?\b/i,
+    suppressType: "planeswalker",
+  },
+  {
+    intentPattern: /\b(removal|remove[sd]?|destroy[sd]?)\b/i,
+    targetPattern: /\bland\s+(?:removal|destroy)|(?:removal|remove|destroy)\s+(?:target\s+|a\s+|the\s+)?lands?\b/i,
+    suppressType: "land",
+  },
+  {
+    intentPattern: /\b(reanimate|reanimation|graveyard\s+recursion)\b/i,
+    targetPattern: /\b(?:reanimate|return)\s+(?:target\s+|a\s+|the\s+)?creatures?\s+(?:from|to)\b|\bcreature\s+reanima/i,
+    suppressType: "creature",
+  },
+  {
+    intentPattern: /\b(reanimate|reanimation|graveyard\s+recursion)\b/i,
+    targetPattern: /\b(?:reanimate|return)\s+(?:target\s+|a\s+|the\s+)?artifacts?\s+(?:from|to)\b|\bartifact\s+reanima/i,
+    suppressType: "artifact",
+  },
+];
+
+function removeArchetypeTargetTypeFilters(
+  naturalQuery: string,
+  scryfallQuery: string
+): string {
+  const lower = naturalQuery.toLowerCase();
+  let updated = scryfallQuery;
+
+  for (const rule of ARCHETYPE_TYPE_SUPPRESSIONS) {
+    if (!rule.intentPattern.test(lower)) continue;
+    if (!rule.targetPattern.test(lower)) continue;
+    const typePattern = new RegExp(`\\s*\\b(?:t|type):${rule.suppressType}\\b`, "gi");
+    updated = updated.replace(typePattern, " ");
+  }
+
+  return updated.replace(/\s{2,}/g, " ").trim();
 }
 
 function removeTokenTypeFiltersForTokenGenerationIntent(
@@ -111,9 +202,11 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
   }
 
   const queryWithoutPrefer = stripPreferBestPrefix(baseQuery);
+  const tagContext = await getTaggerTagContext(ir.naturalQuery);
   let query = finalizeScryfallQuery({
     naturalQuery: ir.naturalQuery,
     rawQuery: queryWithoutPrefer,
+    tagContext,
     maxLength: EFFECTIVE_MAX_QUERY_LENGTH,
   });
 
@@ -125,6 +218,8 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     query = applyCommanderContextFromNaturalQuery(ir.naturalQuery, query);
     query = ensureCommanderCreatureFilter(ir.naturalQuery, query);
     query = removeTokenTypeFiltersForTokenGenerationIntent(ir.naturalQuery, query);
+    query = removeDamageTargetTypeFilters(ir.naturalQuery, query);
+    query = removeArchetypeTargetTypeFilters(ir.naturalQuery, query);
     query = applyDefaultGameFilter(query);
     query = query.replace(/^\s*[iI]\s+/i, "").trim();
 
@@ -134,6 +229,7 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
       query = finalizeScryfallQuery({
         naturalQuery: ir.naturalQuery,
         rawQuery: query,
+        tagContext,
         maxLength: EFFECTIVE_MAX_QUERY_LENGTH,
       });
     }
