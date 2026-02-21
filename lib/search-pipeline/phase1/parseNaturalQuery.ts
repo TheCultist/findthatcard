@@ -1,5 +1,12 @@
 import { hasCommanderDeckContext, resolveCommanderColorIdentity } from "@/lib/commander-context";
 import { getMtgKeywordList, resolveKeywordFilters } from "@/lib/mtg-keywords";
+import {
+  ensureCatalogIndex,
+  matchSubtype,
+  matchSupertype,
+  fuzzyMatchSubtype,
+  getArtistIndex,
+} from "@/lib/scryfall/catalog-index";
 import { isScryfallQuery } from "@/lib/scryfall/query-converter";
 import { resolveSetFilters } from "@/lib/scryfall/sets";
 import { resolveStrategyName, STRATEGY_ORACLETAGS } from "@/lib/strategies/oracletagStrategies";
@@ -54,6 +61,33 @@ const COLOR_IDENTITY: Record<string, string> = {
   sultai: "bug",
   mardu: "brw",
   temur: "urg",
+  // 4-color identities — nephilim names, popular commander names, and "non-X" shorthands
+  // WUBR (no green)
+  "yore-tiller": "wubr",
+  breya: "wubr",
+  "non-green": "wubr",
+  nongreen: "wubr",
+  // WUBG (no red)
+  "witch-maw": "wubg",
+  atraxa: "wubg",
+  "non-red": "wubg",
+  nonred: "wubg",
+  // WBRG (no blue)
+  "dune-brood": "wbrg",
+  saskia: "wbrg",
+  "non-blue": "wbrg",
+  nonblue: "wbrg",
+  // UBRG (no white)
+  "glint-eye": "ubrg",
+  yidris: "ubrg",
+  "non-white": "ubrg",
+  nonwhite: "ubrg",
+  // WURG (no black)
+  "ink-treader": "wurg",
+  kynaios: "wurg",
+  "non-black": "wurg",
+  nonblack: "wurg",
+  // 5-color
   "5 color": "wubrg",
   fivecolor: "wubrg",
   fivecolors: "wubrg",
@@ -107,6 +141,39 @@ const STOPWORDS = new Set([
   "editions",
   "printing",
   "printings",
+  "legal",
+  "illegal",
+  "playable",
+  "both",
+  "also",
+  "any",
+  "some",
+  "all",
+  "most",
+  "every",
+  "are",
+  "can",
+  "could",
+  "would",
+  "should",
+  "have",
+  "has",
+  "had",
+  "been",
+  "being",
+  "about",
+  "like",
+  "or",
+  "and",
+  "but",
+  "not",
+  "nor",
+  "yet",
+  "so",
+  "either",
+  "neither",
+  "versus",
+  "vs",
 ]);
 
 function normalizeWhitespace(value: string): string {
@@ -161,6 +228,156 @@ function normalizeFuzzyToken(value: string): string {
 
 function quoteIfNeeded(value: string): string {
   return /[^\w-]/.test(value) ? `"${value}"` : value;
+}
+
+/**
+ * Returns true when the text between two adjacent matched terms indicates they
+ * should be OR-ed (e.g. "or", ",", ", or") rather than AND-ed.
+ */
+function isOrConnector(between: string): boolean {
+  const t = between.trim();
+  if (/^,?\s*or\s*$/.test(t)) return true;   // "or", ", or"
+  if (/^,\s*$/.test(t)) return true;           // ","
+  if (/^,\s*and\s*$/.test(t)) return true;     // ", and"  (Oxford-comma list)
+  return false;
+}
+
+/**
+ * Groups matched terms by their connectors in the original query.
+ * Terms separated by "or" / "," end up in the same group (will become an OR chain).
+ * Terms separated by "and", "both…and", or appearing in different parts of the query
+ * become separate groups (each emitted as its own AND clause).
+ *
+ * @param searchOverrides  Optional map: canonical → token that actually appeared in the
+ *                         query (needed when the matched token is a plural/fuzzy form).
+ */
+function groupByConnector(
+  naturalQuery: string,
+  terms: string[],
+  searchOverrides?: Map<string, string>
+): string[][] {
+  if (terms.length === 0) return [];
+  if (terms.length === 1) return [[terms[0]]];
+
+  const lower = naturalQuery.toLowerCase();
+
+  const positions: { term: string; start: number; end: number }[] = [];
+  for (const term of terms) {
+    const search = searchOverrides?.get(term) ?? term;
+    const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Allow optional trailing "s" so "instant" matches "instants", etc.
+    const re = new RegExp(`\\b${escaped}s?\\b`, "i");
+    const match = re.exec(lower);
+    if (match) {
+      positions.push({ term, start: match.index, end: match.index + match[0].length });
+    } else {
+      // Term not positionally found — treat as a standalone AND group
+      positions.push({ term, start: -1, end: -1 });
+    }
+  }
+
+  const found = positions.filter((p) => p.start >= 0).sort((a, b) => a.start - b.start);
+  const notFound = positions.filter((p) => p.start < 0);
+
+  const groups: string[][] = [];
+  if (found.length > 0) {
+    let currentGroup: string[] = [found[0].term];
+    for (let i = 1; i < found.length; i++) {
+      const between = lower.slice(found[i - 1].end, found[i].start);
+      if (isOrConnector(between)) {
+        currentGroup.push(found[i].term);
+      } else {
+        groups.push(currentGroup);
+        currentGroup = [found[i].term];
+      }
+    }
+    groups.push(currentGroup);
+  }
+
+  for (const { term } of notFound) groups.push([term]);
+
+  return groups;
+}
+
+/**
+ * Converts OR-groups into QueryClauses.
+ * Single-term groups → `prefix:term`
+ * Multi-term groups  → `(prefix:termA or prefix:termB ...)`
+ *
+ * @param valueTransformer  Applied to each term before attaching the prefix
+ *                          (e.g. to add quotes around multi-word values).
+ */
+function buildGroupedClauses(
+  groups: string[][],
+  prefix: string,
+  source: QueryClause["source"],
+  valueTransformer?: (term: string) => string
+): QueryClause[] {
+  const transform = valueTransformer ?? ((t: string) => t);
+  return groups.map((group) => {
+    if (group.length === 1) {
+      return { value: `${prefix}:${transform(group[0])}`, source };
+    }
+    const inner = group.map((t) => `${prefix}:${transform(t)}`).join(" or ");
+    return { value: `(${inner})`, source };
+  });
+}
+
+/**
+ * Extracts tokens that are filling a semantic role in the query (art subject,
+ * oracle-text target, protection source, synergy/support subject, etc.) and
+ * therefore must NOT be treated as card-type or subtype filters.
+ *
+ * Examples:
+ *   "forest art"           → "forest"  (not t:forest)
+ *   "creatures that exile a zombie" → "zombie" (not t:zombie)
+ *   "deals damage to islands" → "islands" (not t:island)
+ *   "protection from artifacts" → "artifacts" (not t:artifact)
+ *   "equipment support"    → "equipment" (not t:equipment, handled also via synergySubjects)
+ */
+function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
+  const tokens = new Set<string>();
+  const lower = naturalQuery.toLowerCase();
+
+  function capture(re: RegExp): void {
+    let m: RegExpExecArray | null;
+    re.lastIndex = 0;
+    while ((m = re.exec(lower)) !== null) {
+      const phrase = (m[1] ?? m[2] ?? "").trim();
+      for (const tok of phrase.split(/\s+/).filter(Boolean)) {
+        if (!STOPWORDS.has(tok)) tokens.add(tok);
+      }
+    }
+  }
+
+  // 1. Art subjects — capture 1-3 words immediately before art/artwork/illustration anchors.
+  //    e.g. "with forest art" → "forest", "sword and shield art" → ["sword", "shield"]
+  capture(/\b([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})\s+(?:art|artwork|illustration|depict(?:ion|ing|s|ed)?)\b/gi);
+  capture(/\b(?:depict(?:ing|s)?|illustrat(?:ed|ing|es)|pictured\s+with)\s+([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})\b/gi);
+
+  // 2. Oracle-text targets — "that destroy/exile/bounce/create/make/... a/an/each X"
+  capture(/\bthat\s+(?:destroy|exile|bounce|target|counter|sacrifice|kill|remove|discard|copy|tap|untap|create|make|generate|produce|add)\s+(?:a\s+|an\s+|all\s+|each\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s+(?:card|permanent|spell|ability|token)\b|\s+or\b|\s+and\b|\s+from\b|\s+in\b|\s+you\b|$)/gi);
+
+  // 3. Damage targets — "deals/deal damage to a/an/each X"
+  capture(/\bdeals?\s+(?:\w+\s+)?damage\s+to\s+(?:a\s+|an\s+|each\s+|any\s+|all\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s|$)/gi);
+
+  // 4. Protection source — "protection from X"
+  capture(/\bprotection\s+from\s+([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s|$)/gi);
+
+  // 5. Synergy / support / matters subjects
+  capture(/\b([a-z][a-z-]{2,}(?:\s+(?:or|and)\s+[a-z][a-z-]{2,})*)\s+(?:synerg(?:y|ies)|support|matters?|payoffs?|tribal)\b/gi);
+  capture(/\bsupport(?:ing)?\s+([a-z][a-z-]{2,})\b/gi);
+
+  // 6. "Named / called X" — card-name references
+  capture(/\b(?:named?|called)\s+([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,3})(?=\s+(?:in|from|with|that|or|and)|\s*$)/gi);
+
+  // 7. Creation / production subjects — the thing being made, not the card type of the spell.
+  //    e.g. "token maker" → "token" (not t:token), "treasure generator" → "treasure"
+  capture(/\b([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})\s+(?:maker|generator|creator|producer|creation|generation)s?\b/gi);
+  //    Also bare "token generation", "token creation", "token production"
+  capture(/\btoken\s+(?:generat(?:ion|or|ors)|creat(?:ion|or|ors)|produc(?:tion|er|ers)|maker|makers)\b/gi);
+
+  return tokens;
 }
 
 function detectCategory(fragment: string): ResolverCategory {
@@ -262,22 +479,39 @@ function shouldUseFuzzyMatch(token: string, candidate: string): boolean {
   return false;
 }
 
+const WUBRG_ORDER = "wubrg";
+
+function combineColorLetters(letters: Iterable<string>): string {
+  const set = new Set(letters);
+  return WUBRG_ORDER.split("").filter((c) => set.has(c)).join("");
+}
+
 function extractColorIdentityFromText(lowerQuery: string): string | null {
-  let best: string | null = null;
-  let bestLength = 0;
+  // Pass 1: multi-color names (guild / shard / wedge) — return the longest match.
+  let multiName: string | null = null;
+  let multiNameLength = 0;
   for (const [name, id] of Object.entries(COLOR_IDENTITY)) {
+    if (SINGLE_COLOR_NAMES.has(name)) continue;
     const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-    const pattern = new RegExp(`\\b${escaped}\\b`, "i");
-    if (pattern.test(lowerQuery) && name.length > bestLength) {
-      best = id;
-      bestLength = name.length;
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(lowerQuery) && name.length > multiNameLength) {
+      multiName = id;
+      multiNameLength = name.length;
     }
   }
+  if (multiName) return multiName;
 
-  if (best) {
-    return best;
+  // Pass 2: accumulate all individual color names present ("white, blue and black" → "wub").
+  const letters = new Set<string>();
+  for (const [name, id] of Object.entries(COLOR_IDENTITY)) {
+    if (!SINGLE_COLOR_NAMES.has(name)) continue;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`\\b${escaped}\\b`, "i").test(lowerQuery)) {
+      for (const c of id) letters.add(c);
+    }
   }
+  if (letters.size > 0) return combineColorLetters(letters);
 
+  // Pass 3: fuzzy fallback for mis-spelled multi-color names.
   const tokens = lowerQuery
     .replace(/[^a-z0-9\s-]/g, " ")
     .split(/\s+/)
@@ -285,17 +519,48 @@ function extractColorIdentityFromText(lowerQuery: string): string | null {
   for (const token of tokens) {
     if (token.length < 5) continue;
     for (const [name, id] of Object.entries(COLOR_IDENTITY)) {
-      if (name.includes(" ")) continue;
-      if (SINGLE_COLOR_NAMES.has(name)) continue;
-      if (name.length < 5) continue;
-      const distance = levenshteinDistance(token, name);
-      if (distance <= 1) {
-        return id;
-      }
+      if (name.includes(" ") || SINGLE_COLOR_NAMES.has(name) || name.length < 5) continue;
+      if (levenshteinDistance(token, name) <= 1) return id;
     }
   }
 
-  return best;
+  return null;
+}
+
+/**
+ * Common English words that happen to be composed entirely of the letters w/u/b/r/g.
+ * Blocked so they aren't misread as color shorthands.
+ */
+const COLOR_SHORTHAND_BLOCKLIST = new Set(["bug", "rug", "rub", "grub", "burg", "bur"]);
+
+/**
+ * Detects a standalone color-shorthand token (e.g. "wubr", "rg", "wu", "w") in the query.
+ * Returns the canonical WUBRG-ordered color string and the original matched token.
+ * Rejects tokens that are common English words or contain repeated / non-color letters.
+ */
+function detectColorShorthand(
+  naturalQuery: string
+): { colors: string; matchedText: string } | null {
+  const lower = naturalQuery.toLowerCase();
+  const tokens = lower
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  for (const token of tokens) {
+    if (token.length < 1 || token.length > 5) continue;
+    if (COLOR_SHORTHAND_BLOCKLIST.has(token)) continue;
+
+    const chars = token.split("");
+    const unique = new Set(chars);
+    if (unique.size !== chars.length) continue;              // repeated letter
+    if (!chars.every((c) => "wubrg".includes(c))) continue; // non-color letter
+
+    const colors = WUBRG_ORDER.split("").filter((c) => unique.has(c)).join("");
+    return { colors, matchedText: token };
+  }
+
+  return null;
 }
 
 function collectMatchedColorTerms(lowerQuery: string): string[] {
@@ -526,12 +791,21 @@ function extractSynergySubjects(naturalQuery: string): Set<string> {
   const lower = naturalQuery.toLowerCase();
   extractTypeListSynergySubjects(lower, subjects);
   const patterns = [
+    // "X synergies / X synergy"
     /\b([a-z][a-z-]{2,}(?:\s+(?:or|and)\s+[a-z][a-z-]{2,})+)\s+synerg(?:y|ies)\b/gi,
     /\b([a-z][a-z-]{2,})\s+synerg(?:y|ies)\b/gi,
+    // "synergize with X"
     /\bsynerg(?:ize|izes|izing|y|ies)\s+with\s+([a-z][a-z-]{2,}(?:\s+(?:or|and)\s+[a-z][a-z-]{2,})+)\b/gi,
     /\bsynerg(?:ize|izes|izing|y|ies)\s+with\s+([a-z][a-z-]{2,})\b/gi,
+    // "works well with X"
     /\bwork(?:s)?(?:\s+well)?\s+with\s+([a-z][a-z-]{2,}(?:\s+(?:or|and)\s+[a-z][a-z-]{2,})+)\b/gi,
     /\bwork(?:s)?(?:\s+well)?\s+with\s+([a-z][a-z-]{2,})\b/gi,
+    // "X support / X matters / X payoffs / X tribal"
+    /\b([a-z][a-z-]{2,}(?:\s+(?:or|and)\s+[a-z][a-z-]{2,})+)\s+(?:support|matters?|payoffs?|tribal)\b/gi,
+    /\b([a-z][a-z-]{2,})\s+(?:support|matters?|payoffs?|tribal)\b/gi,
+    // "support X / X-matters / X-support"
+    /\bsupport(?:ing)?\s+([a-z][a-z-]{2,})\b/gi,
+    /\b([a-z][a-z-]{2,})-(?:matters?|support|synerg(?:y|ies))\b/gi,
   ];
 
   for (const pattern of patterns) {
@@ -569,7 +843,10 @@ async function resolveSynergyFunctionClauses(
   const available = Array.from(functionTags);
   const clauses: QueryClause[] = [];
   const groupedTags: string[] = [];
-  const strippedTerms: string[] = ["synergy", "synergies"];
+  const strippedTerms: string[] = [
+    "synergy", "synergies", "support", "supports", "matters", "matter",
+    "payoff", "payoffs", "tribal",
+  ];
 
   for (const subject of synergySubjects) {
     strippedTerms.push(subject, `${subject}s`);
@@ -598,6 +875,37 @@ async function resolveSynergyFunctionClauses(
   }
 
   return { clauses, strippedTerms };
+}
+
+function resolveArtistFromQuery(
+  naturalQuery: string
+): { name: string; matchedText: string } | null {
+  const index = getArtistIndex();
+  if (!index || index.size === 0) return null;
+
+  const patterns = [
+    /\b(?:by|artist)\s+(.{3,50})$/i,
+    /\b(?:by|artist)\s+(.{3,50?})\s+(?:in|from|for|that|with|art|cards?)\b/i,
+    /^(.{3,50?})(?:'s)?\s+art\b/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(naturalQuery);
+    if (!match) continue;
+    const candidate = (match[1] || "").trim();
+    if (!candidate) continue;
+    const found = index.get(candidate.toLowerCase());
+    if (found) return { name: found, matchedText: candidate };
+
+    const words = candidate.split(/\s+/);
+    for (let len = Math.min(words.length, 4); len >= 2; len--) {
+      const slice = words.slice(0, len).join(" ");
+      const sliceMatch = index.get(slice.toLowerCase());
+      if (sliceMatch) return { name: sliceMatch, matchedText: slice };
+    }
+  }
+
+  return null;
 }
 
 export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Result> {
@@ -629,23 +937,144 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   const shouldClauses: QueryClause[] = [];
   const mustNotClauses: QueryClause[] = [];
 
-  for (const format of FORMAT_TOKENS) {
-    if (new RegExp(`\\b${format}\\b`, "i").test(naturalQuery)) {
-      mustClauses.push({ value: `f:${format}`, source: "phase1:format" });
-      strippedTerms.push(format);
-    }
-  }
+  const matchedFormats = (FORMAT_TOKENS as readonly string[]).filter((format) =>
+    new RegExp(`\\b${format}\\b`, "i").test(naturalQuery)
+  );
+  for (const format of matchedFormats) strippedTerms.push(format);
+  mustClauses.push(
+    ...buildGroupedClauses(
+      groupByConnector(naturalQuery, matchedFormats),
+      "f",
+      "phase1:format"
+    )
+  );
 
+  // Extract all semantic-role tokens BEFORE any type/subtype matching so they are
+  // consistently excluded from both TYPE_TOKENS and catalog catalog loops.
+  const semanticRoleTokens = extractSemanticRoleTokens(naturalQuery);
+
+  const matchedTypes: string[] = [];
   for (const type of TYPE_TOKENS) {
     const typeForms = getTermForms(type);
-    if (synergySubjects.has(type)) {
+    if (synergySubjects.has(type) || semanticRoleTokens.has(type)) {
       strippedTerms.push(...typeForms);
       continue;
     }
     if (buildTermFormsPattern(typeForms).test(naturalQuery)) {
-      mustClauses.push({ value: `t:${type}`, source: "phase1:type" });
+      matchedTypes.push(type);
       strippedTerms.push(...typeForms);
     }
+  }
+  mustClauses.push(
+    ...buildGroupedClauses(
+      groupByConnector(naturalQuery, matchedTypes),
+      "t",
+      "phase1:type"
+    )
+  );
+
+  await ensureCatalogIndex();
+
+  const catalogTokens = tokenizeNaturalQuery(naturalQuery);
+  const matchedSubtypes = new Set<string>();
+  const alreadyHandled = new Set([
+    ...strippedTerms.map((t) => t.toLowerCase()),
+    ...FORMAT_TOKENS.map((f) => f.toLowerCase()),
+    ...Object.keys(COLOR_IDENTITY),
+    ...semanticRoleTokens,
+  ]);
+
+  // Collect supertypes first (position tracked via original query token)
+  type CatalogMatch = { canonical: string; queryToken: string };
+  const supertypeMatches: CatalogMatch[] = [];
+
+  for (const token of catalogTokens) {
+    if (STOPWORDS.has(token) || alreadyHandled.has(token)) continue;
+    const superMatch = matchSupertype(token);
+    if (superMatch) {
+      const stLower = superMatch.toLowerCase();
+      if (!matchedSubtypes.has(stLower)) {
+        matchedSubtypes.add(stLower);
+        supertypeMatches.push({ canonical: stLower, queryToken: token });
+        strippedTerms.push(...getTermForms(stLower));
+      }
+    }
+  }
+
+  if (supertypeMatches.length > 0) {
+    const overrides = new Map(supertypeMatches.map((m) => [m.canonical, m.queryToken]));
+    mustClauses.push(
+      ...buildGroupedClauses(
+        groupByConnector(naturalQuery, supertypeMatches.map((m) => m.canonical), overrides),
+        "t",
+        "phase1:subtype"
+      )
+    );
+  }
+
+  // Collect subtypes (bigrams, exact, fuzzy) — position tracked via matched query token
+  const subtypeMatches: CatalogMatch[] = [];
+
+  for (let i = 0; i < catalogTokens.length; i++) {
+    const token = catalogTokens[i];
+    if (STOPWORDS.has(token) || alreadyHandled.has(token)) continue;
+
+    const bigram =
+      i < catalogTokens.length - 1
+        ? `${catalogTokens[i]} ${catalogTokens[i + 1]}`
+        : null;
+
+    if (bigram) {
+      const bigramMatch = matchSubtype(bigram);
+      if (bigramMatch && !synergySubjects.has(bigramMatch.name.toLowerCase())) {
+        const stLower = bigramMatch.name.toLowerCase();
+        if (!matchedSubtypes.has(stLower)) {
+          matchedSubtypes.add(stLower);
+          subtypeMatches.push({ canonical: stLower, queryToken: bigram });
+          strippedTerms.push(bigram, ...getTermForms(stLower));
+        }
+        continue;
+      }
+    }
+
+    const subMatch = matchSubtype(token);
+    if (subMatch) {
+      const stLower = subMatch.name.toLowerCase();
+      if (synergySubjects.has(stLower) || synergySubjects.has(token)) {
+        strippedTerms.push(...getTermForms(stLower));
+        continue;
+      }
+      if (!matchedSubtypes.has(stLower)) {
+        matchedSubtypes.add(stLower);
+        subtypeMatches.push({ canonical: stLower, queryToken: token });
+        strippedTerms.push(...getTermForms(stLower));
+      }
+      continue;
+    }
+
+    if (token.length >= 5 && !matchedSubtypes.has(token)) {
+      const fuzzy = fuzzyMatchSubtype(token, shouldUseFuzzyMatch);
+      if (fuzzy) {
+        const stLower = fuzzy.name.toLowerCase();
+        if (!synergySubjects.has(stLower) && !matchedSubtypes.has(stLower)) {
+          matchedSubtypes.add(stLower);
+          subtypeMatches.push({ canonical: stLower, queryToken: token });
+          strippedTerms.push(token, ...getTermForms(stLower));
+        }
+      }
+    }
+  }
+
+  if (subtypeMatches.length > 0) {
+    const overrides = new Map(subtypeMatches.map((m) => [m.canonical, m.queryToken]));
+    mustClauses.push(
+      ...buildGroupedClauses(
+        groupByConnector(naturalQuery, subtypeMatches.map((m) => m.canonical), overrides),
+        "t",
+        "phase1:subtype",
+        quoteIfNeeded
+      )
+    );
   }
 
   const lower = naturalQuery.toLowerCase();
@@ -659,7 +1088,18 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     );
   strippedTerms.push(...collectMatchedColorTerms(lower));
   const commanderDeck = hasCommanderDeckContext(naturalQuery);
-  const commanderColor = resolveCommanderColorIdentity(naturalQuery) || extractColorIdentityFromText(lower);
+
+  // Detect standalone color shorthands ("wubr", "rg", "wu", "w", …).
+  // Shorthands take priority over incidental color words (e.g. "blue" in "blue artifacts
+  // with flash in wubr color identity") so they must be checked before extractColorIdentityFromText.
+  const colorShorthand = detectColorShorthand(lower);
+  if (colorShorthand) strippedTerms.push(colorShorthand.matchedText);
+
+  const commanderColor =
+    resolveCommanderColorIdentity(naturalQuery) ||
+    colorShorthand?.colors ||
+    extractColorIdentityFromText(lower) ||
+    null;
   if (/\bcolor\s+identity\b/i.test(naturalQuery)) {
     strippedTerms.push("color identity", "color", "identity");
   }
@@ -680,7 +1120,46 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       strippedTerms.push("commander", "commanders");
     }
     if (commanderColor) {
-      mustClauses.push({ value: `id:${commanderColor}`, source: "phase1:color" });
+      // Use color identity (id:) when the query is about commander format or explicitly
+      // names "color identity". Otherwise use card color (c:) which is what most searches mean
+      // (e.g. "blue creatures" → c:u, not id:u which would be for deck-building).
+      const useIdentityFilter =
+        /\bcolor\s+identity\b/i.test(naturalQuery) ||
+        matchedFormats.includes("commander");
+
+      // Exact match only when the user writes "mono-X" explicitly.
+      const MONO_RE = /\bmono[-\s]?(?:white|blue|black|red|green|colou?red?)\b/i;
+      const isExplicitMono =
+        commanderColor.length === 1 && MONO_RE.test(naturalQuery);
+
+      if (useIdentityFilter) {
+        // id= for mono identity, id: for multi
+        const isMonocolor = commanderColor.length === 1;
+        mustClauses.push({
+          value: isMonocolor ? `id=${commanderColor}` : `id:${commanderColor}`,
+          source: "phase1:color",
+        });
+
+        // Dual-filter edge case: when a color shorthand drives the identity (e.g. "wubr
+        // color identity"), individual color words like "blue" or "mono-blue" also describe
+        // the card's own color and should emit a secondary c: filter.
+        if (colorShorthand) {
+          const wordColor = extractColorIdentityFromText(lower);
+          if (wordColor && wordColor !== commanderColor) {
+            const wordIsMono = wordColor.length === 1 && MONO_RE.test(naturalQuery);
+            mustClauses.push({
+              value: wordIsMono ? `c=${wordColor}` : `c:${wordColor}`,
+              source: "phase1:color",
+            });
+          }
+        }
+      } else {
+        // c= for explicit mono, c: for everything else
+        mustClauses.push({
+          value: isExplicitMono ? `c=${commanderColor}` : `c:${commanderColor}`,
+          source: "phase1:color",
+        });
+      }
     }
   }
 
@@ -708,6 +1187,12 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     }
   }
 
+  const artistMatch = resolveArtistFromQuery(naturalQuery);
+  if (artistMatch) {
+    mustClauses.push({ value: `artist:"${artistMatch.name}"`, source: "phase1:artist" });
+    strippedTerms.push(artistMatch.matchedText, artistMatch.name.toLowerCase(), "by", "artist");
+  }
+
   const keywordList = await getMtgKeywordList();
   const { correctedQuery, matchedTypos } = applyFuzzyKeywordCorrections(
     naturalQuery,
@@ -716,13 +1201,15 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   strippedTerms.push(...matchedTypos);
 
   const keywordFilters = await resolveKeywordFilters(correctedQuery);
-  for (const keyword of keywordFilters) {
-    mustClauses.push({
-      value: /\s/.test(keyword) ? `kw:"${keyword}"` : `kw:${keyword.toLowerCase()}`,
-      source: "phase1:keyword",
-    });
-    strippedTerms.push(keyword.toLowerCase());
-  }
+  for (const keyword of keywordFilters) strippedTerms.push(keyword.toLowerCase());
+  mustClauses.push(
+    ...buildGroupedClauses(
+      groupByConnector(naturalQuery, keywordFilters.map((k) => k.toLowerCase())),
+      "kw",
+      "phase1:keyword",
+      (k) => (/\s/.test(k) ? `"${k}"` : k)
+    )
+  );
 
   const strategyResult = detectStrategyClauses(correctedQuery);
   mustClauses.push(...strategyResult.clauses);

@@ -3,6 +3,8 @@ export type ClauseSource =
   | "phase1:color"
   | "phase1:commander"
   | "phase1:type"
+  | "phase1:subtype"
+  | "phase1:artist"
   | "phase1:function"
   | "phase1:set"
   | "phase1:keyword"
@@ -35,6 +37,8 @@ export type ResolvedFragment = {
   tags: string[];
   confidence: number;
   category: ResolverCategory;
+  archetype?: string;
+  qualifier?: string;
 };
 
 export type SearchPipelineIR = {

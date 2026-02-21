@@ -6,6 +6,7 @@ import {
   EFFECTIVE_MAX_QUERY_LENGTH,
   PREFER_BEST_PREFIX,
   finalizeScryfallQuery,
+  lookupArchetypeTags,
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
 import { applySetFiltersFromNaturalQuery } from "@/lib/scryfall/sets";
@@ -195,6 +196,29 @@ function removeInvalidTagsFromQuery(
   return updated.replace(/\s{2,}/g, " ").trim();
 }
 
+function injectArchetypeTagsFromResolvedFragments(
+  ir: SearchPipelineIR,
+  query: string
+): string {
+  let updated = query;
+
+  for (const fragment of ir.resolvedFragments) {
+    if (!fragment.archetype) continue;
+
+    const tags = lookupArchetypeTags(fragment.archetype, fragment.qualifier ?? undefined);
+    if (!tags || tags.length === 0) continue;
+
+    const orChain = tags.map((t) => `function:${t}`);
+    if (orChain.length >= 2) {
+      updated = `${updated} (${orChain.join(" or ")})`;
+    } else if (orChain.length === 1) {
+      updated = `${updated} ${orChain[0]}`;
+    }
+  }
+
+  return updated.replace(/\s{2,}/g, " ").trim();
+}
+
 export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result> {
   const baseQuery = assembleQueryFromIR(ir);
   if (!baseQuery) {
@@ -202,10 +226,11 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
   }
 
   const queryWithoutPrefer = stripPreferBestPrefix(baseQuery);
+  const withArchetypeTags = injectArchetypeTagsFromResolvedFragments(ir, queryWithoutPrefer);
   const tagContext = await getTaggerTagContext(ir.naturalQuery);
   let query = finalizeScryfallQuery({
     naturalQuery: ir.naturalQuery,
-    rawQuery: queryWithoutPrefer,
+    rawQuery: withArchetypeTags,
     tagContext,
     maxLength: EFFECTIVE_MAX_QUERY_LENGTH,
   });

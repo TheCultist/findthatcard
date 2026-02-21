@@ -20,6 +20,83 @@ function buildShouldGroup(tokens: string[]): string {
   return `(${tokens.join(" OR ")})`;
 }
 
+const ART_TAG_PREFIX = /^(art|atag|arttag):/i;
+function isArtTag(token: string): boolean {
+  return ART_TAG_PREFIX.test(token.trim());
+}
+
+/** Prefixes whose multiple values within one fragment should be OR-chained. */
+const OR_CHAIN_PREFIXES = [
+  /^function:/i,
+  /^oracletag:/i,
+  /^(art|atag|arttag):/i,
+];
+
+function getOrChainPrefix(token: string): string | null {
+  for (const re of OR_CHAIN_PREFIXES) {
+    const m = re.exec(token.trim());
+    if (m) return m[0].toLowerCase();
+  }
+  return null;
+}
+
+/** Build one (art:a or art:b) group; keeps slugs deduped. */
+function buildArtOrChain(artTags: string[]): string {
+  const seen = new Set<string>();
+  const slugs: string[] = [];
+  for (const t of artTags) {
+    const normalized = t.trim().toLowerCase();
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    slugs.push(normalized.startsWith("art:") ? normalized : `art:${normalized.replace(/^(atag|arttag):/i, "")}`);
+  }
+  if (slugs.length === 0) return "";
+  if (slugs.length === 1) return `(${slugs[0]})`;
+  return `(${slugs.join(" or ")})`;
+}
+
+/** Emit fragment tags, grouping same-prefix OR-chain tags into (a or b) clauses. */
+function emitFragmentTags(tags: string[]): string[] {
+  // Separate art tags (already have their own logic)
+  const artTags = tags.filter(isArtTag);
+  const rest = tags.filter((t) => !isArtTag(t));
+
+  // Group rest by OR-chain prefix; non-OR-chain tags stay individual
+  const groups = new Map<string, string[]>();
+  const singles: string[] = [];
+
+  for (const tag of rest) {
+    const prefix = getOrChainPrefix(tag);
+    if (prefix) {
+      if (!groups.has(prefix)) groups.set(prefix, []);
+      groups.get(prefix)!.push(tag);
+    } else {
+      singles.push(tag);
+    }
+  }
+
+  const result: string[] = [];
+
+  // Art OR chain
+  if (artTags.length > 0) {
+    const group = buildArtOrChain(artTags);
+    if (group) result.push(group);
+  }
+
+  // Grouped OR chains (function:, oracletag:, etc.)
+  for (const members of groups.values()) {
+    if (members.length === 1) {
+      result.push(members[0]);
+    } else {
+      const deduped = [...new Set(members.map((t) => t.trim().toLowerCase()))];
+      result.push(`(${deduped.join(" or ")})`);
+    }
+  }
+
+  result.push(...singles);
+  return result;
+}
+
 export function assembleQueryFromIR(ir: SearchPipelineIR): string {
   if (ir.intent === "direct-scryfall") {
     return ir.mustClauses[0]?.value?.trim() || "";
@@ -29,9 +106,11 @@ export function assembleQueryFromIR(ir: SearchPipelineIR): string {
   const should = dedupeTokens(ir.shouldClauses.map((clause) => clause.value));
   const mustNot = dedupeTokens(ir.mustNotClauses.map((clause) => `-${clause.value.replace(/^-/, "")}`));
 
-  const phase2Tokens = dedupeTokens(
-    ir.resolvedFragments.flatMap((fragment) => fragment.tags)
-  );
+  const phase2Parts: string[] = [];
+  for (const fragment of ir.resolvedFragments.filter((f) => !f.archetype)) {
+    phase2Parts.push(...emitFragmentTags(fragment.tags));
+  }
+  const phase2Tokens = dedupeTokens(phase2Parts);
 
   const parts: string[] = [];
   parts.push(...must);

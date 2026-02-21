@@ -139,11 +139,47 @@ async function testPhase1FuzzyColorIdentityTypo() {
   console.log("[PASS] phase1: fuzzy color identity typo maps dimira -> id:ub");
 }
 
+async function testPhase1MonocolorUsesExactIdentity() {
+  // Commander context → id: (identity)
+  const parsed = await parseNaturalQuery("green creatures for commander");
+  const mustValues = parsed.mustClauses.map((entry) => entry.value);
+  assert.ok(mustValues.includes("id=g"), "mono + commander should use id=g");
+
+  // Multi-color + commander → id: (identity)
+  const parsedB = await parseNaturalQuery("azorius creatures for commander");
+  const mustValuesB = parsedB.mustClauses.map((entry) => entry.value);
+  assert.ok(mustValuesB.includes("id:wu"), "multi + commander should use id:wu");
+
+  // No commander context → c: (card color)
+  const parsedC = await parseNaturalQuery("azorius creatures");
+  const mustValuesC = parsedC.mustClauses.map((entry) => entry.value);
+  assert.ok(mustValuesC.includes("c:wu"), `non-commander multicolor should use c:wu; got: ${mustValuesC.join(", ")}`);
+
+  // Explicit mono prefix, no commander → c=
+  const parsedD = await parseNaturalQuery("mono-green creatures");
+  const mustValuesD = parsedD.mustClauses.map((entry) => entry.value);
+  assert.ok(mustValuesD.includes("c=g"), `explicit mono should use c=g; got: ${mustValuesD.join(", ")}`);
+
+  // Plain color word, no commander → c: (includes)
+  const parsedE = await parseNaturalQuery("blue control spells");
+  const mustValuesE = parsedE.mustClauses.map((entry) => entry.value);
+  assert.ok(mustValuesE.includes("c:u"), `plain color word should use c:u; got: ${mustValuesE.join(", ")}`);
+
+  // Dual-filter: shorthand identity + individual color word → both id: and c:
+  const parsedF = await parseNaturalQuery("mono-blue artifacts with flash in wubr color identity");
+  const mustValuesF = parsedF.mustClauses.map((entry) => entry.value);
+  assert.ok(mustValuesF.includes("id:wubr"), `should include id:wubr; got: ${mustValuesF.join(", ")}`);
+  assert.ok(mustValuesF.includes("c=u"), `should include c=u for mono-blue card color; got: ${mustValuesF.join(", ")}`);
+
+  console.log("[PASS] phase1: color filter uses c: by default, id: for commander/identity contexts");
+}
+
 async function testPhase1FuzzyKeywordTypo() {
   const parsed = await parseNaturalQuery("creatures with fliyng in azorius");
   const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
   assert.ok(mustValues.includes("kw:flying"));
-  assert.ok(mustValues.includes("id:wu"));
+  // No commander context → card color filter (c:)
+  assert.ok(mustValues.includes("c:wu"), `should use c:wu for non-commander azorius; got: ${mustValues.join(", ")}`);
   console.log("[PASS] phase1: fuzzy keyword typo maps fliyng -> kw:flying");
 }
 
@@ -273,6 +309,31 @@ async function testPhase3DoesNotForceCommanderCreatureForFormatIntent() {
   console.log("[PASS] phase3: avoids is:commander when query intent is commander format");
 }
 
+async function testPhase3LegalInMultipleFormatsKeepsFCommanderNoIsCommander() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "goblin cards legal in both modern and commander",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "f:modern", source: "phase1:format" },
+      { value: "f:commander", source: "phase1:format" },
+      { value: "function:tribal-goblin", source: "phase2:resolver" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+  };
+
+  const finalized = await finalizeQuery(ir);
+  assert.ok(!/\bis:commander\b/i.test(finalized.queryForLogs), "should not add is:commander when legal in multiple formats");
+  assert.ok(/\bf:commander\b/i.test(finalized.queryForLogs));
+  assert.ok(/\bf:modern\b/i.test(finalized.queryForLogs));
+  console.log("[PASS] phase3: legal in both modern and commander keeps f:commander, no is:commander");
+}
+
 async function testPhase3RemovesTreasureTypeForTokenGenerationIntent() {
   const ir: SearchPipelineIR = {
     naturalQuery: "rakdos cards that make treasure tokens for commander",
@@ -395,9 +456,292 @@ async function testPhase3AddsBlinkTagsAndKeepsCreatureType() {
   console.log("[PASS] phase3: adds blink tags and keeps t:creature when creature is the card type");
 }
 
+function testAssemblerSkipsArchetypeFragmentTags() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "white creatures that prevent attacking",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "t:creature", source: "phase1:type" },
+      { value: "id=w", source: "phase1:color" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [
+      { fragment: "prevent attacking", tags: ["function:prevent-attack"], confidence: 0.9, category: "effect", archetype: "pillow-fort" },
+    ],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+  };
+
+  const query = assembleQueryFromIR(ir);
+  assert.ok(!/function:prevent-attack/.test(query), "assembler should skip raw tags for archetype-classified fragments");
+  assert.ok(/t:creature/.test(query));
+  assert.ok(/id=w/.test(query));
+  console.log("[PASS] assembler: skips raw tags for archetype-classified fragments");
+}
+
+function testAssemblerEmitsRawTagsForNonArchetypeFragments() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "creatures with cool effects",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "t:creature", source: "phase1:type" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [
+      { fragment: "cool effects", tags: ["function:some-effect"], confidence: 0.8, category: "semantic" },
+    ],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+  };
+
+  const query = assembleQueryFromIR(ir);
+  assert.ok(/function:some-effect/.test(query), "assembler should emit raw tags when no archetype");
+  console.log("[PASS] assembler: emits raw tags for non-archetype fragments");
+}
+
+function testAssemblerAndsArtConceptsPerFragment() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "cards with spider art and sword art",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [
+      { fragment: "spider art", tags: ["art:spider", "art:spider-like"], confidence: 0.9, category: "art" },
+      { fragment: "sword art", tags: ["art:raised-sword", "art:sheathed-sword"], confidence: 0.9, category: "art" },
+    ],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+  };
+
+  const query = assembleQueryFromIR(ir);
+  const spiderGroup = /\(art:spider\s+or\s+art:spider-like\)/i;
+  const swordGroup = /\(art:raised-sword\s+or\s+art:sheathed-sword\)/i;
+  assert.ok(spiderGroup.test(query), "assembler should emit one OR group per art fragment (spider)");
+  assert.ok(swordGroup.test(query), "assembler should emit one OR group per art fragment (sword)");
+  assert.ok(
+    query.indexOf("(art:spider") < query.indexOf("(art:raised-sword"),
+    "spider and sword groups should both appear (AND semantics)"
+  );
+  console.log("[PASS] assembler: ANDs art concepts — one (art:... or ...) per fragment");
+}
+
+async function testPhase3InjectsArchetypeTagsFromResolvedFragments() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "white creatures that prevent attacking for commander",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "t:creature", source: "phase1:type" },
+      { value: "id=w", source: "phase1:color" },
+      { value: "f:commander", source: "phase1:format" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [
+      { fragment: "prevent attacking", tags: [], confidence: 0.9, category: "effect", archetype: "pillow-fort" },
+    ],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+  };
+
+  const finalized = await finalizeQuery(ir);
+  assert.ok(/function:prevent-attack/.test(finalized.queryForLogs), "should inject prevent-attack from pillow-fort archetype");
+  assert.ok(/function:tax-attack/.test(finalized.queryForLogs), "should inject tax-attack from pillow-fort archetype");
+  assert.ok(/\bor\b/i.test(finalized.queryForLogs), "pillow-fort tags should be in an OR chain");
+  console.log("[PASS] phase3: injects archetype tags from resolved fragments into OR chain");
+}
+
+async function testPhase3InjectsDamageArchetypeFromResolvedFragments() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "red spells that hurt opponents",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "c:r", source: "phase1:color" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [
+      { fragment: "hurt opponents", tags: [], confidence: 0.85, category: "effect", archetype: "damage", qualifier: "opponent" },
+    ],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+  };
+
+  const finalized = await finalizeQuery(ir);
+  assert.ok(/function:burn-player/.test(finalized.queryForLogs), "should inject burn-player from damage/opponent archetype");
+  assert.ok(/function:opponent-loses-life/.test(finalized.queryForLogs), "should inject opponent-loses-life");
+  console.log("[PASS] phase3: injects damage archetype tags with qualifier from resolved fragments");
+}
+
+async function testPhase1CreatureTypeFromCatalog() {
+  const parsed = await parseNaturalQuery("goblin creatures for commander");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(mustValues.includes("t:goblin"), "should match goblin as creature type from catalog");
+  assert.ok(mustValues.includes("t:creature"), "should match creature from TYPE_TOKENS");
+  assert.ok(mustValues.includes("f:commander"), "should match commander as format");
+  assert.ok(
+    parsed.unresolvedFragments.every((f) => !/\bgoblin\b/i.test(f.text)),
+    "goblin should be stripped from unresolved fragments"
+  );
+  console.log("[PASS] phase1: matches creature type 'goblin' from catalog");
+}
+
+async function testPhase1LegendaryDragons() {
+  const parsed = await parseNaturalQuery("legendary dragons");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(mustValues.includes("t:legendary"), "should match legendary as supertype from catalog");
+  assert.ok(mustValues.includes("t:dragon"), "should match dragon as creature type from catalog");
+  console.log("[PASS] phase1: matches supertype 'legendary' and creature type 'dragon' from catalog");
+}
+
+async function testPhase1EquipmentArtifacts() {
+  const parsed = await parseNaturalQuery("equipment artifacts");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(mustValues.includes("t:equipment"), "should match equipment as artifact subtype from catalog");
+  assert.ok(mustValues.includes("t:artifact"), "should match artifact from TYPE_TOKENS");
+  console.log("[PASS] phase1: matches artifact subtype 'equipment' from catalog");
+}
+
+async function testPhase1SagaEnchantments() {
+  const parsed = await parseNaturalQuery("saga enchantments");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(mustValues.includes("t:saga"), "should match saga as enchantment subtype from catalog");
+  assert.ok(mustValues.includes("t:enchantment"), "should match enchantment from TYPE_TOKENS");
+  console.log("[PASS] phase1: matches enchantment subtype 'saga' from catalog");
+}
+
+async function testPhase1ElfSynergyExclusion() {
+  const parsed = await parseNaturalQuery("elf synergies for commander");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(!mustValues.includes("t:elf"), "should NOT add t:elf when it is a synergy subject");
+  assert.ok(
+    parsed.unresolvedFragments.every((f) => !/\belf\b/i.test(f.text)),
+    "elf should be stripped from unresolved fragments even when synergy subject"
+  );
+  console.log("[PASS] phase1: skips creature type as synergy subject (elf synergies)");
+}
+
+async function testPhase1ArtistDetection() {
+  const parsed = await parseNaturalQuery("cards by Seb McKinnon");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  const hasArtist = mustValues.some((v) => /artist:"Seb McKinnon"/i.test(v));
+  assert.ok(hasArtist, "should detect artist name 'Seb McKinnon' from catalog");
+  console.log("[PASS] phase1: detects artist name from catalog");
+}
+
+async function testPhase1PluralCreatureType() {
+  const parsed = await parseNaturalQuery("elves in modern");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(mustValues.includes("t:elf"), "should match plural 'elves' to singular 'elf' creature type");
+  assert.ok(mustValues.includes("f:modern"), "should match modern as format");
+  console.log("[PASS] phase1: handles plural creature type 'elves' -> t:elf");
+}
+
+async function testPhase1SnowLands() {
+  const parsed = await parseNaturalQuery("snow lands");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(mustValues.includes("t:snow"), "should match snow as supertype from catalog");
+  assert.ok(mustValues.includes("t:land"), "should match land from TYPE_TOKENS");
+  console.log("[PASS] phase1: matches supertype 'snow' and card type 'land'");
+}
+
+async function testColorShorthandTwoColor() {
+  const parsed = await parseNaturalQuery("rg creatures with trample");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  // No commander context → c: (card color)
+  assert.ok(mustValues.includes("c:rg"), `two-letter shorthand 'rg' should produce c:rg; got: ${mustValues.join(", ")}`);
+  assert.ok(mustValues.includes("t:creature"), "should also detect t:creature");
+  console.log("[PASS] phase1: two-color shorthand 'rg' produces c:rg");
+}
+
+async function testColorShorthandFourColor() {
+  const parsed = await parseNaturalQuery("wubr instants");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  // No commander context → c: (card color)
+  assert.ok(mustValues.includes("c:wubr"), `four-letter shorthand 'wubr' should produce c:wubr; got: ${mustValues.join(", ")}`);
+  console.log("[PASS] phase1: four-color shorthand 'wubr' produces c:wubr");
+}
+
+async function testColorShorthandNormalisesOrder() {
+  const parsed = await parseNaturalQuery("gr aggro");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  // "gr" should be normalised to WUBRG order → "rg"; no commander context → c:
+  assert.ok(mustValues.includes("c:rg"), `shorthand 'gr' should normalise to c:rg (WUBRG order); got: ${mustValues.join(", ")}`);
+  console.log("[PASS] phase1: color shorthand 'gr' normalises to c:rg (WUBRG order)");
+}
+
+async function testColorShorthandBlocklist() {
+  const parsed = await parseNaturalQuery("bug tribal");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    !mustValues.some((v) => v.startsWith("id:") || v.startsWith("c:")),
+    `'bug' should be blocked from shorthand detection; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'bug' is blocked as a color shorthand");
+}
+
+async function testArtSubjectNotAddedAsType() {
+  const parsed = await parseNaturalQuery("Mono-green cards with forest art");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(!mustValues.includes("t:forest"), `t:forest should NOT appear for art query; got: ${mustValues.join(", ")}`);
+  assert.ok(mustValues.includes("c=g"), "should detect mono-green identity (c= for card color)");
+  console.log("[PASS] phase1: art subject 'forest' does not produce t:forest");
+}
+
+async function testOrConnectorFormats() {
+  const parsed = await parseNaturalQuery("goblin cards legal modern or commander");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  const hasOrGroup = mustValues.some((v) => v.includes("(f:modern or f:commander)") || v.includes("(f:commander or f:modern)"));
+  assert.ok(hasOrGroup, `formats connected by 'or' should be emitted as a single OR clause; got: ${mustValues.join(", ")}`);
+  assert.ok(!mustValues.includes("f:modern"), "f:modern should not appear separately");
+  assert.ok(!mustValues.includes("f:commander"), "f:commander should not appear separately");
+  console.log("[PASS] phase1: OR connector between formats emits (f:modern or f:commander)");
+}
+
+async function testAndConnectorFormatsRemainSeparate() {
+  const parsed = await parseNaturalQuery("goblin cards legal in both modern and commander");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(mustValues.includes("f:modern"), "f:modern should be a separate clause");
+  assert.ok(mustValues.includes("f:commander"), "f:commander should be a separate clause");
+  const noOrGroup = mustValues.every((v) => !v.startsWith("(f:"));
+  assert.ok(noOrGroup, `formats connected by 'and' should NOT be merged into an OR clause; got: ${mustValues.join(", ")}`);
+  console.log("[PASS] phase1: AND connector between formats keeps separate clauses");
+}
+
+async function testOrConnectorTypes() {
+  const parsed = await parseNaturalQuery("instant or sorcery spells");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  const hasOrGroup = mustValues.some((v) => v.includes("(t:instant or t:sorcery)") || v.includes("(t:sorcery or t:instant)"));
+  assert.ok(hasOrGroup, `types connected by 'or' should be emitted as a single OR clause; got: ${mustValues.join(", ")}`);
+  console.log("[PASS] phase1: OR connector between types emits (t:instant or t:sorcery)");
+}
+
+async function testOrConnectorSubtypes() {
+  const parsed = await parseNaturalQuery("goblin or elf creatures");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  const hasOrGroup = mustValues.some((v) => v.includes("(t:goblin or t:elf)") || v.includes("(t:elf or t:goblin)"));
+  assert.ok(hasOrGroup, `subtypes connected by 'or' should be emitted as a single OR clause; got: ${mustValues.join(", ")}`);
+  console.log("[PASS] phase1: OR connector between subtypes emits (t:goblin or t:elf)");
+}
+
 async function run() {
   await testPhase1DirectQueryShortCircuit();
   testAssemblerBooleanComposition();
+  testAssemblerSkipsArchetypeFragmentTags();
+  testAssemblerEmitsRawTagsForNonArchetypeFragments();
+  testAssemblerAndsArtConceptsPerFragment();
   await testPhase3DirectQueryAddsPreferBest();
   await testPipelineDirectEndToEnd();
   await testPhase1CommanderFormatColorExtraction();
@@ -405,6 +749,7 @@ async function run() {
   await testPhase1PluralTypeIsStrippedFromArtFragments();
   await testPhase1SorceryPluralKeepsTypeAndStripsFromArtFragment();
   await testPhase1FuzzyColorIdentityTypo();
+  await testPhase1MonocolorUsesExactIdentity();
   await testPhase1FuzzyKeywordTypo();
   await testPhase1FuzzyStrategyTypo();
   await testPhase1SynergyIntentUsesFunctionTagsForMentionedSubject();
@@ -413,11 +758,31 @@ async function run() {
   await testPhase1CommanderFromFranchiseSetsAvoidsNoise();
   await testPhase1CommanderFromLorwynAvoidsCommanderProductSetNoise();
   await testPhase3DoesNotForceCommanderCreatureForFormatIntent();
+  await testPhase3LegalInMultipleFormatsKeepsFCommanderNoIsCommander();
   await testPhase3RemovesTreasureTypeForTokenGenerationIntent();
   await testPhase3RemovesAnyTokenTypeForGenerationIntent();
   await testPhase3StripsDamageTargetCreatureTypeFilter();
   await testPhase3StripsCreatureTypeForRemovalCreatureIntent();
   await testPhase3AddsBlinkTagsAndKeepsCreatureType();
+  await testPhase3InjectsArchetypeTagsFromResolvedFragments();
+  await testPhase3InjectsDamageArchetypeFromResolvedFragments();
+  await testPhase1CreatureTypeFromCatalog();
+  await testPhase1LegendaryDragons();
+  await testPhase1EquipmentArtifacts();
+  await testPhase1SagaEnchantments();
+  await testPhase1ElfSynergyExclusion();
+  await testPhase1ArtistDetection();
+  await testPhase1PluralCreatureType();
+  await testPhase1SnowLands();
+  await testArtSubjectNotAddedAsType();
+  await testColorShorthandTwoColor();
+  await testColorShorthandFourColor();
+  await testColorShorthandNormalisesOrder();
+  await testColorShorthandBlocklist();
+  await testOrConnectorFormats();
+  await testAndConnectorFormatsRemainSeparate();
+  await testOrConnectorTypes();
+  await testOrConnectorSubtypes();
   console.log("search-pipeline tests passed");
 }
 

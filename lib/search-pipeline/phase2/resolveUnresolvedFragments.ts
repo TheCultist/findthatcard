@@ -3,12 +3,16 @@ import { getTaggerTagContext } from "@/lib/tagger/context";
 import { buildResolverPrompt } from "@/lib/search-pipeline/phase2/buildResolverPrompt";
 import { Phase2Result, ResolvedFragment, ResolverCategory, SearchPipelineIR } from "../types";
 
+type ResolverResponseItem = {
+  fragment?: string;
+  tags?: string[];
+  confidence?: number;
+  archetype?: string | null;
+  qualifier?: string | null;
+};
+
 type ResolverResponse = {
-  results?: Array<{
-    fragment?: string;
-    tags?: string[];
-    confidence?: number;
-  }>;
+  results?: ResolverResponseItem[];
 };
 
 const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
@@ -94,6 +98,7 @@ function parseResolverOutput(raw: string): ResolverResponse {
 async function runCategoryBatch(args: {
   category: ResolverCategory;
   fragments: string[];
+  naturalQuery: string;
   availableArtTags: string[];
   availableFunctionTags: string[];
 }): Promise<ResolvedFragment[]> {
@@ -118,11 +123,21 @@ async function runCategoryBatch(args: {
     const fragment = (item.fragment || "").trim();
     if (!fragment) continue;
     const confidence = Math.max(0, Math.min(1, Number(item.confidence ?? 0)));
+
+    const archetype = typeof item.archetype === "string" && item.archetype.trim()
+      ? item.archetype.trim().toLowerCase()
+      : undefined;
+    const qualifier = typeof item.qualifier === "string" && item.qualifier.trim()
+      ? item.qualifier.trim().toLowerCase()
+      : undefined;
+
     results.push({
       fragment,
       category: args.category,
       tags: sanitizeTags(item.tags || []),
       confidence,
+      archetype,
+      qualifier,
     });
   }
   return results;
@@ -130,6 +145,7 @@ async function runCategoryBatch(args: {
 
 async function runSequentialFallback(args: {
   unresolved: Array<{ text: string; category: ResolverCategory }>;
+  naturalQuery: string;
   availableArtTags: string[];
   availableFunctionTags: string[];
 }): Promise<ResolvedFragment[]> {
@@ -138,6 +154,7 @@ async function runSequentialFallback(args: {
     const batch = await runCategoryBatch({
       category: fragment.category,
       fragments: [fragment.text],
+      naturalQuery: args.naturalQuery,
       availableArtTags: args.availableArtTags,
       availableFunctionTags: args.availableFunctionTags,
     });
@@ -158,6 +175,10 @@ function groupByCategory(
   return grouped;
 }
 
+function isResolvedByArchetypeOrTags(entry: ResolvedFragment): boolean {
+  return (entry.archetype != null && entry.archetype.length > 0) || entry.tags.length > 0;
+}
+
 export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<Phase2Result> {
   if (ir.intent === "direct-scryfall" || ir.unresolvedFragments.length === 0) {
     return { ir, batchCalls: 0, sequentialCalls: 0 };
@@ -176,6 +197,7 @@ export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<
       const resolved = await runCategoryBatch({
         category,
         fragments,
+        naturalQuery: ir.naturalQuery,
         availableArtTags: tagContext.art,
         availableFunctionTags: tagContext.function,
       });
@@ -189,7 +211,7 @@ export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<
   const leftovers = ir.unresolvedFragments.filter((fragment) => {
     if (!covered.has(fragment.text.toLowerCase())) return true;
     const result = firstPass.find((entry) => entry.fragment.toLowerCase() === fragment.text.toLowerCase());
-    return !result || result.tags.length === 0 || result.confidence < MIN_CONFIDENCE;
+    return !result || (!isResolvedByArchetypeOrTags(result)) || result.confidence < MIN_CONFIDENCE;
   });
 
   let fallbackResults: ResolvedFragment[] = [];
@@ -198,6 +220,7 @@ export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<
     try {
       fallbackResults = await runSequentialFallback({
         unresolved: leftovers,
+        naturalQuery: ir.naturalQuery,
         availableArtTags: tagContext.art,
         availableFunctionTags: tagContext.function,
       });
@@ -207,7 +230,7 @@ export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<
   }
 
   const merged = [...firstPass, ...fallbackResults]
-    .filter((entry) => entry.tags.length > 0 && entry.confidence >= MIN_CONFIDENCE)
+    .filter((entry) => isResolvedByArchetypeOrTags(entry) && entry.confidence >= MIN_CONFIDENCE)
     .reduce<ResolvedFragment[]>((acc, current) => {
       const existing = acc.find((entry) => entry.fragment.toLowerCase() === current.fragment.toLowerCase());
       if (!existing) {
@@ -217,6 +240,8 @@ export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<
       if (current.confidence > existing.confidence) {
         existing.tags = current.tags;
         existing.confidence = current.confidence;
+        existing.archetype = current.archetype;
+        existing.qualifier = current.qualifier;
       }
       return acc;
     }, []);
@@ -237,4 +262,3 @@ export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<
     sequentialCalls,
   };
 }
-

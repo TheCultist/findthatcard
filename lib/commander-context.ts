@@ -30,6 +30,27 @@ const COLOR_WORDS: Record<string, string> = {
   sultai: "bug",
   mardu: "brw",
   temur: "urg",
+  // 4-color identities
+  "yore-tiller": "wubr",
+  breya: "wubr",
+  "non-green": "wubr",
+  nongreen: "wubr",
+  "witch-maw": "wubg",
+  atraxa: "wubg",
+  "non-red": "wubg",
+  nonred: "wubg",
+  "dune-brood": "wbrg",
+  saskia: "wbrg",
+  "non-blue": "wbrg",
+  nonblue: "wbrg",
+  "glint-eye": "ubrg",
+  yidris: "ubrg",
+  "non-white": "ubrg",
+  nonwhite: "ubrg",
+  "ink-treader": "wurg",
+  kynaios: "wurg",
+  "non-black": "wurg",
+  nonblack: "wurg",
 };
 
 function normalizeForColorMatch(text: string): string {

@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { getCacheDir } from "@/lib/cache-paths";
+import { ensureScryfallCatalogCache, getCatalog } from "@/lib/scryfall/catalogs";
 
 type MtgKeywordEntry = {
   name: string;
@@ -245,6 +246,38 @@ async function fetchKeywordsFromScryfall(): Promise<MtgKeywordEntry[]> {
   return entries;
 }
 
+const BLOCKED_KEYWORD_ACTIONS = new Set([
+  "activate", "attach", "cast", "counter", "create", "destroy", "discard",
+  "double", "exchange", "exile", "fight", "play", "regenerate", "reveal",
+  "sacrifice", "search", "shuffle", "tap", "untap", "vote", "fateseal",
+]);
+
+async function fetchCatalogKeywordExtras(): Promise<MtgKeywordEntry[]> {
+  try {
+    await ensureScryfallCatalogCache();
+    const [actions, abilityWords] = await Promise.all([
+      getCatalog("keyword-actions"),
+      getCatalog("ability-words"),
+    ]);
+
+    const entries: MtgKeywordEntry[] = [];
+    for (const name of actions) {
+      const slug = normalizeKeywordName(name);
+      if (!slug || BLOCKED_KEYWORD_ACTIONS.has(slug)) continue;
+      entries.push({ name, slug });
+    }
+    for (const name of abilityWords) {
+      const slug = normalizeKeywordName(name);
+      if (!slug) continue;
+      entries.push({ name, slug });
+    }
+    return entries;
+  } catch (error) {
+    console.warn("[MTG Keywords] Failed to fetch catalog keyword extras:", error);
+    return [];
+  }
+}
+
 async function initializeKeywordCache(): Promise<void> {
   if (keywordCache !== null) {
     return;
@@ -273,6 +306,23 @@ async function initializeKeywordCache(): Promise<void> {
     );
 
     const fetched = await fetchKeywordsFromScryfall();
+
+    const catalogExtras = await fetchCatalogKeywordExtras();
+    if (catalogExtras.length > 0) {
+      const existingSlugs = new Set(fetched.map((e) => e.slug));
+      let added = 0;
+      for (const extra of catalogExtras) {
+        if (!existingSlugs.has(extra.slug)) {
+          fetched.push(extra);
+          existingSlugs.add(extra.slug);
+          added++;
+        }
+      }
+      if (added > 0) {
+        console.log(`[MTG Keywords] Merged ${added} extra keywords from catalogs (keyword-actions, ability-words)`);
+      }
+    }
+
     const { merged, addedSlugs, renamed } = mergeKeywords(
       existing?.keywords || null,
       fetched,

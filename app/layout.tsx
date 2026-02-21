@@ -30,7 +30,7 @@ export default function RootLayout({
           content="fe0d142c-1e97-427f-9abb-35dd9ed1c38f"
         />
       </head>
-      <body className="min-h-screen bg-gray-950 text-gray-100 antialiased">
+      <body suppressHydrationWarning className="min-h-screen bg-gray-950 text-gray-100 antialiased">
         {children}
         <Analytics />
       </body>

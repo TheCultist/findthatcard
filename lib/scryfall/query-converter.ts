@@ -274,20 +274,24 @@ function normalizeManaCostSymbolIntent(naturalQuery: string, query: string): str
 
 function normalizeCommanderIntent(naturalQuery: string, query: string): string {
   const lower = naturalQuery.toLowerCase();
-  const wantsCommanderFormat = /\b(commander[-\s]?legal|legal\s+in\s+commander|for\s+commander|commander\s+format|in\s+commander|edh[-\s]?legal|legal\s+in\s+edh|for\s+edh|edh\s+format|in\s+edh)\b/i.test(
-    lower
-  );
+  const wantsCommanderFormat =
+    /\b(commander[-\s]?legal|legal\s+in\s+commander|for\s+commander|commander\s+format|in\s+commander|edh[-\s]?legal|legal\s+in\s+edh|for\s+edh|edh\s+format|in\s+edh)\b/i.test(
+      lower
+    ) ||
+    (/\blegal\b/i.test(lower) && /\bcommander\b/i.test(lower));
+  const multipleFormats = (query.match(/\bf:[a-z]+\b/gi) || []).length >= 2;
   const myCommanderDeck = hasCommanderDeckContext(naturalQuery);
   const wantsCommanders =
+    !multipleFormats &&
     /\b(commanders?|commander cards?|commander creatures?|can be commanders?)\b/i.test(lower) &&
     !wantsCommanderFormat &&
     !myCommanderDeck;
 
   let updated = query;
 
-  if (wantsCommanderFormat) {
+  if (wantsCommanderFormat || multipleFormats) {
     updated = updated.replace(/\bis:commander\b/gi, "");
-    if (!/\bf:commander\b/i.test(updated)) {
+    if (!/\bf:commander\b/i.test(updated) && wantsCommanderFormat) {
       updated = `${updated} f:commander`;
     }
     return normalizeWhitespace(updated);
@@ -527,6 +531,7 @@ type ArchetypeQualifier = {
 
 type ArchetypeEntry = {
   name: string;
+  description: string;
   detect: RegExp;
   disqualify?: RegExp;
   defaultTags: string[];
@@ -537,6 +542,7 @@ type ArchetypeEntry = {
 const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   {
     name: "removal",
+    description: "Destroy, exile, bounce, or tuck permanents",
     detect: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?|kill\s+spell|kill\s+spells)\b/i,
     disqualify: /\b(graveyard|reanimate|return|recursion)\b/i,
     defaultTags: ["removal", "spot-removal", "repeatable-removal"],
@@ -586,11 +592,13 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   },
   {
     name: "ramp",
+    description: "Accelerate mana production or cheat mana costs",
     detect: /\b(ramp|mana\s+ramp|mana\s+accel(?:eration)?|ramp\s+(?:spells?|cards?|effects?))\b/i,
     defaultTags: ["ramp", "mana-ramp"],
   },
   {
     name: "tokens",
+    description: "Create or multiply creature/artifact/treasure tokens",
     detect: /\b(token\s+(?:generat(?:or|ion|e|es|ing)|creat(?:or|ion|e|es|ing)|mak(?:er?|es?|ing))|(?:make|create|generate|produce)s?\s+tokens?)\b/i,
     defaultTags: ["repeatable-token-generator", "repeatable-creature-tokens"],
     qualifiers: [
@@ -619,6 +627,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   },
   {
     name: "reanimator",
+    description: "Return permanents from graveyard to battlefield",
     detect: /\b(reanimate[sd]?|reanimation|reanimate\s+(?:creature|artifact|permanent)|graveyard\s+(?:recursion|return|recur)|return(?:s|ed|ing)?\s+from\s+(?:the\s+)?graveyard|raise\s+dead)\b/i,
     defaultTags: ["reanimate", "reanimate-creature", "reanimate-permanent", "reanimate-from-any"],
     qualifiers: [
@@ -642,6 +651,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   },
   {
     name: "mill",
+    description: "Put cards from libraries into graveyards",
     detect: /\b(mill(?:s|ed|ing)?)\b/i,
     disqualify: /\b(windmill|sawmill|treadmill)\b/i,
     defaultTags: ["mill", "mill-opponent", "mill-any"],
@@ -666,6 +676,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   },
   {
     name: "blink",
+    description: "Exile a permanent and return it to the battlefield to re-trigger ETB effects",
     detect: /\b(blink(?:s|ed|ing)?|flicker(?:s|ed|ing)?|exile\s+(?:and|then)\s+return)\b/i,
     defaultTags: ["blink", "flicker", "flicker-creature", "flicker-permanent"],
     qualifiers: [
@@ -694,6 +705,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   },
   {
     name: "discard",
+    description: "Force discarding cards or benefit from discarding",
     detect: /\b(discard(?:s|ed|ing)?|hand\s+disruption|hand\s+attack)\b/i,
     defaultTags: ["discard", "discard-outlet", "discard-matters"],
     qualifiers: [
@@ -712,6 +724,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   },
   {
     name: "card-draw",
+    description: "Draw extra cards or generate card advantage",
     detect: /\b(card\s+draw|draw\s+(?:engine|cards?|spells?)|draw(?:ing)?\s+(?:a\s+)?(?:lot|tons?|extra)\b|card\s+advantage)\b/i,
     disqualify: /\b(draw\s+(?:a\s+card\s+)?when\s+.*enters)\b/i,
     defaultTags: ["draw-engine", "repeatable-draw", "pure-draw", "impulse-draw", "burst-draw"],
@@ -719,24 +732,28 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   },
   {
     name: "voltron",
+    description: "Buff a single creature with equipment or auras to win via commander damage",
     detect: /\b(voltron|equipment\s+(?:matters?|synerg|deck|theme)|aura\s+(?:matters?|synerg|deck|theme))\b/i,
     defaultTags: ["synergy-equipment", "synergy-aura", "sneak-equipment", "sneak-aura"],
     strayPattern: /\bfunction:(synergy-equipment(?:-[a-z0-9-]+)?|synergy-aura|sneak-equipment|sneak-aura)\b/gi,
   },
   {
     name: "stax",
+    description: "Tax or restrict opponents' actions (casting, attacking, untapping)",
     detect: /\b(stax|tax\s+(?:effects?|spells?|cards?)|hatebears?|hate\s+bears?)\b/i,
     defaultTags: ["tax", "tax-attack", "tax-block", "cast-tax"],
     strayPattern: /\bfunction:(tax(?:-[a-z0-9-]+)?|cast-tax)\b/gi,
   },
   {
     name: "landfall",
+    description: "Trigger effects when lands enter the battlefield",
     detect: /\b(landfall|lands?\s+matter|lands?\s+entering)\b/i,
     defaultTags: ["landfall", "landfall-other"],
     strayPattern: /\bfunction:(landfall(?:-[a-z0-9-]+)?|islandfall)\b/gi,
   },
   {
     name: "infect",
+    description: "Deal damage as poison counters or infect/toxic mechanics",
     detect: /\b(infect|poison(?:\s+counters?)?|toxic|poisonous)\b/i,
     disqualify: /\b(poison\s+(?:ivy|dart|frog|breath))\b/i,
     defaultTags: ["infect", "poison", "poison-opponents", "gives-infect", "synergy-infect", "synergy-poison"],
@@ -744,6 +761,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   },
   {
     name: "storm",
+    description: "Copy spells based on number of spells cast this turn",
     detect: /\b(storm(?:\s+(?:count|deck|off|cards?))?)\b/i,
     disqualify: /\b(storm\s+(?:crow|herald|fleet|breath|entity|scale|seeker|sewer|the\s+vault))\b/i,
     defaultTags: ["storm", "storm-like", "storm-count-matters", "gives-storm"],
@@ -751,12 +769,14 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   },
   {
     name: "extra-combat",
+    description: "Grant additional combat phases in a turn",
     detect: /\b(extra\s+combat|additional\s+combat|multiple\s+combats?)\b/i,
     defaultTags: ["extra-combat", "extra-combat-phase"],
     strayPattern: /\bfunction:(extra-combat(?:-[a-z0-9-]+)?)\b/gi,
   },
   {
     name: "pillow-fort",
+    description: "Prevent or tax opponents from attacking you",
     detect: /\b(pillow\s*fort|prevent(?:s|ed|ing)?\s+(?:players?\s+from\s+)?attack(?:s|ed|ing)?|stop\s+attack(?:s|ing)?|(?:tax|cost)\s+(?:to\s+)?attack(?:s|ing)?|can'?t\s+(?:be\s+)?attack(?:ed|ing)?|attack\s+(?:prevention|tax|cost|restrict))\b/i,
     defaultTags: ["prevent-attack", "prevent-attacker", "tax-attack"],
     strayPattern: /\bfunction:(prevent-attack(?:er)?|tax-attack)\b/gi,
@@ -805,6 +825,57 @@ function normalizeArchetypeIntents(
   }
 
   return normalizeWhitespace(updated);
+}
+
+export type ArchetypeMenuEntry = {
+  name: string;
+  description: string;
+  qualifiers?: string[];
+};
+
+export function getArchetypeMenu(): ArchetypeMenuEntry[] {
+  const damageEntry: ArchetypeMenuEntry = {
+    name: "damage",
+    description: "Deal direct damage or burn to opponents, creatures, planeswalkers, or any target",
+    qualifiers: ["opponent", "creature", "planeswalker", "player", "any", "battle", "general"],
+  };
+
+  const archetypeEntries = ARCHETYPE_REGISTRY.map((entry) => {
+    const result: ArchetypeMenuEntry = {
+      name: entry.name,
+      description: entry.description,
+    };
+    if (entry.qualifiers && entry.qualifiers.length > 0) {
+      result.qualifiers = entry.qualifiers.map((q) => q.name);
+    }
+    return result;
+  });
+
+  return [damageEntry, ...archetypeEntries];
+}
+
+export function lookupArchetypeTags(
+  archetype: string,
+  qualifier?: string
+): string[] | null {
+  if (archetype === "damage") {
+    const target = (qualifier || "general") as DamageTarget;
+    return DAMAGE_TAG_FAMILIES[target] || DAMAGE_TAG_FAMILIES.general;
+  }
+
+  const entry = ARCHETYPE_REGISTRY.find(
+    (e) => e.name.toLowerCase() === archetype.toLowerCase()
+  );
+  if (!entry) return null;
+
+  if (qualifier && entry.qualifiers) {
+    const q = entry.qualifiers.find(
+      (q) => q.name.toLowerCase() === qualifier.toLowerCase()
+    );
+    if (q) return q.tags;
+  }
+
+  return entry.defaultTags;
 }
 
 function normalizeArtIntent(
@@ -860,9 +931,35 @@ function normalizeArtIntent(
 
   if (!/\b-?(?:art|atag|arttag):/i.test(updated)) {
     const additions = eligibleKeywords.slice(0, 3).map((keyword) => `art:${keyword}`);
-    updated = `${updated} ${additions.join(" ")}`.trim();
+    updated = `${updated} (${additions.join(" or ")})`.trim();
   }
 
+  return normalizeWhitespace(updated);
+}
+
+/** Counts parenthesized art OR groups like (art:x or art:y). */
+function countArtOrGroups(query: string): number {
+  const matches = query.match(/\(\s*art:/gi);
+  return matches ? matches.length : 0;
+}
+
+/** Collects all art/atag/arttag tokens and replaces them with a single OR chain. Leaves query unchanged when it already has multiple (art:... or ...) groups (AND of concepts). */
+function normalizeArtTagsToOrChain(query: string): string {
+  if (countArtOrGroups(query) >= 2) return query;
+
+  const artPattern = /\b(?:art|atag|arttag):([^\s()]+)(?=\s|$|\))/gi;
+  const tags: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = artPattern.exec(query)) !== null) {
+    const slug = match[1];
+    if (slug && !tags.some((t) => t.toLowerCase() === `art:${slug.toLowerCase()}`)) {
+      tags.push(`art:${slug}`);
+    }
+  }
+  if (tags.length < 2) return query;
+  let updated = query.replace(artPattern, " ");
+  updated = normalizeWhitespace(updated);
+  updated = `${updated} (${tags.join(" or ")})`.trim();
   return normalizeWhitespace(updated);
 }
 
@@ -1247,6 +1344,7 @@ export function finalizeScryfallQuery(args: {
     tagContext
   );
   normalizedQuery = normalizeArtIntent(naturalQuery, normalizedQuery, tagContext);
+  normalizedQuery = normalizeArtTagsToOrChain(normalizedQuery);
   normalizedQuery = normalizeBounceCounterspellOr(naturalQuery, normalizedQuery);
   normalizedQuery = quoteOracleTextPhrases(normalizedQuery);
   normalizedQuery = normalizeOrphanedOr(normalizedQuery);
