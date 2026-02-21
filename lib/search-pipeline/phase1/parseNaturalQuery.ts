@@ -754,6 +754,41 @@ function detectColorShorthand(
 }
 
 /**
+ * Returns true when the query explicitly asks for cards that *include* or *contain*
+ * certain colors, rather than cards whose color is exactly those colors.
+ * Used to switch from the default c=/id= (exact) to c:/id: (superset).
+ * Examples: "creatures that include white", "cards containing blue and red",
+ *           "cards with at least green", "cards with green or more colors"
+ */
+/**
+ * Returns true when the query explicitly asks for cards that *include* or *contain*
+ * certain colors. Used to switch c= (default exact) → c: (superset).
+ * e.g. "creatures containing blue and red", "cards with at least green"
+ */
+function detectColorInclusionIntent(naturalQuery: string): boolean {
+  return /\b(?:includes?|contain(?:s|ing)?|with\s+at\s+least|at\s+least|or\s+more\s+colou?rs?|including)\b/i.test(
+    naturalQuery
+  );
+}
+
+/**
+ * Returns true when the query explicitly asks for an *exact* color identity.
+ * Used to switch id: (default superset) → id= (exact).
+ * e.g. "exactly esper color identity", "only white color identity", "mono-blue identity"
+ */
+function detectExactColorIdentityIntent(naturalQuery: string): boolean {
+  // "exactly/only/purely/strictly X color identity"
+  if (/\b(?:exact(?:ly)?|only|purely|strictly|just)\s+\w[\w\s-]*(?:colou?r\s+)?identit/i.test(naturalQuery)) {
+    return true;
+  }
+  // "mono-X" or "mono X" — single-color exact identity
+  if (/\bmono[-\s]?(?:white|blue|black|red|green|colou?red?)\b/i.test(naturalQuery)) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Detects single colors that are explicitly negated in the query
  * (e.g. "not blue", "without red", "that are not green").
  * Returns the negated WUBRG letters and a version of the query with those
@@ -817,10 +852,19 @@ function applyOracleIntentHeuristics(
   mustClauses: QueryClause[],
   strippedTerms: string[]
 ): void {
+  const ETB_TERMS = [
+    "etb", "enters", "enter",
+    "enters the battlefield", "enters the field",
+    "enters battlefield", "battlefield", "field",
+    "when it enters", "when they enter", "when ~ enters",
+  ];
+
   const hasEtbIntent =
     /\b(etb|enters?\s+(?:the\s+)?(?:battlefield|field)|when\s+[^.]{0,40}\s+enters?)\b/i.test(
       naturalQuery
     );
+
+  // --- ETB + draw ---
   const hasDrawIntent =
     /\bdraw(?:s|n|ing)?\b/i.test(naturalQuery) ||
     /\bdraw\s+(?:a|one|two|three|\d+)?\s*cards?\b/i.test(naturalQuery);
@@ -828,19 +872,92 @@ function applyOracleIntentHeuristics(
   if (hasEtbIntent && hasDrawIntent) {
     mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
     mustClauses.push({ value: "o:draw", source: "phase1:oracle" });
-    strippedTerms.push(
-      "etb",
-      "enters",
-      "enter",
-      "enters the battlefield",
-      "enters the field",
-      "battlefield",
-      "field",
-      "draw",
-      "draws",
-      "draw cards",
-      "draw a card"
+    strippedTerms.push(...ETB_TERMS, "draw", "draws", "draw cards", "draw a card");
+    return;
+  }
+
+  // --- ETB + mana production ---
+  // e.g. "creatures that give you mana when they enter", "adds mana when it enters"
+  const hasManaProductionIntent =
+    /\b(give[sd]?\s+(?:you\s+)?mana|add[sd]?\s+mana|produce[sd]?\s+mana|generates?\s+mana|mana\s+when|gives?\s+mana)\b/i.test(
+      naturalQuery
     );
+
+  if (hasEtbIntent && hasManaProductionIntent) {
+    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"add"', source: "phase1:oracle" });
+    strippedTerms.push(...ETB_TERMS, "mana", "give", "gives", "add", "adds", "produce", "produces", "generates", "generate");
+    return;
+  }
+
+  // --- ETB + life gain ---
+  // e.g. "creatures that gain life when they enter", "ETB lifegain"
+  const hasLifegainIntent =
+    /\b(gain[sd]?\s+life|life\s+gain|lifegain|heal[sd]?|restore[sd]?\s+life)\b/i.test(
+      naturalQuery
+    );
+
+  if (hasEtbIntent && hasLifegainIntent) {
+    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"gain"', source: "phase1:oracle" });
+    strippedTerms.push(...ETB_TERMS, "gain", "gains", "gain life", "lifegain", "life gain", "heal", "heals");
+    return;
+  }
+
+  // --- ETB + damage ---
+  // e.g. "creatures that deal damage when they enter", "ETB pinger"
+  const hasDamageIntent =
+    /\b(deal[sd]?\s+damage|deal[sd]?\s+\d+\s+damage|ping[sd]?|shock[sd]?|damage\s+when)\b/i.test(
+      naturalQuery
+    );
+
+  if (hasEtbIntent && hasDamageIntent) {
+    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"deals"', source: "phase1:oracle" });
+    strippedTerms.push(...ETB_TERMS, "deal", "deals", "damage", "pings", "ping");
+    return;
+  }
+
+  // --- ETB + token creation ---
+  // e.g. "creatures that create tokens when they enter"
+  const hasTokenIntent =
+    /\b(create[sd]?\s+(?:a\s+|an?\s+)?tokens?|make[sd]?\s+(?:a\s+)?tokens?|tokens?\s+when)\b/i.test(
+      naturalQuery
+    );
+
+  if (hasEtbIntent && hasTokenIntent) {
+    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"create"', source: "phase1:oracle" });
+    strippedTerms.push(...ETB_TERMS, "create", "creates", "token", "tokens", "make", "makes");
+    return;
+  }
+
+  // --- ETB + discard / hand disruption ---
+  // e.g. "creatures that make opponents discard when they enter"
+  const hasDiscardIntent =
+    /\b(discard[sd]?\s+(?:a\s+)?(?:card|their\s+hand)?|hand\s+disruption)\b/i.test(
+      naturalQuery
+    );
+
+  if (hasEtbIntent && hasDiscardIntent) {
+    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: "o:discard", source: "phase1:oracle" });
+    strippedTerms.push(...ETB_TERMS, "discard", "discards", "hand", "disruption");
+    return;
+  }
+
+  // --- ETB + destroy / exile (removal on ETB) ---
+  // e.g. "creatures that destroy a permanent when they enter"
+  const hasDestroyIntent =
+    /\b(destroy[sd]?\s+(?:target\s+|a\s+|an?\s+)?(?:permanent|creature|artifact|enchantment)|exile[sd]?\s+(?:target\s+|a\s+)?(?:permanent|creature|artifact))\b/i.test(
+      naturalQuery
+    );
+
+  if (hasEtbIntent && hasDestroyIntent) {
+    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    strippedTerms.push(...ETB_TERMS);
+    // leave destroy/exile for the AI/strategy resolver to handle more precisely
+    return;
   }
 }
 
@@ -1090,8 +1207,6 @@ async function resolveSynergyFunctionClauses(
   ];
 
   for (const subject of synergySubjects) {
-    strippedTerms.push(subject, `${subject}s`);
-
     const preferred = [`synergy-${subject}`, `${subject}-synergy`].filter((tag) =>
       functionTags.has(tag)
     );
@@ -1101,7 +1216,12 @@ async function resolveSynergyFunctionClauses(
       .sort((a, b) => a.length - b.length);
 
     const selected = [...new Set([...preferred, ...related])].slice(0, 4);
+    // Only strip the subject when we actually found tags for it. If we strip
+    // without emitting a clause the subject disappears entirely and the query
+    // can end up empty. Keeping it lets it fall through to unresolved fragments
+    // for AI resolution.
     if (selected.length === 0) continue;
+    strippedTerms.push(subject, `${subject}s`);
 
     const tagChain = selected.map((tag) => `function:${tag}`);
     groupedTags.push(...tagChain);
@@ -1199,7 +1319,10 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   for (const type of TYPE_TOKENS) {
     const typeForms = getTermForms(type);
     if (synergySubjects.has(type) || semanticRoleTokens.has(type)) {
-      strippedTerms.push(...typeForms);
+      // Don't strip synergy subjects here — let resolveSynergyFunctionClauses
+      // strip them only if tags are found; otherwise they fall through to AI resolution.
+      // Semantic-role tokens (subject/object markers) are noise and can be stripped.
+      if (semanticRoleTokens.has(type)) strippedTerms.push(...typeForms);
       continue;
     }
     if (buildTermFormsPattern(typeForms).test(naturalQuery)) {
@@ -1301,7 +1424,9 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     if (subMatch) {
       const stLower = subMatch.name.toLowerCase();
       if (synergySubjects.has(stLower) || synergySubjects.has(token)) {
-        strippedTerms.push(...getTermForms(stLower));
+        // Don't strip here — resolveSynergyFunctionClauses will strip the subject
+        // only if it finds matching tags. If it finds nothing, the subject must
+        // remain in the text so it reaches the AI resolver as an unresolved fragment.
         continue;
       }
       addSubtypeMatch(stLower, token);
@@ -1383,23 +1508,24 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       strippedTerms.push("commander", "commanders");
     }
     if (commanderColor) {
-      // Use color identity (id:) when the query is about commander format or explicitly
-      // names "color identity". Otherwise use card color (c:) which is what most searches mean
-      // (e.g. "blue creatures" → c:u, not id:u which would be for deck-building).
-      const useIdentityFilter =
-        /\bcolor\s+identity\b/i.test(naturalQuery) ||
-        matchedFormats.includes("commander");
+      // Default to color identity (id:) — it's the safer, broader filter and works well
+      // for both casual searches ("blue creatures") and deck-building contexts.
+      // Only use card color (c:) when the query explicitly references the card's own color
+      // (e.g. "card color is blue", "blue color symbol").
+      const useCardColorExplicitly =
+        /\bcard\s+colou?r\b|\bcolou?r\s+(?:of\s+the\s+card|symbol|pip)\b/i.test(naturalQuery);
+      const useIdentityFilter = !useCardColorExplicitly;
 
-      // Exact match only when the user writes "mono-X" explicitly.
-      const MONO_RE = /\bmono[-\s]?(?:white|blue|black|red|green|colou?red?)\b/i;
-      const isExplicitMono =
-        commanderColor.length === 1 && MONO_RE.test(naturalQuery);
+      // Card color (c): default exact (c=), use superset (c:) only for inclusion language.
+      // Color identity (id): default superset (id:), use exact (id=) only for explicit
+      // "exactly/only/mono-X" language — because id: is the natural fit for commander
+      // compatibility and "what cards have this identity" queries.
+      const isColorInclusionQuery = detectColorInclusionIntent(naturalQuery);
+      const isExactIdentityQuery = detectExactColorIdentityIntent(naturalQuery);
 
       if (useIdentityFilter) {
-        // id= for mono identity, id: for multi
-        const isMonocolor = commanderColor.length === 1;
         mustClauses.push({
-          value: isMonocolor ? `id=${commanderColor}` : `id:${commanderColor}`,
+          value: isExactIdentityQuery ? `id=${commanderColor}` : `id:${commanderColor}`,
           source: "phase1:color",
         });
 
@@ -1409,17 +1535,15 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
         if (colorShorthand) {
           const wordColor = extractColorIdentityFromText(lower);
           if (wordColor && wordColor !== commanderColor) {
-            const wordIsMono = wordColor.length === 1 && MONO_RE.test(naturalQuery);
             mustClauses.push({
-              value: wordIsMono ? `c=${wordColor}` : `c:${wordColor}`,
+              value: isColorInclusionQuery ? `c:${wordColor}` : `c=${wordColor}`,
               source: "phase1:color",
             });
           }
         }
       } else {
-        // c= for explicit mono, c: for everything else
         mustClauses.push({
-          value: isExplicitMono ? `c=${commanderColor}` : `c:${commanderColor}`,
+          value: isColorInclusionQuery ? `c:${commanderColor}` : `c=${commanderColor}`,
           source: "phase1:color",
         });
       }

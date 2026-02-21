@@ -727,7 +727,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     description: "Draw extra cards or generate card advantage",
     detect: /\b(card\s+draw|draw\s+(?:engine|cards?|spells?)|draw(?:ing)?\s+(?:a\s+)?(?:lot|tons?|extra)\b|card\s+advantage)\b/i,
     disqualify: /\b(draw\s+(?:a\s+card\s+)?when\s+.*enters)\b/i,
-    defaultTags: ["draw-engine", "repeatable-draw", "pure-draw", "impulse-draw", "burst-draw"],
+    defaultTags: ["draw-engine", "repeatable-draw", "pure-draw", "impulse-draw", "burst-draw", "card-advantage"],
     strayPattern: /\bfunction:(draw(?:-[a-z0-9-]+)?|repeatable-draw|pure-draw|repeatable-pure-draw|impulse-draw|impulsive-draw|repeatable-impulsive-draw|burst-draw|draw-engine|drawlink|force-draw)\b/gi,
   },
   {

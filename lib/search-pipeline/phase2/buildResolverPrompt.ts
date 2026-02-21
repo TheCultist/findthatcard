@@ -34,6 +34,7 @@ function formatArchetypeMenu(entries: ArchetypeMenuEntry[]): string {
 const FEW_SHOT_EXAMPLES = `Examples:
 {"results":[{"fragment":"make opponents pay to swing at me","archetype":"pillow-fort","qualifier":null,"tags":[],"confidence":0.9}]}
 {"results":[{"fragment":"etb draw effects","archetype":null,"qualifier":null,"tags":["o:enters","o:draw"],"confidence":0.85}]}
+{"results":[{"fragment":"give mana when enter","archetype":null,"qualifier":null,"tags":["o:enters","o:\\"add\\""],"confidence":0.85}]}
 {"results":[{"fragment":"deal damage to creatures","archetype":"damage","qualifier":"creature","tags":[],"confidence":0.9}]}
 {"results":[{"fragment":"cards depicting a forest at night","archetype":null,"qualifier":null,"tags":["art:forest","art:night"],"confidence":0.8}]}
 {"results":[{"fragment":"ways to get lands back from graveyard","archetype":"reanimator","qualifier":"self","tags":[],"confidence":0.7}]}`;
@@ -70,6 +71,7 @@ export function buildResolverPrompt({
     "- max 4 raw tags per fragment. Prefer function: tags from the sample list below.",
     "- confidence: 0.0-1.0. If uncertain, return empty tags with low confidence.",
     "- Do NOT return color identity, format, or type tags already handled by the rest of the query.",
+    "- IMPORTANT: When the fragment describes a SPECIFIC trigger condition (enters, dies, attacks, taps, etc.), use o: oracle text tags to capture that specificity. Do NOT fall back to a broad function: archetype tag that ignores the trigger. Example: 'give mana when enters' → o:enters + o:\"add\", NOT function:ramp.",
     "",
     FEW_SHOT_EXAMPLES,
     "",

@@ -137,7 +137,7 @@ const finalizeCases: FinalizeTestCase[] = [
     naturalQuery: "blue card draw engines",
     rawQuery: "c:u",
     expected:
-      "c:u (function:draw-engine or function:repeatable-draw or function:pure-draw or function:impulse-draw or function:burst-draw)",
+      "c:u (function:draw-engine or function:repeatable-draw or function:pure-draw or function:impulse-draw or function:burst-draw or function:card-advantage)",
   },
   {
     name: "adds infect tags for infect intent",
