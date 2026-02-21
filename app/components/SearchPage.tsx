@@ -266,9 +266,9 @@ export default function SearchPage() {
   const trimmedQuery = query.trim();
 
   return (
-    <main className="min-h-screen px-4 py-10 sm:px-6 lg:px-8">
+    <main className="min-h-screen px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <section className="relative overflow-hidden rounded-3xl border border-gray-800/60 bg-gray-950/80 px-6 py-10 shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_20px_60px_-30px_rgba(15,23,42,0.9)] sm:px-10 sm:py-14">
+        <section className="relative overflow-hidden rounded-2xl border border-gray-800/60 bg-gray-950/80 px-4 py-6 shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_20px_60px_-30px_rgba(15,23,42,0.9)] sm:rounded-3xl sm:px-10 sm:py-14">
           <div className="relative">
             {/* Header */}
             <div className="text-center">
@@ -276,30 +276,34 @@ export default function SearchPage() {
                 href="/"
                 className="inline-flex justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
               >
-                <h1 className="mb-2 text-5xl font-bold tracking-tight text-gray-100 sm:text-6xl">
+                <h1 className="mb-2 text-3xl font-bold tracking-tight text-gray-100 sm:text-5xl lg:text-6xl">
                   Find That Card
                 </h1>
               </Link>
-              <p className="mx-auto max-w-2xl text-xl text-gray-400">
+              <p className="mx-auto max-w-2xl text-base text-gray-400 sm:text-xl">
                 Search Magic: The Gathering cards using natural language.
               </p>
             </div>
 
             {/* Search Form */}
-            <form onSubmit={handleSubmit} className="mt-8">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <form onSubmit={handleSubmit} className="mt-5 sm:mt-8">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <input
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder='Try "white creatures" or "cards with dragons in the art"'
-                  className="flex-1 rounded-xl border border-gray-700/80 bg-gray-950/70 px-4 py-3 text-gray-100 placeholder-gray-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  placeholder='Try "white creatures" or "dragons in the art"'
+                  className="flex-1 rounded-xl border border-gray-700/80 bg-gray-950/70 px-4 py-3.5 text-base text-gray-100 placeholder-gray-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:py-3"
                   disabled={loading}
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                 />
                 <button
                   type="submit"
                   disabled={loading}
-                  className="rounded-xl bg-blue-600 px-7 py-3 font-medium text-white shadow-[0_10px_30px_-16px_rgba(59,130,246,0.8)] transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl bg-blue-600 px-7 py-3.5 font-medium text-white shadow-[0_10px_30px_-16px_rgba(59,130,246,0.8)] transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 sm:py-3"
                 >
                   {loading ? "Searching..." : "Search"}
                 </button>
@@ -308,13 +312,13 @@ export default function SearchPage() {
 
             {/* Example Chips */}
             {exampleQueries.length > 0 && (
-              <div className="mt-6 flex flex-wrap justify-center gap-2">
+              <div className="mt-4 flex flex-wrap justify-center gap-2 sm:mt-6">
                 {exampleQueries.map((example, index) => (
                   <button
                     key={`${example}-${index}`}
                     onClick={() => handleChipClick(example)}
                     disabled={loading}
-                    className="rounded-full border border-gray-700/70 bg-gray-900/60 px-4 py-1.5 text-base text-gray-300 shadow-sm transition-colors hover:border-blue-500/40 hover:bg-gray-800/80 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="rounded-full border border-gray-700/70 bg-gray-900/60 px-4 py-2.5 text-sm text-gray-300 shadow-sm transition-colors hover:border-blue-500/40 hover:bg-gray-800/80 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 sm:text-base"
                   >
                     {example}
                   </button>
@@ -325,9 +329,9 @@ export default function SearchPage() {
         </section>
 
         {/* Static intro content */}
-        <section className="mb-10 mt-10 text-base text-gray-400">
+        <section className="mb-8 mt-6 text-base text-gray-400 sm:mb-10 sm:mt-10">
           <div className="mx-auto max-w-4xl text-center">
-            <p className="text-lg text-gray-200">
+            <p className="text-base text-gray-200 sm:text-lg">
               Find That Card is a Magic: The Gathering search tool that lets you describe cards in
               plain language.
             </p>
@@ -338,37 +342,37 @@ export default function SearchPage() {
               </Link>
               .
             </p>
-            <div className="mt-6 grid grid-cols-1 gap-4 text-center sm:grid-cols-2 lg:grid-cols-3">
-              <div className="rounded-2xl border border-gray-800/80 bg-gray-900/40 px-6 py-6 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
-                  <ShieldCheckIcon className="h-6 w-6" aria-hidden="true" />
+            <div className="mt-4 grid grid-cols-1 gap-3 text-center sm:mt-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+              <div className="rounded-xl border border-gray-800/80 bg-gray-900/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400 sm:mb-4 sm:h-12 sm:w-12">
+                  <ShieldCheckIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
                 </div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
                   Card intent
                 </p>
-                <p className="mt-2 text-base text-gray-300">
+                <p className="mt-1.5 text-sm text-gray-300 sm:mt-2 sm:text-base">
                   Removal, ramp, tutors, tokens, or any role you can describe.
                 </p>
               </div>
-              <div className="rounded-2xl border border-gray-800/80 bg-gray-900/40 px-6 py-6 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
-                  <PaintBrushIcon className="h-6 w-6" aria-hidden="true" />
+              <div className="rounded-xl border border-gray-800/80 bg-gray-900/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400 sm:mb-4 sm:h-12 sm:w-12">
+                  <PaintBrushIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
                 </div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
                   Art and flavor
                 </p>
-                <p className="mt-2 text-base text-gray-300">
+                <p className="mt-1.5 text-sm text-gray-300 sm:mt-2 sm:text-base">
                   Dragons, angels, swords, landscapes, or other artwork subjects.
                 </p>
               </div>
-              <div className="rounded-2xl border border-gray-800/80 bg-gray-900/40 px-6 py-6 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400">
-                  <QueueListIcon className="h-6 w-6" aria-hidden="true" />
+              <div className="rounded-xl border border-gray-800/80 bg-gray-900/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400 sm:mb-4 sm:h-12 sm:w-12">
+                  <QueueListIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
                 </div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-gray-500">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
                   Formats and rules
                 </p>
-                <p className="mt-2 text-base text-gray-300">
+                <p className="mt-1.5 text-sm text-gray-300 sm:mt-2 sm:text-base">
                   Commander, Modern, Pauper, plus colors, keywords, and mechanics.
                 </p>
               </div>
@@ -403,7 +407,7 @@ export default function SearchPage() {
         {(editableQuery || sourceQuery || results) && !loading && (
           <div id="query-display" className="relative z-50 mb-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-900 px-4 py-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20">
+              <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-900 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 sm:px-4 sm:py-2">
                 <span className="text-sm text-gray-500 whitespace-nowrap">Query:</span>
                 <div className="relative flex-1 min-w-0">
                   <input
@@ -419,7 +423,7 @@ export default function SearchPage() {
                     }}
                     onFocus={handleEditableQueryFocus}
                     onBlur={handleEditableQueryBlur}
-                    className={`w-full bg-transparent text-base text-blue-400 focus:outline-none font-mono ${
+                    className={`w-full bg-transparent text-sm text-blue-400 focus:outline-none font-mono sm:text-base ${
                       isEditingQuery
                         ? "relative z-10 opacity-100"
                         : "absolute inset-0 opacity-0 pointer-events-none"
@@ -446,7 +450,7 @@ export default function SearchPage() {
                 <button
                   onClick={handleEditableQuerySearch}
                   disabled={loading || !editableQuery.trim()}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-base font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none sm:py-2 sm:text-base"
                 >
                   Search
                 </button>
@@ -454,9 +458,10 @@ export default function SearchPage() {
                   href={`https://scryfall.com/search?q=${encodeURIComponent(editableQuery)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-base text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-700"
+                  className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-center text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-700 sm:flex-none sm:py-2 sm:text-base"
                 >
-                  View on Scryfall
+                  <span className="sm:hidden">Scryfall</span>
+                  <span className="hidden sm:inline">View on Scryfall</span>
                 </a>
               </div>
             </div>
@@ -489,12 +494,12 @@ export default function SearchPage() {
         {/* Results */}
         {results && (
           <div id="results-section" className="mb-10">
-            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-4 py-3 text-base text-gray-300 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-3 py-2.5 text-sm text-gray-300 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] sm:mb-5 sm:gap-3 sm:px-4 sm:py-3 sm:text-base">
               <div>
                 Found {results.total.toLocaleString()} card{results.total !== 1 ? "s" : ""}
                 {results.total > 0 && (
-                  <span className="ml-2">
-                    (Page {results.page}, showing {results.cards.length} card{results.cards.length !== 1 ? "s" : ""})
+                  <span className="ml-1 text-gray-500 sm:ml-2 sm:text-gray-300">
+                    (p.{results.page}, {results.cards.length} shown)
                   </span>
                 )}
               </div>
@@ -506,7 +511,7 @@ export default function SearchPage() {
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
                   {(() => {
                     const items: React.ReactNode[] = [];
                     const cardCount = results.cards.length;
@@ -540,19 +545,19 @@ export default function SearchPage() {
 
                 {/* Pagination Controls */}
                 {(results.has_more || results.page > 1) && (
-                  <div className="mt-8 flex flex-col items-center justify-center gap-4">
-                    <div className="flex flex-wrap items-center justify-center gap-4 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-4 py-3 text-base text-gray-300 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
+                  <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:mt-8 sm:gap-4">
+                    <div className="flex w-full items-center justify-center gap-3 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-3 py-3 text-base text-gray-300 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] sm:w-auto sm:gap-4 sm:px-4">
                       <button
                         onClick={() => handlePageChange(results.page - 1)}
                         disabled={loading || results.page === 1}
-                        className="rounded-lg border border-gray-700 bg-gray-950/60 px-4 py-2 text-base font-medium text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="min-h-[44px] rounded-lg border border-gray-700 bg-gray-950/60 px-3 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:px-4 sm:text-base"
                       >
                         Previous
                       </button>
-                      <span className="text-base text-gray-400">
-                        Page {results.page} of {Math.ceil(results.total / results.per_page)}
+                      <span className="text-sm text-gray-400 sm:text-base">
+                        {results.page} / {Math.ceil(results.total / results.per_page)}
                       </span>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="hidden flex-wrap items-center gap-2 sm:flex">
                         {(() => {
                           const totalPages = Math.max(
                             1,
@@ -585,14 +590,14 @@ export default function SearchPage() {
                       <button
                         onClick={() => handlePageChange(results.page + 1)}
                         disabled={loading || !results.has_more}
-                        className="rounded-lg border border-gray-700 bg-gray-950/60 px-4 py-2 text-base font-medium text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="min-h-[44px] rounded-lg border border-gray-700 bg-gray-950/60 px-3 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:px-4 sm:text-base"
                       >
                         Next
                       </button>
                     </div>
                     {Math.ceil(results.total / results.per_page) >= 5 && (
-                      <div className="flex items-center gap-2 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-4 py-3 text-base text-gray-300">
-                        <label htmlFor="page-jump" className="text-sm text-gray-500">
+                      <div className="flex items-center gap-2 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-3 py-2.5 text-sm text-gray-300 sm:px-4 sm:py-3 sm:text-base">
+                        <label htmlFor="page-jump" className="text-xs text-gray-500 sm:text-sm">
                           Jump to
                         </label>
                         <input
@@ -608,13 +613,14 @@ export default function SearchPage() {
                               handleJumpToPage();
                             }
                           }}
-                          className="w-20 rounded-lg border border-gray-700 bg-gray-950/60 px-3 py-2 text-base text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                          className="w-16 rounded-lg border border-gray-700 bg-gray-950/60 px-2 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 sm:w-20 sm:px-3 sm:text-base"
                           disabled={loading}
+                          inputMode="numeric"
                         />
                         <button
                           onClick={handleJumpToPage}
                           disabled={loading}
-                          className="rounded-lg border border-gray-700 bg-gray-950/60 px-3 py-2 text-base text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="min-h-[44px] rounded-lg border border-gray-700 bg-gray-950/60 px-3 py-2 text-sm text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:text-base"
                         >
                           Go
                         </button>
@@ -628,7 +634,7 @@ export default function SearchPage() {
         )}
 
         {/* Footer */}
-        <footer className="mt-16 border-t border-gray-800 pt-8 pb-24 text-center text-sm text-gray-500">
+        <footer className="mt-10 border-t border-gray-800 pt-6 pb-24 text-center text-xs text-gray-500 sm:mt-16 sm:pt-8 sm:text-sm">
           <p>
             Unofficial fan content. Card data and images from{" "}
             <a

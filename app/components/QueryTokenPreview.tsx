@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getTokenMetadata, tokenizeQuery, TokenMetadata } from "@/lib/query-tokens";
 
 type QueryTokenPreviewProps = {
@@ -34,6 +34,24 @@ export default function QueryTokenPreview({
   className = "",
 }: QueryTokenPreviewProps) {
   const [setNames, setSetNames] = useState<Record<string, string>>({});
+  const [activeTooltip, setActiveTooltip] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (activeTooltip === null) return;
+
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setActiveTooltip(null);
+      }
+    };
+    document.addEventListener("touchstart", handleOutsideClick);
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("touchstart", handleOutsideClick);
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [activeTooltip]);
   const tokenMetadata = useMemo(
     () =>
       scryfallQuery
@@ -95,8 +113,14 @@ export default function QueryTokenPreview({
 
   const isEmpty = tokenMetadata.length === 0;
 
+  const handleTokenTap = (index: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setActiveTooltip(activeTooltip === index ? null : index);
+  };
+
   const tokens = (
-    <div className={`isolate flex flex-wrap gap-2 font-mono text-sm text-blue-200 ${className}`}>
+    <div ref={containerRef} className={`isolate flex flex-wrap gap-1.5 font-mono text-xs text-blue-200 sm:gap-2 sm:text-sm ${className}`}>
       {isEmpty ? (
         <span className="rounded border border-gray-800/70 bg-gray-900/60 px-2 py-1 text-xs text-gray-500">
           No query tokens yet.
@@ -105,12 +129,15 @@ export default function QueryTokenPreview({
         tokenMetadata.map((token, index) => (
           <span
             key={`${token.raw}-${index}`}
-            className={`group relative z-0 inline-flex items-center cursor-help rounded border bg-gray-900/70 px-2 py-1 leading-none hover:z-30 ${getTokenClassName(
+            onClick={(e) => handleTokenTap(index, e)}
+            className={`group relative z-0 inline-flex items-center cursor-help rounded border bg-gray-900/70 px-1.5 py-1 leading-none hover:z-30 sm:px-2 ${getTokenClassName(
               token
             )}`}
           >
             {token.raw}
-            <span className="pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-80 -translate-x-1/2 rounded-xl border border-gray-700/70 bg-gray-950/95 px-4 py-3 text-xs text-gray-200 opacity-0 shadow-xl transition duration-200 group-hover:opacity-100">
+            <span className={`pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-64 -translate-x-1/2 rounded-xl border border-gray-700/70 bg-gray-950/95 px-3 py-2.5 text-xs text-gray-200 shadow-xl transition duration-200 sm:w-80 sm:px-4 sm:py-3 ${
+              activeTooltip === index ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            }`}>
               <div className="text-sm font-semibold text-white">{token.title}</div>
               <div className="mt-2 text-gray-300">{token.description}</div>
               {token.type === "field" &&

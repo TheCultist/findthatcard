@@ -8,12 +8,19 @@
     --foreground: 210 40% 98%;
   }
 
+  html {
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   * {
     @apply border-gray-800;
   }
 
   body {
     @apply bg-gray-950 text-gray-100;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
   }
 }
 
