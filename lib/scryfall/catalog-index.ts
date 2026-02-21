@@ -170,11 +170,16 @@ export function matchArtistName(text: string): { name: string; matchedText: stri
 const SUBTYPE_FUZZY_BLOCKLIST = new Set([
   // "board" → "boars" (Boar creature type, levenshtein 1)
   "board", "boards",
+  // "other" / "others" → "otter" / "otters" (Otter creature type, levenshtein 1)
+  "other", "others",
   // "wipe" / "wipes" — MTG slang for mass removal, not a subtype
   "wipe", "wipes",
   // Other common English words adjacent to creature-type names
   "beards", "bards", "beats", "bears", "gears", "fears", "tears", "years",
   "forms", "forts", "words", "lords", "cords", "birds",
+  // Common relational / grammar words that sit within edit-distance of creature types
+  "target", "player", "players", "spell", "spells", "effect", "effects",
+  "power", "token", "tokens", "counter", "counters", "trigger", "triggers",
 ]);
 
 export function fuzzyMatchSubtype(

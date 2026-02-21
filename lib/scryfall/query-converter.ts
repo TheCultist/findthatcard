@@ -781,6 +781,30 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     defaultTags: ["prevent-attack", "prevent-attacker", "tax-attack"],
     strayPattern: /\bfunction:(prevent-attack(?:er)?|tax-attack)\b/gi,
   },
+  {
+    name: "tutor",
+    description: "Search, fetch, or find specific cards from your library or deck",
+    detect: /\b(tutor(?:s|ed|ing)?|(?:acts?|works?|functions?)\s+like\s+a\s+tutor|fetch(?:es|ed|ing)?\s+(?:a\s+)?card|find\s+(?:a\s+)?card\s+(?:from|in)\s+(?:your\s+)?(?:library|deck))\b/i,
+    defaultTags: ["tutor", "tutor-to-hand"],
+    qualifiers: [
+      {
+        name: "creature",
+        detect: /\b(?:tutor|fetch|find)\s+(?:a\s+|for\s+a\s+)?creatures?\b/i,
+        tags: ["tutor", "tutor-creature", "tutor-to-hand"],
+      },
+      {
+        name: "land",
+        detect: /\b(?:tutor|fetch|find)\s+(?:a\s+|for\s+a\s+)?lands?\b/i,
+        tags: ["tutor", "tutor-land", "tutor-to-hand"],
+      },
+      {
+        name: "artifact",
+        detect: /\b(?:tutor|fetch|find)\s+(?:a\s+|for\s+a\s+)?artifacts?\b/i,
+        tags: ["tutor", "tutor-artifact", "tutor-to-hand"],
+      },
+    ],
+    strayPattern: /\bfunction:(tutor(?:-[a-z0-9-]+)?|hate-tutor)\b/gi,
+  },
 ];
 
 function normalizeArchetypeIntents(

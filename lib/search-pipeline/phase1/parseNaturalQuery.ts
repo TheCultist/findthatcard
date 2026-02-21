@@ -144,6 +144,8 @@ const STOPWORDS = new Set([
   "legal",
   "illegal",
   "playable",
+  "other",
+  "others",
   "both",
   "also",
   "any",
@@ -961,6 +963,82 @@ function applyOracleIntentHeuristics(
   }
 }
 
+/**
+ * Maps common in-game actions a user might express aversion to, into -o: oracle
+ * text exclusions. e.g. "I hate shuffling" → -o:shuffle, "without targeting" → -o:target
+ */
+const AVERSION_ORACLE_INTENTS: Array<{
+  detect: RegExp;
+  oracleQuery: string;
+  /** Keywords to exclude via mustNotClauses — for cases where shuffling/triggering only appears in reminder text */
+  keywordExclusions?: string[];
+  strip: string[];
+}> = [
+  {
+    detect: /\b(?:i\s+)?(?:hate|avoid|dislike|don'?t\s+(?:want|like)|without|no)\s+(?:having\s+to\s+|needing\s+to\s+|to\s+)?shuffl(?:e|ing|ed)\b/i,
+    oracleQuery: "shuffle",
+    // cycling (landcycling variants) and transmute both involve shuffling only in reminder text,
+    // which Scryfall's o: filter does not search, so we must exclude them by keyword
+    keywordExclusions: ["cycling", "transmute"],
+    strip: ["shuffle", "shuffling", "i hate", "hate", "avoid", "dislike", "without", "having to"],
+  },
+  {
+    detect: /\b(?:i\s+)?(?:hate|avoid|dislike|don'?t\s+(?:want|like)|without|no)\s+(?:having\s+to\s+|to\s+)?target(?:ing)?\b/i,
+    oracleQuery: "target",
+    strip: ["target", "targeting", "hate", "avoid", "dislike"],
+  },
+  {
+    detect: /\b(?:i\s+)?(?:hate|avoid|dislike|don'?t\s+(?:want|like)|without|no)\s+(?:having\s+to\s+|to\s+)?discard(?:ing)?\b/i,
+    oracleQuery: "discard",
+    strip: ["discard", "discarding", "hate", "avoid", "dislike"],
+  },
+  {
+    detect: /\b(?:i\s+)?(?:hate|avoid|dislike|don'?t\s+(?:want|like)|without|no)\s+(?:(?:having\s+to\s+|to\s+)?flip(?:ping)?\s+(?:a\s+)?coins?|coin\s+flip(?:s|ping)?)\b/i,
+    oracleQuery: '"flip a coin"',
+    strip: ["flip", "flipping", "coin", "coins", "coin flip", "coin flips", "hate", "avoid"],
+  },
+  {
+    detect: /\b(?:i\s+)?(?:hate|avoid|dislike|don'?t\s+(?:want|like)|without|no)\s+(?:having\s+to\s+|to\s+)?roll(?:ing)?\s*(?:dice|a\s+die|d\d+)?\b/i,
+    oracleQuery: '"roll"',
+    strip: ["roll", "rolling", "dice", "die", "hate", "avoid"],
+  },
+  {
+    detect: /\b(?:i\s+)?(?:hate|avoid|dislike|don'?t\s+(?:want|like)|without|no)\s+(?:having\s+to\s+|to\s+)?sacrific(?:e|ing|ed)\b/i,
+    oracleQuery: "sacrifice",
+    strip: ["sacrifice", "sacrificing", "hate", "avoid", "dislike"],
+  },
+  {
+    detect: /\b(?:i\s+)?(?:hate|avoid|dislike|don'?t\s+(?:want|like)|without|no)\s+(?:having\s+to\s+|to\s+)?paying?\s+life\b/i,
+    oracleQuery: '"pay life"',
+    strip: ["pay", "paying", "life", "hate", "avoid"],
+  },
+  {
+    detect: /\b(?:i\s+)?(?:hate|avoid|dislike|don'?t\s+(?:want|like)|without|no)\s+(?:having\s+to\s+|to\s+)?mill(?:ing)?\b/i,
+    oracleQuery: "mill",
+    strip: ["mill", "milling", "hate", "avoid", "dislike"],
+  },
+];
+
+function resolveAversionOracleIntents(naturalQuery: string): {
+  mustNotClauses: QueryClause[];
+  strippedTerms: string[];
+} {
+  const mustNotClauses: QueryClause[] = [];
+  const strippedTerms: string[] = [];
+
+  for (const intent of AVERSION_ORACLE_INTENTS) {
+    if (intent.detect.test(naturalQuery)) {
+      mustNotClauses.push({ value: `o:${intent.oracleQuery}`, source: "phase1:oracle" });
+      for (const kw of intent.keywordExclusions ?? []) {
+        mustNotClauses.push({ value: `kw:${kw}`, source: "phase1:keyword" });
+      }
+      strippedTerms.push(...intent.strip);
+    }
+  }
+
+  return { mustNotClauses, strippedTerms };
+}
+
 function applyFuzzyKeywordCorrections(
   naturalQuery: string,
   keywordList: string[]
@@ -1623,6 +1701,10 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   strippedTerms.push(...synergyResult.strippedTerms);
 
   applyOracleIntentHeuristics(naturalQuery, mustClauses, strippedTerms);
+
+  const aversionResult = resolveAversionOracleIntents(naturalQuery);
+  mustNotClauses.push(...aversionResult.mustNotClauses);
+  strippedTerms.push(...aversionResult.strippedTerms);
 
   const { unresolvedFragments, noiseTokens } = buildUnresolvedFragments(
     naturalQuery,

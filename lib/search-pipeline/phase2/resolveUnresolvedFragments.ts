@@ -179,6 +179,16 @@ function isResolvedByArchetypeOrTags(entry: ResolvedFragment): boolean {
   return (entry.archetype != null && entry.archetype.length > 0) || entry.tags.length > 0;
 }
 
+function maskStrippedTerms(query: string, strippedTerms: string[]): string {
+  let masked = query;
+  for (const term of strippedTerms) {
+    if (!term) continue;
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    masked = masked.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ");
+  }
+  return masked.replace(/\s{2,}/g, " ").trim();
+}
+
 export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<Phase2Result> {
   if (ir.intent === "direct-scryfall" || ir.unresolvedFragments.length === 0) {
     return { ir, batchCalls: 0, sequentialCalls: 0 };
@@ -186,6 +196,7 @@ export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<
 
   const tagContext = await getTaggerTagContext(ir.naturalQuery);
   const grouped = groupByCategory(ir.unresolvedFragments);
+  const maskedQuery = maskStrippedTerms(ir.naturalQuery, ir.debug.strippedTerms);
 
   let batchCalls = 0;
   let sequentialCalls = 0;
@@ -197,7 +208,7 @@ export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<
       const resolved = await runCategoryBatch({
         category,
         fragments,
-        naturalQuery: ir.naturalQuery,
+        naturalQuery: maskedQuery,
         availableArtTags: tagContext.art,
         availableFunctionTags: tagContext.function,
       });
@@ -220,7 +231,7 @@ export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<
     try {
       fallbackResults = await runSequentialFallback({
         unresolved: leftovers,
-        naturalQuery: ir.naturalQuery,
+        naturalQuery: maskedQuery,
         availableArtTags: tagContext.art,
         availableFunctionTags: tagContext.function,
       });

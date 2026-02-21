@@ -72,6 +72,7 @@ export function buildResolverPrompt({
     "- confidence: 0.0-1.0. If uncertain, return empty tags with low confidence.",
     "- Do NOT return color identity, format, or type tags already handled by the rest of the query.",
     "- IMPORTANT: When the fragment describes a SPECIFIC trigger condition (enters, dies, attacks, taps, etc.), use o: oracle text tags to capture that specificity. Do NOT fall back to a broad function: archetype tag that ignores the trigger. Example: 'give mana when enters' → o:enters + o:\"add\", NOT function:ramp.",
+    "- IMPORTANT: When you emit a function: tag, do NOT also add o: oracle text for the same intent. The function: tag already covers that search space and adding oracle text will over-restrict the results to zero.",
     "",
     FEW_SHOT_EXAMPLES,
     "",
