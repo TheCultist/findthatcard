@@ -36,6 +36,17 @@ export const STRATEGY_ORACLETAGS: StrategyOracletagGroup[] = [
     aliases: ["plus one counters", "plus-one counters", "pp-counters"],
   },
   {
+    strategy: "Board Wipe",
+    oracletags: ["oracletag:board-wipe"],
+    aliases: [
+      "board wipes", "boardwipe", "boardwipes",
+      "mass removal", "sweeper", "sweepers",
+      "wrath", "wraths", "wrath effect", "wrath effects",
+      "wrath of god effect", "wrath of god effects",
+      "mass destroy", "mass exile", "mass bounce",
+    ],
+  },
+  {
     strategy: "Control",
     oracletags: [
       "oracletag:counterspell",

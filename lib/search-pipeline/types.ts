@@ -10,6 +10,7 @@ export type ClauseSource =
   | "phase1:keyword"
   | "phase1:strategy"
   | "phase1:oracle"
+  | "phase1:stat"
   | "phase1:direct"
   | "phase2:resolver"
   | "phase3:sanitize";

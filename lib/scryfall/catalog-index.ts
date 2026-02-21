@@ -163,12 +163,27 @@ export function matchArtistName(text: string): { name: string; matchedText: stri
   return null;
 }
 
+/**
+ * Common English words that are close (levenshtein ≤ 1) to MTG subtype names or their
+ * plurals but should never be treated as subtypes. Checked before fuzzy subtype matching.
+ */
+const SUBTYPE_FUZZY_BLOCKLIST = new Set([
+  // "board" → "boars" (Boar creature type, levenshtein 1)
+  "board", "boards",
+  // "wipe" / "wipes" — MTG slang for mass removal, not a subtype
+  "wipe", "wipes",
+  // Other common English words adjacent to creature-type names
+  "beards", "bards", "beats", "bears", "gears", "fears", "tears", "years",
+  "forms", "forts", "words", "lords", "cords", "birds",
+]);
+
 export function fuzzyMatchSubtype(
   token: string,
   distanceFn: (a: string, b: string) => boolean
 ): SubtypeMatch | null {
   if (!subtypeIndex) return null;
   const lower = token.toLowerCase();
+  if (SUBTYPE_FUZZY_BLOCKLIST.has(lower)) return null;
   for (const [form, entry] of subtypeIndex.entries()) {
     if (form.includes(" ") || form.includes("-")) continue;
     if (distanceFn(lower, form)) return entry;

@@ -176,6 +176,196 @@ const STOPWORDS = new Set([
   "vs",
 ]);
 
+const WORD_TO_NUMBER: Record<string, number> = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5,
+  six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12,
+};
+
+const COMPARISON_OP_PATTERNS: Array<[RegExp, string]> = [
+  [/less\s+than|fewer\s+than|below/i, "<"],
+  [/more\s+than|greater\s+than|above|higher\s+than/i, ">"],
+  [/at\s+most|at\s+max(?:imum)?|or\s+(?:less|fewer)|up\s+to|no\s+more\s+than/i, "<="],
+  [/at\s+least|at\s+min(?:imum)?|or\s+(?:more|greater)|no\s+less\s+than/i, ">="],
+  [/equal(?:\s+to)?|exactly/i, "="],
+];
+
+function textToComparisonOp(text: string): string | null {
+  for (const [re, op] of COMPARISON_OP_PATTERNS) {
+    if (re.test(text)) return op;
+  }
+  return null;
+}
+
+function wordOrDigitToNumber(s: string): number | null {
+  const t = s.trim().toLowerCase();
+  if (/^\d+$/.test(t)) return parseInt(t, 10);
+  return WORD_TO_NUMBER[t] ?? null;
+}
+
+/**
+ * Parses natural language numeric stat comparisons (mana value, power, toughness, loyalty)
+ * and returns the corresponding Scryfall filter clauses.
+ * Examples: "mana value less than 2" → mv<2, "3-drop" → mv=3, "power greater than 4" → pow>4
+ */
+function resolveNumericStatFilters(naturalQuery: string): {
+  clauses: QueryClause[];
+  strippedTerms: string[];
+} {
+  const clauses: QueryClause[] = [];
+  const strippedTerms: string[] = [];
+  const lower = naturalQuery.toLowerCase();
+
+  const NUM_PAT = `(?:\\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)`;
+  const OP_PAT = [
+    `less\\s+than`, `fewer\\s+than`, `below`,
+    `more\\s+than`, `greater\\s+than`, `above`, `higher\\s+than`,
+    `at\\s+most`, `at\\s+max(?:imum)?`, `or\\s+(?:less|fewer)`, `up\\s+to`, `no\\s+more\\s+than`,
+    `at\\s+least`, `at\\s+min(?:imum)?`, `or\\s+(?:more|greater)`, `no\\s+less\\s+than`,
+    `equal(?:\\s+to)?`, `exactly`,
+  ].join("|");
+
+  const emitIfNew = (field: string, op: string, num: number, matchedText: string) => {
+    const clauseValue = `${field}${op}${num}`;
+    if (!clauses.some((c) => c.value === clauseValue)) {
+      clauses.push({ value: clauseValue, source: "phase1:stat" });
+    }
+    strippedTerms.push(matchedText.trim());
+  };
+
+  const MV_ALIASES = `(?:mana\\s+value|converted\\s+mana\\s+cost|cmc|mv)`;
+
+  // "[mv alias] [op] [num]" — e.g. "mana value less than 2", "cmc at most 6"
+  const mvOpNum = new RegExp(`\\b(${MV_ALIASES})\\s+(?:of\\s+)?(${OP_PAT})\\s+(${NUM_PAT})\\b`, "gi");
+  for (const m of lower.matchAll(mvOpNum)) {
+    const op = textToComparisonOp(m[2] ?? "");
+    const num = wordOrDigitToNumber(m[3] ?? "");
+    if (op !== null && num !== null) emitIfNew("mv", op, num, m[0]);
+  }
+
+  // "[mv alias] of [num]" or "[mv alias] [num]" — e.g. "mana value of 3", "mana value 3"
+  const mvEqNum = new RegExp(`\\b(${MV_ALIASES})\\s+(?:of\\s+|equal\\s+to\\s+|exactly\\s+)?(${NUM_PAT})\\b`, "gi");
+  for (const m of lower.matchAll(mvEqNum)) {
+    const num = wordOrDigitToNumber(m[2] ?? "");
+    if (num !== null && !strippedTerms.some((t) => t.includes(m[0]))) {
+      emitIfNew("mv", "=", num, m[0]);
+    }
+  }
+
+  // "[num]-drop" or "[num] drop" — e.g. "2-drop", "three drop", "three-drop"
+  const dropPat = new RegExp(`\\b(${NUM_PAT})[-\\s]drops?\\b`, "gi");
+  for (const m of lower.matchAll(dropPat)) {
+    const num = wordOrDigitToNumber(m[1] ?? "");
+    if (num !== null && num <= 12) emitIfNew("mv", "=", num, m[0]);
+  }
+
+  // "costs [op] [num] [mana]" — e.g. "costs less than 2 mana"
+  const costsOpNum = new RegExp(`\\b(?:costs?|costing)\\s+(${OP_PAT})\\s+(${NUM_PAT})(?:\\s+mana)?\\b`, "gi");
+  for (const m of lower.matchAll(costsOpNum)) {
+    const op = textToComparisonOp(m[1] ?? "");
+    const num = wordOrDigitToNumber(m[2] ?? "");
+    if (op !== null && num !== null) emitIfNew("mv", op, num, m[0]);
+  }
+
+  // "costs [num] mana" — e.g. "costs 3 mana", "costing 2"
+  const costsNum = new RegExp(`\\b(?:costs?|costing)\\s+(${NUM_PAT})(?:\\s+mana)?\\b`, "gi");
+  for (const m of lower.matchAll(costsNum)) {
+    const num = wordOrDigitToNumber(m[1] ?? "");
+    if (num !== null && !strippedTerms.some((t) => t.includes(m[0]))) {
+      emitIfNew("mv", "=", num, m[0]);
+    }
+  }
+
+  // "[num] mana or less/more" — e.g. "2 mana or less", "3 or fewer mana"
+  const numManaOp = new RegExp(`\\b(${NUM_PAT})(?:\\s+mana)?\\s+(or\\s+(?:less|fewer|more|greater))\\b`, "gi");
+  for (const m of lower.matchAll(numManaOp)) {
+    const num = wordOrDigitToNumber(m[1] ?? "");
+    const op = textToComparisonOp(m[2] ?? "");
+    if (num !== null && op !== null) emitIfNew("mv", op, num, m[0]);
+  }
+
+  // "[op] [num] mana" standalone — e.g. "less than 2 mana", "at most 3 mana"
+  const opNumMana = new RegExp(`\\b(${OP_PAT})\\s+(${NUM_PAT})\\s+mana\\b`, "gi");
+  for (const m of lower.matchAll(opNumMana)) {
+    const op = textToComparisonOp(m[1] ?? "");
+    const num = wordOrDigitToNumber(m[2] ?? "");
+    if (op !== null && num !== null && !strippedTerms.some((t) => t.includes(m[0]))) {
+      emitIfNew("mv", op, num, m[0]);
+    }
+  }
+
+  // Power: "[power/pow] [op] [num]" and "[num] power"
+  const POW_ALIASES = `(?:power|pow)`;
+  const powOpNum = new RegExp(`\\b(${POW_ALIASES})\\s+(?:of\\s+)?(${OP_PAT})\\s+(${NUM_PAT})\\b`, "gi");
+  for (const m of lower.matchAll(powOpNum)) {
+    const op = textToComparisonOp(m[2] ?? "");
+    const num = wordOrDigitToNumber(m[3] ?? "");
+    if (op !== null && num !== null) emitIfNew("pow", op, num, m[0]);
+  }
+  const powEqNum = new RegExp(`\\b(${POW_ALIASES})\\s+(?:of\\s+|equal\\s+to\\s+|exactly\\s+)?(${NUM_PAT})\\b`, "gi");
+  for (const m of lower.matchAll(powEqNum)) {
+    const num = wordOrDigitToNumber(m[2] ?? "");
+    if (num !== null && !strippedTerms.some((t) => t.includes(m[0]))) {
+      emitIfNew("pow", "=", num, m[0]);
+    }
+  }
+  const numPow = new RegExp(`\\b(${NUM_PAT})\\s+power\\b`, "gi");
+  for (const m of lower.matchAll(numPow)) {
+    const num = wordOrDigitToNumber(m[1] ?? "");
+    if (num !== null && !strippedTerms.some((t) => t.includes(m[0]))) {
+      emitIfNew("pow", "=", num, m[0]);
+    }
+  }
+
+  // Toughness: "[toughness/tou] [op] [num]" and "[num] toughness"
+  const TOU_ALIASES = `(?:toughness|tou)`;
+  const touOpNum = new RegExp(`\\b(${TOU_ALIASES})\\s+(?:of\\s+)?(${OP_PAT})\\s+(${NUM_PAT})\\b`, "gi");
+  for (const m of lower.matchAll(touOpNum)) {
+    const op = textToComparisonOp(m[2] ?? "");
+    const num = wordOrDigitToNumber(m[3] ?? "");
+    if (op !== null && num !== null) emitIfNew("tou", op, num, m[0]);
+  }
+  const touEqNum = new RegExp(`\\b(${TOU_ALIASES})\\s+(?:of\\s+|equal\\s+to\\s+|exactly\\s+)?(${NUM_PAT})\\b`, "gi");
+  for (const m of lower.matchAll(touEqNum)) {
+    const num = wordOrDigitToNumber(m[2] ?? "");
+    if (num !== null && !strippedTerms.some((t) => t.includes(m[0]))) {
+      emitIfNew("tou", "=", num, m[0]);
+    }
+  }
+  const numTou = new RegExp(`\\b(${NUM_PAT})\\s+toughness\\b`, "gi");
+  for (const m of lower.matchAll(numTou)) {
+    const num = wordOrDigitToNumber(m[1] ?? "");
+    if (num !== null && !strippedTerms.some((t) => t.includes(m[0]))) {
+      emitIfNew("tou", "=", num, m[0]);
+    }
+  }
+
+  // Loyalty: "[loyalty/loy] [op] [num]" and "[num] loyalty"
+  const LOY_ALIASES = `(?:loyalty|loy)`;
+  const loyOpNum = new RegExp(`\\b(${LOY_ALIASES})\\s+(?:of\\s+)?(${OP_PAT})\\s+(${NUM_PAT})\\b`, "gi");
+  for (const m of lower.matchAll(loyOpNum)) {
+    const op = textToComparisonOp(m[2] ?? "");
+    const num = wordOrDigitToNumber(m[3] ?? "");
+    if (op !== null && num !== null) emitIfNew("loy", op, num, m[0]);
+  }
+  const loyEqNum = new RegExp(`\\b(${LOY_ALIASES})\\s+(?:of\\s+|equal\\s+to\\s+|exactly\\s+)?(${NUM_PAT})\\b`, "gi");
+  for (const m of lower.matchAll(loyEqNum)) {
+    const num = wordOrDigitToNumber(m[2] ?? "");
+    if (num !== null && !strippedTerms.some((t) => t.includes(m[0]))) {
+      emitIfNew("loy", "=", num, m[0]);
+    }
+  }
+  const numLoy = new RegExp(`\\b(${NUM_PAT})\\s+loyalty\\b`, "gi");
+  for (const m of lower.matchAll(numLoy)) {
+    const num = wordOrDigitToNumber(m[1] ?? "");
+    if (num !== null && !strippedTerms.some((t) => t.includes(m[0]))) {
+      emitIfNew("loy", "=", num, m[0]);
+    }
+  }
+
+  return { clauses, strippedTerms };
+}
+
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s{2,}/g, " ").trim();
 }
@@ -563,6 +753,35 @@ function detectColorShorthand(
   return null;
 }
 
+/**
+ * Detects single colors that are explicitly negated in the query
+ * (e.g. "not blue", "without red", "that are not green").
+ * Returns the negated WUBRG letters and a version of the query with those
+ * color names blanked out so positive color extraction ignores them.
+ */
+function detectColorNegations(lowerQuery: string): {
+  negatedColorLetters: string;
+  maskedQuery: string;
+} {
+  const NEG = `(?:not|without|no\\s+|except(?:\\s+for)?|excluding|isn'?t|aren'?t|is\\s+not|are\\s+not|(?:that\\s+(?:is|are)\\s+not))`;
+  const negatedLetters = new Set<string>();
+  let masked = lowerQuery;
+
+  for (const [name, id] of Object.entries(COLOR_IDENTITY)) {
+    if (!SINGLE_COLOR_NAMES.has(name)) continue;
+    const escaped = escapeRegex(name);
+    const pattern = new RegExp(`\\b${NEG}\\s*(?:a\\s+)?(?:colou?rs?\\s+)?${escaped}\\b`, "gi");
+    if (pattern.test(lowerQuery)) {
+      for (const c of id) negatedLetters.add(c);
+      // Blank this color name so extractColorIdentityFromText won't re-pick it up
+      masked = masked.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ".repeat(name.length));
+    }
+  }
+
+  const negatedColorLetters = WUBRG_ORDER.split("").filter((c) => negatedLetters.has(c)).join("");
+  return { negatedColorLetters, maskedQuery: masked };
+}
+
 function collectMatchedColorTerms(lowerQuery: string): string[] {
   const matched: string[] = [];
   for (const name of Object.keys(COLOR_IDENTITY)) {
@@ -749,6 +968,28 @@ function escapeRegex(value: string): string {
 function buildTermFormsPattern(forms: string[]): RegExp {
   const escaped = forms.map((form) => escapeRegex(form));
   return new RegExp(`\\b(?:${escaped.join("|")})\\b`, "i");
+}
+
+/**
+ * Returns true when the term (or any of its singular/plural forms) appears in the
+ * query immediately after a negation phrase such as "not", "without", "non-", etc.
+ * Used to route matched filters to mustNotClauses instead of mustClauses.
+ */
+function isTermNegated(naturalQuery: string, term: string): boolean {
+  const lower = naturalQuery.toLowerCase();
+  const forms = getTermForms(term).map(escapeRegex);
+  const termPat = `(?:${forms.join("|")})`;
+
+  const negWords =
+    `(?:not|without|no|except(?:\\s+for)?|excluding|isn'?t|aren'?t` +
+    `|is\\s+not|are\\s+not|that\\s+(?:is|are)\\s+not|rather\\s+than|other\\s+than)`;
+  const qualifier = `(?:a\\s+|an\\s+|any\\s+|being\\s+(?:a\\s+|an\\s+)?)?`;
+
+  if (new RegExp(`\\b${negWords}\\s+${qualifier}${termPat}\\b`, "i").test(lower)) return true;
+  // "non-X" prefix form (e.g. "non-creature", "non-land")
+  if (new RegExp(`\\bnon-${termPat}\\b`, "i").test(lower)) return true;
+
+  return false;
 }
 
 function addSynergySubjectsFromPhrase(phrase: string, subjects: Set<string>): void {
@@ -954,6 +1195,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   const semanticRoleTokens = extractSemanticRoleTokens(naturalQuery);
 
   const matchedTypes: string[] = [];
+  const negatedTypes: string[] = [];
   for (const type of TYPE_TOKENS) {
     const typeForms = getTermForms(type);
     if (synergySubjects.has(type) || semanticRoleTokens.has(type)) {
@@ -961,7 +1203,11 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       continue;
     }
     if (buildTermFormsPattern(typeForms).test(naturalQuery)) {
-      matchedTypes.push(type);
+      if (isTermNegated(naturalQuery, type)) {
+        negatedTypes.push(type);
+      } else {
+        matchedTypes.push(type);
+      }
       strippedTerms.push(...typeForms);
     }
   }
@@ -972,6 +1218,9 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       "phase1:type"
     )
   );
+  for (const type of negatedTypes) {
+    mustNotClauses.push({ value: `t:${type}`, source: "phase1:type" });
+  }
 
   await ensureCatalogIndex();
 
@@ -995,8 +1244,12 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       const stLower = superMatch.toLowerCase();
       if (!matchedSubtypes.has(stLower)) {
         matchedSubtypes.add(stLower);
-        supertypeMatches.push({ canonical: stLower, queryToken: token });
         strippedTerms.push(...getTermForms(stLower));
+        if (isTermNegated(naturalQuery, stLower)) {
+          mustNotClauses.push({ value: `t:${quoteIfNeeded(stLower)}`, source: "phase1:subtype" });
+        } else {
+          supertypeMatches.push({ canonical: stLower, queryToken: token });
+        }
       }
     }
   }
@@ -1024,15 +1277,22 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
         ? `${catalogTokens[i]} ${catalogTokens[i + 1]}`
         : null;
 
+    const addSubtypeMatch = (stLower: string, queryToken: string, extraStrip?: string) => {
+      if (matchedSubtypes.has(stLower)) return;
+      matchedSubtypes.add(stLower);
+      strippedTerms.push(...getTermForms(stLower));
+      if (extraStrip) strippedTerms.push(extraStrip);
+      if (isTermNegated(naturalQuery, stLower)) {
+        mustNotClauses.push({ value: `t:${quoteIfNeeded(stLower)}`, source: "phase1:subtype" });
+      } else {
+        subtypeMatches.push({ canonical: stLower, queryToken });
+      }
+    };
+
     if (bigram) {
       const bigramMatch = matchSubtype(bigram);
       if (bigramMatch && !synergySubjects.has(bigramMatch.name.toLowerCase())) {
-        const stLower = bigramMatch.name.toLowerCase();
-        if (!matchedSubtypes.has(stLower)) {
-          matchedSubtypes.add(stLower);
-          subtypeMatches.push({ canonical: stLower, queryToken: bigram });
-          strippedTerms.push(bigram, ...getTermForms(stLower));
-        }
+        addSubtypeMatch(bigramMatch.name.toLowerCase(), bigram, bigram);
         continue;
       }
     }
@@ -1044,11 +1304,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
         strippedTerms.push(...getTermForms(stLower));
         continue;
       }
-      if (!matchedSubtypes.has(stLower)) {
-        matchedSubtypes.add(stLower);
-        subtypeMatches.push({ canonical: stLower, queryToken: token });
-        strippedTerms.push(...getTermForms(stLower));
-      }
+      addSubtypeMatch(stLower, token);
       continue;
     }
 
@@ -1056,10 +1312,8 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       const fuzzy = fuzzyMatchSubtype(token, shouldUseFuzzyMatch);
       if (fuzzy) {
         const stLower = fuzzy.name.toLowerCase();
-        if (!synergySubjects.has(stLower) && !matchedSubtypes.has(stLower)) {
-          matchedSubtypes.add(stLower);
-          subtypeMatches.push({ canonical: stLower, queryToken: token });
-          strippedTerms.push(token, ...getTermForms(stLower));
+        if (!synergySubjects.has(stLower)) {
+          addSubtypeMatch(stLower, token, token);
         }
       }
     }
@@ -1089,16 +1343,25 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   strippedTerms.push(...collectMatchedColorTerms(lower));
   const commanderDeck = hasCommanderDeckContext(naturalQuery);
 
+  // Detect colors that are explicitly negated ("not blue", "without red", etc.)
+  // and emit them as must-not clauses. Also mask them from positive color extraction.
+  const { negatedColorLetters, maskedQuery: colorMaskedQuery } = detectColorNegations(lower);
+  if (negatedColorLetters) {
+    for (const c of negatedColorLetters) {
+      mustNotClauses.push({ value: `c:${c}`, source: "phase1:color" });
+    }
+  }
+
   // Detect standalone color shorthands ("wubr", "rg", "wu", "w", …).
   // Shorthands take priority over incidental color words (e.g. "blue" in "blue artifacts
   // with flash in wubr color identity") so they must be checked before extractColorIdentityFromText.
-  const colorShorthand = detectColorShorthand(lower);
+  const colorShorthand = detectColorShorthand(colorMaskedQuery);
   if (colorShorthand) strippedTerms.push(colorShorthand.matchedText);
 
   const commanderColor =
     resolveCommanderColorIdentity(naturalQuery) ||
     colorShorthand?.colors ||
-    extractColorIdentityFromText(lower) ||
+    extractColorIdentityFromText(colorMaskedQuery) ||
     null;
   if (/\bcolor\s+identity\b/i.test(naturalQuery)) {
     strippedTerms.push("color identity", "color", "identity");
@@ -1201,10 +1464,22 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   strippedTerms.push(...matchedTypos);
 
   const keywordFilters = await resolveKeywordFilters(correctedQuery);
-  for (const keyword of keywordFilters) strippedTerms.push(keyword.toLowerCase());
+  const positiveKeywords: string[] = [];
+  for (const keyword of keywordFilters) {
+    const kw = keyword.toLowerCase();
+    strippedTerms.push(kw);
+    if (isTermNegated(naturalQuery, kw)) {
+      mustNotClauses.push({
+        value: `kw:${/\s/.test(kw) ? `"${kw}"` : kw}`,
+        source: "phase1:keyword",
+      });
+    } else {
+      positiveKeywords.push(kw);
+    }
+  }
   mustClauses.push(
     ...buildGroupedClauses(
-      groupByConnector(naturalQuery, keywordFilters.map((k) => k.toLowerCase())),
+      groupByConnector(naturalQuery, positiveKeywords),
       "kw",
       "phase1:keyword",
       (k) => (/\s/.test(k) ? `"${k}"` : k)
@@ -1214,6 +1489,10 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   const strategyResult = detectStrategyClauses(correctedQuery);
   mustClauses.push(...strategyResult.clauses);
   strippedTerms.push(...strategyResult.strippedTerms);
+
+  const statResult = resolveNumericStatFilters(naturalQuery);
+  mustClauses.push(...statResult.clauses);
+  strippedTerms.push(...statResult.strippedTerms);
 
   const synergyResult = await resolveSynergyFunctionClauses(synergySubjects);
   mustClauses.push(...synergyResult.clauses);
