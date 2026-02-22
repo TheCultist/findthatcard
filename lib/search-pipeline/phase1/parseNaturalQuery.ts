@@ -625,20 +625,29 @@ function buildUnresolvedFragments(
   const noiseTokens = rawTokens.filter((token) => STOPWORDS.has(token));
   const usefulTokens = rawTokens.filter((token) => !STOPWORDS.has(token));
 
-  const chunks = remaining
-    .split(/\b(?:and|or|but|then|also)\b/gi)
-    .map((chunk) => normalizeWhitespace(chunk))
-    .filter(Boolean);
+  // Split while retaining the connector word between each chunk (capturing group),
+  // so we can record whether adjacent fragments were joined by "or" (→ OR in the query)
+  // vs "and"/"but"/etc. (→ AND, the default Scryfall behaviour).
+  // splitParts alternates: [chunk0, connector1, chunk1, connector2, chunk2, ...]
+  const splitParts = remaining.split(/\b(and|or|but|then|also)\b/gi);
 
   const unresolvedFragments: UnresolvedFragment[] = [];
-  for (const chunk of chunks) {
+  for (let i = 0; i < splitParts.length; i += 2) {
+    const chunk = normalizeWhitespace(splitParts[i] || "");
     const filtered = chunk
       .split(/\s+/)
       .filter((token) => !STOPWORDS.has(token))
       .join(" ");
     const cleaned = normalizeWhitespace(filtered);
     if (!cleaned || cleaned.length < 3) continue;
-    unresolvedFragments.push({ text: cleaned, category: detectCategory(cleaned) });
+
+    // The connector at index i-1 (odd) tells us how this chunk relates to the previous one.
+    const connector = i > 0 ? (splitParts[i - 1] || "").toLowerCase().trim() : null;
+    unresolvedFragments.push({
+      text: cleaned,
+      category: detectCategory(cleaned),
+      orConnected: connector === "or",
+    });
   }
 
   if (unresolvedFragments.length === 0 && usefulTokens.length > 0) {

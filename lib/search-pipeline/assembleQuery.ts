@@ -106,10 +106,47 @@ export function assembleQueryFromIR(ir: SearchPipelineIR): string {
   const should = dedupeTokens(ir.shouldClauses.map((clause) => clause.value));
   const mustNot = dedupeTokens(ir.mustNotClauses.map((clause) => `-${clause.value.replace(/^-/, "")}`));
 
+  // Iterate in original query order (unresolvedFragments preserves it) so we can
+  // correctly OR-group consecutive fragments that were joined by "or" in the query.
   const phase2Parts: string[] = [];
-  for (const fragment of ir.resolvedFragments.filter((f) => !f.archetype)) {
-    phase2Parts.push(...emitFragmentTags(fragment.tags));
+  let orGroupTags: string[] = [];
+
+  const flushOrGroup = () => {
+    if (orGroupTags.length === 0) return;
+    if (orGroupTags.length === 1) {
+      phase2Parts.push(orGroupTags[0]);
+    } else {
+      // Flatten into one big OR chain: ((A or B) or (C or D)) → (A or B or C or D)
+      const inner = orGroupTags
+        .map((t) => t.replace(/^\((.+)\)$/, "$1"))
+        .join(" or ");
+      phase2Parts.push(`(${inner})`);
+    }
+    orGroupTags = [];
+  };
+
+  for (const unresolved of ir.unresolvedFragments) {
+    const resolved = ir.resolvedFragments.find(
+      (f) => !f.archetype && f.fragment.toLowerCase() === unresolved.text.toLowerCase()
+    );
+    if (!resolved) {
+      if (!unresolved.orConnected) flushOrGroup();
+      continue;
+    }
+    const emitted = emitFragmentTags(resolved.tags);
+    if (emitted.length === 0) {
+      if (!unresolved.orConnected) flushOrGroup();
+      continue;
+    }
+    if (unresolved.orConnected && orGroupTags.length > 0) {
+      orGroupTags.push(...emitted);
+    } else {
+      flushOrGroup();
+      orGroupTags.push(...emitted);
+    }
   }
+  flushOrGroup();
+
   const phase2Tokens = dedupeTokens(phase2Parts);
 
   const parts: string[] = [];

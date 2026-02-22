@@ -257,6 +257,15 @@ export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<
       return acc;
     }, []);
 
+  // Propagate the orConnected flag from unresolvedFragments so the assembly
+  // phase knows which resolved fragments were joined by "or" in the original query.
+  for (const resolved of merged) {
+    const source = ir.unresolvedFragments.find(
+      (f) => f.text.toLowerCase() === resolved.fragment.toLowerCase()
+    );
+    if (source?.orConnected) resolved.orConnected = true;
+  }
+
   const nextIR: SearchPipelineIR = {
     ...ir,
     resolvedFragments: merged,

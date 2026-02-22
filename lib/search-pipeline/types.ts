@@ -32,6 +32,9 @@ export type ResolverCategory = "effect" | "art" | "mechanic" | "semantic";
 export type UnresolvedFragment = {
   text: string;
   category: ResolverCategory;
+  /** True when this fragment was preceded by "or" in the original query,
+   *  meaning its resolved tags should be OR-ed with the previous fragment's tags. */
+  orConnected?: boolean;
 };
 
 export type ResolvedFragment = {
@@ -41,6 +44,8 @@ export type ResolvedFragment = {
   category: ResolverCategory;
   archetype?: string;
   qualifier?: string;
+  /** Carried from UnresolvedFragment — if true, OR-merge with the previous fragment in assembly. */
+  orConnected?: boolean;
 };
 
 export type SearchPipelineIR = {

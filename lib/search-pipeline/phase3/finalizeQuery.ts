@@ -202,19 +202,43 @@ function injectArchetypeTagsFromResolvedFragments(
 ): string {
   let updated = query;
 
-  for (const fragment of ir.resolvedFragments) {
-    if (!fragment.archetype) continue;
+  // Iterate in original query order so OR-connected archetype fragments are merged
+  // into a single OR chain rather than AND-ed together.
+  let orGroupChains: string[][] = [];
 
+  const flushArchetypeOrGroup = () => {
+    if (orGroupChains.length === 0) return;
+    const allTags = orGroupChains.flat();
+    if (allTags.length === 1) {
+      updated = `${updated} ${allTags[0]}`;
+    } else {
+      updated = `${updated} (${allTags.join(" or ")})`;
+    }
+    orGroupChains = [];
+  };
+
+  for (const unresolved of ir.unresolvedFragments) {
+    const fragment = ir.resolvedFragments.find(
+      (f) => f.archetype && f.fragment.toLowerCase() === unresolved.text.toLowerCase()
+    );
+    if (!fragment?.archetype) {
+      if (!unresolved.orConnected) flushArchetypeOrGroup();
+      continue;
+    }
     const tags = lookupArchetypeTags(fragment.archetype, fragment.qualifier ?? undefined);
-    if (!tags || tags.length === 0) continue;
-
+    if (!tags || tags.length === 0) {
+      if (!unresolved.orConnected) flushArchetypeOrGroup();
+      continue;
+    }
     const orChain = tags.map((t) => `function:${t}`);
-    if (orChain.length >= 2) {
-      updated = `${updated} (${orChain.join(" or ")})`;
-    } else if (orChain.length === 1) {
-      updated = `${updated} ${orChain[0]}`;
+    if (unresolved.orConnected && orGroupChains.length > 0) {
+      orGroupChains.push(orChain);
+    } else {
+      flushArchetypeOrGroup();
+      orGroupChains.push(orChain);
     }
   }
+  flushArchetypeOrGroup();
 
   return updated.replace(/\s{2,}/g, " ").trim();
 }
