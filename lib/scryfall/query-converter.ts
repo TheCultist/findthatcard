@@ -782,6 +782,13 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     strayPattern: /\bfunction:(prevent-attack(?:er)?|tax-attack)\b/gi,
   },
   {
+    name: "enchantress",
+    description: "Draw a card whenever an enchantment is cast or enters; enchantress-effect payoffs",
+    detect: /\benchantress(?:\s+(?:cards?|deck|theme|payoff|synerg(?:y|ies)|effects?|commander))?\b/i,
+    defaultTags: ["enchantress"],
+    strayPattern: /\bfunction:enchantress\b/gi,
+  },
+  {
     name: "tutor",
     description: "Search, fetch, or find specific cards from your library or deck",
     detect: /\b(tutor(?:s|ed|ing)?|(?:acts?|works?|functions?)\s+like\s+a\s+tutor|fetch(?:es|ed|ing)?\s+(?:a\s+)?card|find\s+(?:a\s+)?card\s+(?:from|in)\s+(?:your\s+)?(?:library|deck))\b/i,

@@ -221,12 +221,14 @@ function injectArchetypeTagsFromResolvedFragments(
 
 export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result> {
   const baseQuery = assembleQueryFromIR(ir);
-  if (!baseQuery) {
+  const queryWithoutPrefer = stripPreferBestPrefix(baseQuery);
+  // Archetype-resolved Phase 2 fragments are injected here, not in assembleQueryFromIR,
+  // so the emptiness check must come after injection — the base alone can be empty when
+  // the entire query meaning comes from Phase 2 archetypes (e.g. "deal damage to any target").
+  const withArchetypeTags = injectArchetypeTagsFromResolvedFragments(ir, queryWithoutPrefer);
+  if (!withArchetypeTags) {
     throw new Error("Search pipeline produced an empty query");
   }
-
-  const queryWithoutPrefer = stripPreferBestPrefix(baseQuery);
-  const withArchetypeTags = injectArchetypeTagsFromResolvedFragments(ir, queryWithoutPrefer);
   const tagContext = await getTaggerTagContext(ir.naturalQuery);
 
   // For direct Scryfall syntax, use the query exactly as typed — no strategy expansion or other post-processing.

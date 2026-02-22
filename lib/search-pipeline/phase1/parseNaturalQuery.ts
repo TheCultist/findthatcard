@@ -1360,6 +1360,30 @@ function resolveArtistFromQuery(
 // ---------------------------------------------------------------------------
 
 /**
+ * Returns true when `phrase` appears in `naturalQuery` immediately after a
+ * relative pronoun or auxiliary verb — indicating it is used as a verb phrase
+ * (oracle-text description) rather than a card name reference.
+ *
+ * Examples that should be blocked:
+ *   "cards that deal damage to any target"   → "that deal" → verb context ✓
+ *   "spells that counter a spell"            → "that counter" → verb context ✓
+ *   "creatures that can fly"                 → "that can fly" → verb context ✓
+ *
+ * Examples that should NOT be blocked:
+ *   "Lightning Bolt"                          → nothing before it
+ *   "show me Counterspell"                    → "me" is not a verb-context word
+ */
+function isInVerbPhraseContext(naturalQuery: string, phrase: string): boolean {
+  const lower = naturalQuery.toLowerCase();
+  const pos = lower.indexOf(phrase.toLowerCase());
+  if (pos < 0) return false;
+  const before = lower.slice(0, pos).replace(/\s+$/, " ");
+  // Matches text that ends with a relative pronoun or auxiliary verb
+  // (optionally followed by a short adverb like "not", "also", "always")
+  return /\b(?:that|which|who(?:m)?|can|could|will|would|do(?:es)?|did|may|might|must|should|shall)\s+(?:(?:not|also|only|always|never|even|still|just)\s+)?$/.test(before);
+}
+
+/**
  * Pre-pass: find multi-word (2+ words) card names as contiguous word windows
  * BEFORE structural parsing runs, so those words cannot be misidentified as
  * creature types, subtypes, formats, etc.
@@ -1406,7 +1430,7 @@ function cardNamePrePass(
       // e.g. "jace the mind sculptor" for Jace, the Mind Sculptor
       const fullPhrase = words.slice(rangeStart, rangeEnd + 1).join(" ");
       const canonical = lookupCardName(fullPhrase);
-      if (canonical) {
+      if (canonical && !isInVerbPhraseContext(naturalQuery, fullPhrase)) {
         return {
           canonical,
           reservedWords: words.slice(rangeStart, rangeEnd + 1),
@@ -1418,7 +1442,7 @@ function cardNamePrePass(
       const usefulPhrase = selectedIndices.map((i) => words[i]).join(" ");
       if (usefulPhrase !== fullPhrase) {
         const canonical2 = lookupCardName(usefulPhrase);
-        if (canonical2) {
+        if (canonical2 && !isInVerbPhraseContext(naturalQuery, usefulPhrase)) {
           return {
             canonical: canonical2,
             reservedWords: selectedIndices.map((i) => words[i]),
@@ -1517,6 +1541,10 @@ function detectCardNamePostPass(
       // Single-word names are too ambiguous unless the word is the only
       // useful token left (i.e. the user typed essentially just the card name).
       if (len === 1 && usefulCount > 1) continue;
+
+      // Skip names that appear as verb phrases in the original query
+      // (e.g. "cards that deal damage" — "deal damage" is oracle text, not a name)
+      if (len >= 2 && isInVerbPhraseContext(naturalQuery, candidate)) continue;
 
       clauses.push({ value: `name:"${canonical}"`, source: "phase1:cardname" });
       extraStripped.push(...tokens.slice(start, start + len));
