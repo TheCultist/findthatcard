@@ -63,10 +63,31 @@ const SUBTYPE_SOURCES: Array<{ catalog: string; category: string }> = [
   { catalog: "planeswalker-types", category: "planeswalker" },
 ];
 
+type CardNameIndexPair = {
+  exact: Map<string, string>;      // lowercase as-is → canonical
+  simplified: Map<string, string>; // punctuation-stripped lowercase → canonical
+};
+
 let subtypeIndex: Map<string, SubtypeMatch> | null = null;
 let supertypeSet: Set<string> | null = null;
 let artistIndex: Map<string, string> | null = null;
+let cardNameIndexPair: CardNameIndexPair | null = null;
 let indexPromise: Promise<void> | null = null;
+
+/**
+ * Normalise a card name for fuzzy lookup: lowercase, strip apostrophes,
+ * remove commas, convert hyphens to spaces, collapse whitespace.
+ * Used when building the simplified index AND when normalising query text.
+ */
+function simplifyForNameLookup(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/'/g, "")      // Gaea's → gaeas
+    .replace(/,/g, "")      // Jace, the → jace the
+    .replace(/-/g, " ")     // Well-Read → well read
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 async function buildIndexes(): Promise<void> {
   await ensureScryfallCatalogCache();
@@ -116,9 +137,23 @@ async function buildIndexes(): Promise<void> {
   }
   artistIndex = artMap;
 
+  const cardNames = await getCatalog("card-names");
+  const cnExact = new Map<string, string>();
+  const cnSimplified = new Map<string, string>();
+  for (const name of cardNames) {
+    const lower = name.toLowerCase();
+    cnExact.set(lower, name);
+    const simplified = simplifyForNameLookup(name);
+    if (simplified !== lower && !cnSimplified.has(simplified)) {
+      cnSimplified.set(simplified, name);
+    }
+  }
+  cardNameIndexPair = { exact: cnExact, simplified: cnSimplified };
+
   console.log(
     `[Catalog Index] Built indexes: ${stMap.size} subtype forms, ` +
-      `${spSet.size} supertype forms, ${artMap.size} artists`
+      `${spSet.size} supertype forms, ${artMap.size} artists, ` +
+      `${cnExact.size} card names (${cnSimplified.size} simplified forms)`
   );
 }
 
@@ -202,6 +237,25 @@ export function getSubtypeIndex(): Map<string, SubtypeMatch> | null {
 
 export function getArtistIndex(): Map<string, string> | null {
   return artistIndex;
+}
+
+/**
+ * Look up a card name candidate against the catalog.
+ * First tries an exact lowercase match, then a simplified match
+ * (apostrophes stripped, commas removed, hyphens → spaces).
+ * Returns the canonical card name or null if not found.
+ */
+export function lookupCardName(text: string): string | null {
+  if (!cardNameIndexPair) return null;
+  const lower = text.toLowerCase().trim();
+  const exact = cardNameIndexPair.exact.get(lower);
+  if (exact) return exact;
+  const simplified = simplifyForNameLookup(text);
+  return cardNameIndexPair.simplified.get(simplified) ?? null;
+}
+
+export function hasCardNameIndex(): boolean {
+  return cardNameIndexPair !== null;
 }
 
 ensureCatalogIndex().catch((error) => {

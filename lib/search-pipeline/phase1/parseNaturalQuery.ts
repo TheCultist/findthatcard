@@ -6,6 +6,8 @@ import {
   matchSupertype,
   fuzzyMatchSubtype,
   getArtistIndex,
+  lookupCardName,
+  hasCardNameIndex,
 } from "@/lib/scryfall/catalog-index";
 import { isScryfallQuery } from "@/lib/scryfall/query-converter";
 import { resolveSetFilters } from "@/lib/scryfall/sets";
@@ -1353,6 +1355,344 @@ function resolveArtistFromQuery(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Card name detection helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Pre-pass: find multi-word (2+ words) card names as contiguous word windows
+ * BEFORE structural parsing runs, so those words cannot be misidentified as
+ * creature types, subtypes, formats, etc.
+ *
+ * Strategy: for each window of non-stopword tokens (lengths 5→2), take the
+ * full original-word span between the first and last token of that window
+ * (preserving stopwords like "the" that are inside the name), and check it
+ * against the card name catalog.  We deliberately skip single-word matches
+ * here — those are handled more carefully in the post-pass.
+ *
+ * Returns the canonical card name and the raw word tokens to reserve
+ * (add to both semanticRoleTokens and strippedTerms before structural
+ * parsing, so parsers ignore them).
+ */
+function cardNamePrePass(
+  naturalQuery: string
+): { canonical: string; reservedWords: string[] } | null {
+  if (!hasCardNameIndex()) return null;
+
+  const words = naturalQuery
+    .toLowerCase()
+    .replace(/[^a-z0-9'\s-]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length < 2) return null;
+
+  // Indices of words that are NOT stopwords
+  const usefulIndices: number[] = [];
+  for (let i = 0; i < words.length; i++) {
+    if (!STOPWORDS.has(words[i])) usefulIndices.push(i);
+  }
+  if (usefulIndices.length < 2) return null;
+
+  const MAX_WINDOW = Math.min(6, usefulIndices.length);
+
+  for (let len = MAX_WINDOW; len >= 2; len--) {
+    for (let start = 0; start <= usefulIndices.length - len; start++) {
+      const selectedIndices = usefulIndices.slice(start, start + len);
+      const rangeStart = selectedIndices[0];
+      const rangeEnd = selectedIndices[selectedIndices.length - 1];
+
+      // Full-span phrase: include stopwords between the outer useful tokens
+      // e.g. "jace the mind sculptor" for Jace, the Mind Sculptor
+      const fullPhrase = words.slice(rangeStart, rangeEnd + 1).join(" ");
+      const canonical = lookupCardName(fullPhrase);
+      if (canonical) {
+        return {
+          canonical,
+          reservedWords: words.slice(rangeStart, rangeEnd + 1),
+        };
+      }
+
+      // Useful-only phrase: just the non-stopword tokens (no gaps)
+      // e.g. "emrakul aeons torn" for Emrakul, the Aeons Torn
+      const usefulPhrase = selectedIndices.map((i) => words[i]).join(" ");
+      if (usefulPhrase !== fullPhrase) {
+        const canonical2 = lookupCardName(usefulPhrase);
+        if (canonical2) {
+          return {
+            canonical: canonical2,
+            reservedWords: selectedIndices.map((i) => words[i]),
+          };
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Post-pass: called after all structural parsing, finds card name references
+ * in what remains.  Handles:
+ *   1. Explicit "named/called <Name>" patterns (always tried first).
+ *   2. Bare multi-word card names in the leftover non-structural tokens.
+ *   3. Single-word card names, but only when the word is the *sole* useful
+ *      token remaining (user typed essentially just the card name).
+ */
+function detectCardNamePostPass(
+  naturalQuery: string,
+  strippedTerms: string[]
+): { clauses: QueryClause[]; extraStripped: string[] } {
+  const clauses: QueryClause[] = [];
+  const extraStripped: string[] = [];
+  if (!hasCardNameIndex()) return { clauses, extraStripped };
+
+  // --- Pass 1: explicit "named / called <Name>" ---
+  const NAMED_RE =
+    /\b(?:named?|called)\s+([A-Za-z][A-Za-z'',.‐\- ]{0,60}?)(?=\s+(?:in|from|with|that|or|and|but|which|where)|\s*[,;]|\s*$)/gi;
+  for (const match of naturalQuery.matchAll(NAMED_RE)) {
+    const rawName = match[1].trim();
+    const nameWords = rawName.split(/\s+/);
+    // Try progressively shorter substrings so we always grab the longest valid name
+    for (let len = nameWords.length; len >= 1; len--) {
+      const candidate = nameWords.slice(0, len).join(" ");
+      const canonical = lookupCardName(candidate);
+      if (canonical) {
+        clauses.push({ value: `name:"${canonical}"`, source: "phase1:cardname" });
+        extraStripped.push(
+          match[0].toLowerCase().split(/\s+/)[0], // "named" / "called"
+          ...nameWords.slice(0, len).map((w) => w.toLowerCase())
+        );
+        break;
+      }
+    }
+    // Whether or not a catalog match was found, strip "named"/"called" so it
+    // doesn't pollute unresolved fragments sent to the AI.
+    const keyword = match[0].toLowerCase().split(/\s+/)[0];
+    if (!extraStripped.includes(keyword)) extraStripped.push(keyword);
+  }
+
+  // If an explicit pattern already resolved a name, we're done.
+  if (clauses.length > 0) return { clauses, extraStripped };
+
+  // --- Pass 2: bare card name in the remaining text ---
+  const allStripped = [...strippedTerms, ...extraStripped];
+  let remaining = naturalQuery.toLowerCase();
+  for (const term of allStripped) {
+    if (!term) continue;
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    remaining = remaining.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ");
+  }
+
+  // Keep apostrophes and hyphens — they appear in real card names
+  const tokens = remaining
+    .replace(/[^a-z0-9'\s-]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (tokens.length === 0) return { clauses, extraStripped };
+
+  const usefulCount = tokens.filter((t) => !STOPWORDS.has(t)).length;
+  const usedPositions = new Set<number>();
+
+  outer: for (
+    let len = Math.min(6, tokens.length);
+    len >= 1;
+    len--
+  ) {
+    for (let start = 0; start <= tokens.length - len; start++) {
+      let overlaps = false;
+      for (let i = start; i < start + len; i++) {
+        if (usedPositions.has(i)) {
+          overlaps = true;
+          break;
+        }
+      }
+      if (overlaps) continue;
+
+      const candidate = tokens.slice(start, start + len).join(" ");
+      const canonical = lookupCardName(candidate);
+      if (!canonical) continue;
+
+      // Single-word names are too ambiguous unless the word is the only
+      // useful token left (i.e. the user typed essentially just the card name).
+      if (len === 1 && usefulCount > 1) continue;
+
+      clauses.push({ value: `name:"${canonical}"`, source: "phase1:cardname" });
+      extraStripped.push(...tokens.slice(start, start + len));
+      for (let i = start; i < start + len; i++) usedPositions.add(i);
+      break outer;
+    }
+  }
+
+  return { clauses, extraStripped };
+}
+
+/**
+ * Within a single comma-delimited segment, extract all card names using a
+ * greedy longest-first scan.  "and" / "or" connector words between names are
+ * skipped so that "Call of the Ring and Black Market Connections" yields both
+ * names while a card that legitimately contains "and" (e.g. "Sword of Law
+ * and Order") is still found whole because the longest-first search tries the
+ * full phrase before shorter substrings.
+ */
+type SegmentNameResult = {
+  /** The Scryfall filter to emit.
+   *  Exact matches: `name:"Canonical Name"` (quoted = exact).
+   *  Partial matches: `name:word` (unquoted = Scryfall substring search). */
+  scryfall: string;
+  /** True when the name was verified against the card-names catalog. */
+  isExact: boolean;
+};
+
+function resolveNamesInSegment(segment: string): SegmentNameResult[] {
+  const words = segment
+    .toLowerCase()
+    .replace(/[^a-z0-9'\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const results: SegmentNameResult[] = [];
+  let pos = 0;
+  const MAX_NAME_LEN = 6;
+
+  while (pos < words.length) {
+    // Skip bare connector words between names
+    if (words[pos] === "and" || words[pos] === "or") {
+      pos++;
+      continue;
+    }
+
+    // Greedy longest-first: try the longest run of words that forms a card name
+    let matched = false;
+    for (let len = Math.min(MAX_NAME_LEN, words.length - pos); len >= 1; len--) {
+      const candidate = words.slice(pos, pos + len).join(" ");
+      const canonical = lookupCardName(candidate);
+      if (canonical) {
+        results.push({ scryfall: `name:"${canonical}"`, isExact: true });
+        pos += len;
+        matched = true;
+        break;
+      }
+    }
+
+    if (!matched) pos++;
+  }
+
+  // If the entire segment yielded no catalog match AND it normalises to a
+  // single meaningful word, treat it as a partial (substring) name search.
+  // This lets users type e.g. "Animar" and get name:animar → Scryfall will
+  // find "Animar, Soul of Elements" via its own substring matching.
+  if (results.length === 0) {
+    const meaningful = words.filter((w) => !STOPWORDS.has(w) && w !== "and" && w !== "or");
+    if (meaningful.length === 1) {
+      results.push({ scryfall: `name:${meaningful[0]}`, isExact: false });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Re-join pairs of comma-split segments that together form a known card name.
+ *
+ * Problem: "Animar, Soul of Elements" contains a comma, so a naive comma-split
+ * produces ["animar", "soul of elements"] — two fragments that don't match
+ * individually.  This pass greedily scans consecutive pairs and merges them
+ * when the joined text is a known card name, restoring the full name for the
+ * subsequent resolver to find.
+ *
+ * Tries both "X, Y" (exact — comma intact as in the real name) and "X Y"
+ * (simplified — comma stripped, for the simplified index).
+ */
+function mergeCommaSplitNameFragments(segments: string[]): string[] {
+  const result: string[] = [];
+  let i = 0;
+  while (i < segments.length) {
+    if (i < segments.length - 1) {
+      const withComma = segments[i] + ", " + segments[i + 1];
+      if (lookupCardName(withComma)) {
+        result.push(withComma);
+        i += 2;
+        continue;
+      }
+      const withSpace = segments[i] + " " + segments[i + 1];
+      if (lookupCardName(withSpace)) {
+        result.push(withSpace);
+        i += 2;
+        continue;
+      }
+    }
+    result.push(segments[i]);
+    i++;
+  }
+  return result;
+}
+
+/**
+ * Detect a comma-separated (or "and"-joined) list of card names, e.g.
+ *   "Phyrexian Arena, Call of the Ring, Black Market Connections"
+ *   "Phyrexian Arena, Call of the Ring and Black Market Connections"
+ *   "Lightning Bolt, Counterspell, and Giant Growth"   (Oxford comma)
+ *   "Animar, Soul of Elements, Lightning Bolt"         (name contains comma)
+ *
+ * If at least 2 names are resolved the whole query short-circuits to a single
+ * OR name: clause with no structural parsing or AI call needed.
+ *
+ * Returns null when the query doesn't look like a card name list.
+ */
+function detectCardNameList(
+  naturalQuery: string
+): { clause: QueryClause; strippedWords: string[] } | null {
+  if (!hasCardNameIndex()) return null;
+  if (!naturalQuery.includes(",")) return null;
+
+  // Split on commas; strip leading "and"/"or" from each piece (handles Oxford
+  // comma: "A, B, and C" → ["A", "B", "C"])
+  let segments = naturalQuery
+    .split(",")
+    .map((s) => s.trim().replace(/^(?:and|or)\s+/i, "").trim())
+    .filter(Boolean);
+  if (segments.length < 2) return null;
+
+  // Re-join adjacent fragments that belong to the same comma-containing name
+  // (e.g. ["animar", "soul of elements"] → ["animar, soul of elements"])
+  segments = mergeCommaSplitNameFragments(segments);
+
+  const allResults: SegmentNameResult[] = [];
+  const strippedWords: string[] = [];
+
+  for (const segment of segments) {
+    const segResults = resolveNamesInSegment(segment);
+    allResults.push(...segResults);
+    for (const r of segResults) {
+      // Strip the words so they don't pollute structural parsing
+      const filterText = r.scryfall.replace(/^name:/i, "").replace(/"/g, "");
+      strippedWords.push(...filterText.toLowerCase().split(/\s+/));
+    }
+  }
+
+  // Commit to list mode when:
+  //   • at least 1 catalog-verified (exact) name confirms this is a card list, AND
+  //   • at least 2 total entries (exact + partial) to warrant OR-clause mode.
+  // This prevents false positives from structural queries that happen to contain
+  // a comma (e.g. "creatures, instants" — zero exact matches → bail out).
+  const exactCount = allResults.filter((r) => r.isExact).length;
+  if (exactCount < 1 || allResults.length < 2) return null;
+
+  const nameValue =
+    allResults.length === 1
+      ? allResults[0].scryfall
+      : `(${allResults.map((r) => r.scryfall).join(" or ")})`;
+
+  return {
+    clause: { value: nameValue, source: "phase1:cardname" },
+    strippedWords,
+  };
+}
+
 export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Result> {
   const tokenizedQuery = tokenizeNaturalQuery(naturalQuery);
   const strippedTerms: string[] = [];
@@ -1382,6 +1722,32 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   const shouldClauses: QueryClause[] = [];
   const mustNotClauses: QueryClause[] = [];
 
+  // Ensure catalog indexes (subtypes, card names, etc.) are ready before any
+  // parsing step that depends on them.
+  await ensureCatalogIndex();
+
+  // Early exit: comma-separated card name list ("Bolt, Counterspell, Growth")
+  const cardNameList = detectCardNameList(naturalQuery);
+  if (cardNameList) {
+    return {
+      naturalQuery,
+      intent: "search",
+      tokenizedQuery,
+      noiseTokens: [],
+      mustClauses: [cardNameList.clause],
+      shouldClauses: [],
+      mustNotClauses: [],
+      unresolvedFragments: [],
+      resolvedFragments: [],
+      debug: {
+        strippedTerms: cardNameList.strippedWords,
+        aiBatchCalls: 0,
+        aiSequentialCalls: 0,
+        invalidTagsRemoved: 0,
+      },
+    };
+  }
+
   const matchedFormats = (FORMAT_TOKENS as readonly string[]).filter((format) =>
     new RegExp(`\\b${format}\\b`, "i").test(naturalQuery)
   );
@@ -1397,6 +1763,21 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   // Extract all semantic-role tokens BEFORE any type/subtype matching so they are
   // consistently excluded from both TYPE_TOKENS and catalog catalog loops.
   const semanticRoleTokens = extractSemanticRoleTokens(naturalQuery);
+
+  // Pre-pass: detect multi-word card names before structural parsing so that
+  // individual words of the name (e.g. "Giant" in "Giant Growth") are not
+  // misidentified as creature types / subtypes.
+  const prePassResult = cardNamePrePass(naturalQuery);
+  if (prePassResult) {
+    mustClauses.push({
+      value: `name:"${prePassResult.canonical}"`,
+      source: "phase1:cardname",
+    });
+    for (const word of prePassResult.reservedWords) {
+      semanticRoleTokens.add(word);   // prevents TYPE_TOKENS from grabbing them
+      strippedTerms.push(word);        // prevents catalog subtypes from grabbing them
+    }
+  }
 
   const matchedTypes: string[] = [];
   const negatedTypes: string[] = [];
@@ -1431,8 +1812,6 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   for (const type of negatedTypes) {
     mustNotClauses.push({ value: `t:${type}`, source: "phase1:type" });
   }
-
-  await ensureCatalogIndex();
 
   const catalogTokens = tokenizeNaturalQuery(naturalQuery);
   const matchedSubtypes = new Set<string>();
@@ -1770,6 +2149,15 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       }
       strippedTerms.push(...rule.strip);
     }
+  }
+
+  // Post-pass: detect card names in remaining text (handles "named/called X"
+  // and bare card names that survived structural parsing).  Skip if the
+  // pre-pass already found a card name.
+  if (!prePassResult) {
+    const postPassResult = detectCardNamePostPass(naturalQuery, strippedTerms);
+    mustClauses.push(...postPassResult.clauses);
+    strippedTerms.push(...postPassResult.extraStripped);
   }
 
   const { unresolvedFragments, noiseTokens } = buildUnresolvedFragments(

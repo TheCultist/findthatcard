@@ -736,6 +736,168 @@ async function testOrConnectorSubtypes() {
   console.log("[PASS] phase1: OR connector between subtypes emits (t:goblin or t:elf)");
 }
 
+// ---------------------------------------------------------------------------
+// Card name detection tests
+// ---------------------------------------------------------------------------
+
+async function testCardNameBare() {
+  const parsed = await parseNaturalQuery("Lightning Bolt");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  assert.ok(
+    mustValues.some((v) => v.toLowerCase() === `name:"lightning bolt"`),
+    `bare card name should produce name:"Lightning Bolt"; got: ${mustValues.join(", ")}`
+  );
+  assert.equal(parsed.unresolvedFragments.length, 0, "no unresolved fragments expected");
+  console.log('[PASS] card name: bare "Lightning Bolt" resolves to name:"Lightning Bolt"');
+}
+
+async function testCardNameWithStopwords() {
+  const parsed = await parseNaturalQuery("show me Counterspell please");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  assert.ok(
+    mustValues.some((v) => v.toLowerCase() === `name:"counterspell"`),
+    `query with stopwords should produce name:"Counterspell"; got: ${mustValues.join(", ")}`
+  );
+  console.log('[PASS] card name: "show me Counterspell please" resolves to name:"Counterspell"');
+}
+
+async function testCardNameWithFormat() {
+  const parsed = await parseNaturalQuery("Lightning Bolt in Modern");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.some((v) => v === `name:"lightning bolt"`),
+    `card name + format query should produce name:"Lightning Bolt"; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(mustValues.includes("f:modern"), "should also detect f:modern");
+  console.log('[PASS] card name: "Lightning Bolt in Modern" resolves to name:"Lightning Bolt" + f:modern');
+}
+
+async function testCardNameMultiWord() {
+  const parsed = await parseNaturalQuery("Giant Growth");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  assert.ok(
+    mustValues.some((v) => v.toLowerCase() === `name:"giant growth"`),
+    `"Giant Growth" should produce name:"Giant Growth" (not t:giant); got: ${mustValues.join(", ")}`
+  );
+  const hasCreatureType = mustValues.some((v) => v.toLowerCase() === "t:giant");
+  assert.ok(!hasCreatureType, `t:giant should NOT appear when "Giant" is part of a card name; got: ${mustValues.join(", ")}`);
+  console.log('[PASS] card name: "Giant Growth" resolves to name:"Giant Growth" without t:giant');
+}
+
+async function testCardNameCommaInName() {
+  // "Jace, the Mind Sculptor" has a comma — users typically omit it
+  const parsed = await parseNaturalQuery("Jace the Mind Sculptor");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  assert.ok(
+    mustValues.some((v) => v.toLowerCase() === `name:"jace, the mind sculptor"`),
+    `comma-containing card name typed without comma should still match; got: ${mustValues.join(", ")}`
+  );
+  console.log('[PASS] card name: "Jace the Mind Sculptor" resolves to name:"Jace, the Mind Sculptor"');
+}
+
+async function testCardNameNamedPattern() {
+  const parsed = await parseNaturalQuery("cards named Counterspell in Modern");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.some((v) => v === `name:"counterspell"`),
+    `"named X" pattern should produce name:"Counterspell"; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(mustValues.includes("f:modern"), "should also detect f:modern");
+  console.log('[PASS] card name: "named Counterspell in Modern" resolves to name:"Counterspell" + f:modern');
+}
+
+async function testCardNameCommaSeparatedList() {
+  const parsed = await parseNaturalQuery(
+    "phyrexian arena,call of the ring, black market connections"
+  );
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.equal(mustValues.length, 1, `expected exactly 1 clause; got: ${mustValues.join(", ")}`);
+  const clause = mustValues[0];
+  assert.ok(clause.includes(`name:"phyrexian arena"`), `missing Phyrexian Arena; got: ${clause}`);
+  assert.ok(clause.includes(`name:"call of the ring"`), `missing Call of the Ring; got: ${clause}`);
+  assert.ok(
+    clause.includes(`name:"black market connections"`),
+    `missing Black Market Connections; got: ${clause}`
+  );
+  assert.equal(parsed.unresolvedFragments.length, 0, "no unresolved fragments expected");
+  console.log('[PASS] card name list: comma-separated three-card list → single OR name: clause');
+}
+
+async function testCardNameListAndSeparator() {
+  // Last item joined with "and" instead of a comma
+  const parsed = await parseNaturalQuery(
+    "phyrexian arena,call of the ring and black market connections"
+  );
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.equal(mustValues.length, 1, `expected exactly 1 clause; got: ${mustValues.join(", ")}`);
+  const clause = mustValues[0];
+  assert.ok(clause.includes(`name:"phyrexian arena"`), `missing Phyrexian Arena; got: ${clause}`);
+  assert.ok(clause.includes(`name:"call of the ring"`), `missing Call of the Ring; got: ${clause}`);
+  assert.ok(
+    clause.includes(`name:"black market connections"`),
+    `missing Black Market Connections; got: ${clause}`
+  );
+  console.log('[PASS] card name list: "and" within a segment resolves both names');
+}
+
+async function testCardNameListCommaInName() {
+  // "Animar, Soul of Elements" contains a comma — must not be split into two segments
+  const parsed = await parseNaturalQuery(
+    "phyrexian arena,call of the ring, animar, soul of elements, the one ring and black market connections"
+  );
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.equal(mustValues.length, 1, `expected exactly 1 clause; got: ${mustValues.join(", ")}`);
+  const clause = mustValues[0];
+  assert.ok(clause.includes(`name:"phyrexian arena"`), `missing Phyrexian Arena; got: ${clause}`);
+  assert.ok(clause.includes(`name:"call of the ring"`), `missing Call of the Ring; got: ${clause}`);
+  assert.ok(
+    clause.includes(`name:"animar, soul of elements"`),
+    `missing Animar, Soul of Elements; got: ${clause}`
+  );
+  assert.ok(clause.includes(`name:"the one ring"`), `missing The One Ring; got: ${clause}`);
+  assert.ok(
+    clause.includes(`name:"black market connections"`),
+    `missing Black Market Connections; got: ${clause}`
+  );
+  console.log('[PASS] card name list: comma-in-name "Animar, Soul of Elements" is preserved');
+}
+
+async function testCardNameListOxfordComma() {
+  const parsed = await parseNaturalQuery(
+    "Lightning Bolt, Counterspell, and Giant Growth"
+  );
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.equal(mustValues.length, 1, `expected exactly 1 clause; got: ${mustValues.join(", ")}`);
+  const clause = mustValues[0];
+  assert.ok(clause.includes(`name:"lightning bolt"`), `missing Lightning Bolt; got: ${clause}`);
+  assert.ok(clause.includes(`name:"counterspell"`), `missing Counterspell; got: ${clause}`);
+  assert.ok(clause.includes(`name:"giant growth"`), `missing Giant Growth; got: ${clause}`);
+  console.log('[PASS] card name list: Oxford comma ("A, B, and C") resolves all three names');
+}
+
+async function testCardNameListPartialMatch() {
+  // "animar" alone doesn't match a catalog entry; should become name:animar (unquoted)
+  const parsed = await parseNaturalQuery("phyrexian arena, animar, lightning bolt");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.equal(mustValues.length, 1, `expected 1 clause; got: ${mustValues.join(", ")}`);
+  const clause = mustValues[0];
+  assert.ok(clause.includes(`name:"phyrexian arena"`), `missing Phyrexian Arena; got: ${clause}`);
+  assert.ok(clause.includes("name:animar"), `missing name:animar partial; got: ${clause}`);
+  assert.ok(clause.includes(`name:"lightning bolt"`), `missing Lightning Bolt; got: ${clause}`);
+  console.log('[PASS] card name list: partial single-word "animar" emits name:animar for Scryfall substring search');
+}
+
+async function testCardNameDoesNotMatchStructuralQuery() {
+  // A query about creature types / colors should NOT produce a name: clause
+  const parsed = await parseNaturalQuery("red creatures with flying");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    !mustValues.some((v) => v.startsWith("name:")),
+    `structural query should not produce a name: clause; got: ${mustValues.join(", ")}`
+  );
+  console.log('[PASS] card name: structural query "red creatures with flying" produces no name: clause');
+}
+
 async function run() {
   await testPhase1DirectQueryShortCircuit();
   testAssemblerBooleanComposition();
@@ -783,6 +945,18 @@ async function run() {
   await testAndConnectorFormatsRemainSeparate();
   await testOrConnectorTypes();
   await testOrConnectorSubtypes();
+  await testCardNameBare();
+  await testCardNameWithStopwords();
+  await testCardNameWithFormat();
+  await testCardNameMultiWord();
+  await testCardNameCommaInName();
+  await testCardNameNamedPattern();
+  await testCardNameCommaSeparatedList();
+  await testCardNameListAndSeparator();
+  await testCardNameListOxfordComma();
+  await testCardNameListCommaInName();
+  await testCardNameListPartialMatch();
+  await testCardNameDoesNotMatchStructuralQuery();
   console.log("search-pipeline tests passed");
 }
 
