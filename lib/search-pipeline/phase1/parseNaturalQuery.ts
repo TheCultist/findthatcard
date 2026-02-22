@@ -1726,13 +1726,14 @@ function detectCardNameList(
     }
   }
 
-  // Commit to list mode when:
-  //   • at least 1 catalog-verified (exact) name confirms this is a card list, AND
-  //   • at least 2 total entries (exact + partial) to warrant OR-clause mode.
-  // This prevents false positives from structural queries that happen to contain
-  // a comma (e.g. "creatures, instants" — zero exact matches → bail out).
+  // Commit to list mode when at least 2 catalog-verified (exact) names are found.
+  // Requiring 2 exact matches prevents false positives from structural queries
+  // that happen to contain a comma followed by a word that is incidentally also
+  // a card name (e.g. "mutant, ninja or turtle creatures that synergize with …"
+  // — "Ninja" is a real card but the query is asking for creature subtypes, not
+  // a list of cards).  A genuine card-name list will always have 2+ confirmed names.
   const exactCount = allResults.filter((r) => r.isExact).length;
-  if (exactCount < 1 || allResults.length < 2) return null;
+  if (exactCount < 2 || allResults.length < 2) return null;
 
   const nameValue =
     allResults.length === 1
