@@ -21,6 +21,7 @@ type MtgKeywordIndex = {
 
 const SCRYFALL_KEYWORDS_URL =
   "https://api.scryfall.com/catalog/keyword-abilities";
+const SCRYFALL_CARD_SEARCH_URL = "https://api.scryfall.com/cards/search";
 
 const SCRYFALL_USER_AGENT =
   process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthat.card)";
@@ -235,6 +236,106 @@ type ScryfallKeywordResponse = {
   data: string[];
 };
 
+type ScryfallCardSearchResponse = {
+  data?: Array<{
+    oracle_text?: string;
+    card_faces?: Array<{ oracle_text?: string }>;
+  }>;
+};
+
+/**
+ * Extracts reminder text from oracle text for a given keyword.
+ * Matches patterns like:
+ *   "Evoke {W} (You may cast this spell for its evoke cost...)"
+ *   "Cascade (When you cast this spell, exile cards...)"
+ *   "Ward {2} (Whenever this becomes the target...)"
+ */
+function extractReminderText(keyword: string, oracleText: string): string | null {
+  if (!oracleText) return null;
+  const escaped = escapeRegex(keyword).replace(/\s+/g, "\\s+");
+  // Match keyword at start of line, optionally followed by one or more mana costs, then reminder in parens
+  const pattern = new RegExp(
+    `(?:^|\\n)${escaped}(?:\\s*\\{[^}]+\\})*\\s*\\(([^)]+)\\)`,
+    "i",
+  );
+  const match = pattern.exec(oracleText);
+  return match ? match[1].trim() : null;
+}
+
+async function fetchReminderTextForKeyword(keyword: string): Promise<string | null> {
+  try {
+    const url = new URL(SCRYFALL_CARD_SEARCH_URL);
+    url.searchParams.set("q", `kw:"${keyword}"`);
+    url.searchParams.set("unique", "cards");
+    url.searchParams.set("order", "released");
+    url.searchParams.set("dir", "asc");
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        "User-Agent": SCRYFALL_USER_AGENT,
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as ScryfallCardSearchResponse;
+    for (const card of (data.data ?? []).slice(0, 5)) {
+      const found = extractReminderText(keyword, card.oracle_text ?? "");
+      if (found) return found;
+      for (const face of card.card_faces ?? []) {
+        const faceFound = extractReminderText(keyword, face.oracle_text ?? "");
+        if (faceFound) return faceFound;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * For any keyword entry missing reminderText, queries Scryfall to find a card
+ * whose oracle_text contains the keyword followed by a parenthetical reminder.
+ * Modifies entries in-place. Returns true if any entries were updated.
+ */
+async function enrichKeywordsWithReminderText(entries: MtgKeywordEntry[]): Promise<boolean> {
+  const missing = entries.filter((e) => !e.reminderText);
+  if (missing.length === 0) return false;
+
+  console.log(
+    `[MTG Keywords] Fetching reminder texts for ${missing.length} keywords from Scryfall...`,
+  );
+  let updated = 0;
+
+  for (const entry of missing) {
+    try {
+      const reminderText = await fetchReminderTextForKeyword(entry.name);
+      if (reminderText) {
+        entry.reminderText = reminderText;
+        updated++;
+      }
+    } catch (error) {
+      console.warn(
+        `[MTG Keywords] Could not fetch reminder text for "${entry.name}":`,
+        error,
+      );
+    }
+    // Respect Scryfall's rate limit guideline of max 10 req/s
+    await new Promise((resolve) => setTimeout(resolve, 110));
+  }
+
+  if (updated > 0) {
+    console.log(
+      `[MTG Keywords] Added reminder text for ${updated}/${missing.length} keywords`,
+    );
+  } else {
+    console.log(`[MTG Keywords] No new reminder texts found from Scryfall`);
+  }
+
+  return updated > 0;
+}
+
 async function fetchKeywordsFromScryfall(): Promise<MtgKeywordEntry[]> {
   const response = await fetch(SCRYFALL_KEYWORDS_URL, {
     headers: {
@@ -348,6 +449,13 @@ async function initializeKeywordCache(): Promise<void> {
       existing?.keywords || null,
       fetched,
     );
+
+    // Enrich any keywords that are still missing reminder text by querying Scryfall card oracle text
+    try {
+      await enrichKeywordsWithReminderText(merged);
+    } catch (enrichError) {
+      console.warn("[MTG Keywords] Reminder text enrichment failed:", enrichError);
+    }
 
     keywordCache = merged;
     keywordCacheUpdatedAt = todayStamp;
