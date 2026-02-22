@@ -1720,6 +1720,58 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   mustNotClauses.push(...aversionResult.mustNotClauses);
   strippedTerms.push(...aversionResult.strippedTerms);
 
+  // --- Explicit MTG action verb detection ---
+  // When the user names a specific game action (exile, destroy, counter, bounce),
+  // emit oracle text directly so the exact method is preserved. This prevents the
+  // verb fragment from reaching phase 2 where it collapses into a broad removal
+  // archetype that ignores the specific method the user asked for.
+  {
+    const EXPLICIT_ACTION_RULES: Array<{
+      detect: RegExp;
+      oracle: string[];
+      strip: string[];
+    }> = [
+      {
+        // "exile a creature", "that exiles target permanent", "to exile each artifact"
+        detect:
+          /\b(?:that\s+|to\s+|can\s+|will\s+|would\s+)?exiles?\s+(?:a\s+|an\s+|target\s+|each\s+|all\s+|any\s+)?(?:creature|permanent|artifact|enchantment|land|card|spell|token|planeswalker)s?\b/i,
+        oracle: ["o:exile"],
+        strip: ["exile", "exiles"],
+      },
+      {
+        // "destroy a creature", "that destroys target artifact"
+        detect:
+          /\b(?:that\s+|to\s+|can\s+|will\s+|would\s+)?destroys?\s+(?:a\s+|an\s+|target\s+|each\s+|all\s+|any\s+)?(?:creature|permanent|artifact|enchantment|land|card|token|planeswalker)s?\b/i,
+        oracle: ["o:destroy"],
+        strip: ["destroy", "destroys"],
+      },
+      {
+        // "counter a spell", "that counters target ability"
+        detect:
+          /\b(?:that\s+|to\s+|can\s+)?counters?\s+(?:a\s+|an?\s+|target\s+)?(?:spell|ability)s?\b/i,
+        oracle: ["o:counter"],
+        strip: ["counter", "counters"],
+      },
+      {
+        // "bounce a creature", "bounces target permanent"
+        detect:
+          /\bbounce[sd]?\s+(?:a\s+|an?\s+|target\s+|each\s+|all\s+|any\s+)?(?:creature|permanent|artifact|enchantment|land|token)s?\b/i,
+        oracle: ["o:return", "o:hand"],
+        strip: ["bounce", "bounces", "bounced"],
+      },
+    ];
+
+    for (const rule of EXPLICIT_ACTION_RULES) {
+      if (!rule.detect.test(naturalQuery)) continue;
+      for (const oracleValue of rule.oracle) {
+        if (!mustClauses.some((c) => c.value === oracleValue)) {
+          mustClauses.push({ value: oracleValue, source: "phase1:oracle" });
+        }
+      }
+      strippedTerms.push(...rule.strip);
+    }
+  }
+
   const { unresolvedFragments, noiseTokens } = buildUnresolvedFragments(
     naturalQuery,
     strippedTerms
