@@ -135,7 +135,7 @@ export default function QueryTokenPreview({
             )}`}
           >
             {token.raw}
-            <span className={`pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-64 -translate-x-1/2 rounded-xl border border-gray-700/70 bg-gray-950/95 px-3 py-2.5 text-xs text-gray-200 shadow-xl transition duration-200 sm:w-80 sm:px-4 sm:py-3 ${
+            <span className={`pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-gray-700/70 bg-gray-950/95 px-3 py-2.5 text-xs text-gray-200 shadow-xl transition duration-200 sm:w-80 sm:px-4 sm:py-3 ${
               activeTooltip === index ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             }`}>
               <div className="text-sm font-semibold text-white">{token.title}</div>
