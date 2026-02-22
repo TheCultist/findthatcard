@@ -298,6 +298,19 @@ function resolveNumericStatFilters(naturalQuery: string): {
     }
   }
 
+  // Bare "[num] mana" — e.g. "3 mana creatures", "2 mana spells"
+  // Skip oracle-text contexts like "add 3 mana", "pay 3 mana", "produce 3 mana"
+  const ORACLE_MANA_VERBS = /\b(?:add(?:s)?|produce[sd]?|gain(?:s)?|pay[s]?|spend(?:s)?|costs?|tap[s]?|get[s]?)\s*$/i;
+  const bareNumMana = new RegExp(`\\b(${NUM_PAT})\\s+mana\\b`, "gi");
+  for (const m of lower.matchAll(bareNumMana)) {
+    const num = wordOrDigitToNumber(m[1] ?? "");
+    if (num === null) continue;
+    if (strippedTerms.some((t) => t.includes(m[0]))) continue;
+    const before = lower.slice(0, m.index ?? 0).trimEnd();
+    if (ORACLE_MANA_VERBS.test(before)) continue;
+    emitIfNew("mv", "=", num, m[0]);
+  }
+
   // Power: "[power/pow] [op] [num]" and "[num] power"
   const POW_ALIASES = `(?:power|pow)`;
   const powOpNum = new RegExp(`\\b(${POW_ALIASES})\\s+(?:of\\s+)?(${OP_PAT})\\s+(${NUM_PAT})\\b`, "gi");
@@ -1191,6 +1204,8 @@ function isTermNegated(naturalQuery: string, term: string): boolean {
   if (new RegExp(`\\b${negWords}\\s+${qualifier}${termPat}\\b`, "i").test(lower)) return true;
   // "non-X" prefix form (e.g. "non-creature", "non-land")
   if (new RegExp(`\\bnon-${termPat}\\b`, "i").test(lower)) return true;
+  // "non X" space-separated form (e.g. "non creature", "non land spells")
+  if (new RegExp(`\\bnon\\s+${termPat}\\b`, "i").test(lower)) return true;
 
   return false;
 }
