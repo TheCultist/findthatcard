@@ -6,14 +6,23 @@ import ManaCost from "@/app/components/ManaCost";
 import Image from "next/image";
 import { useState } from "react";
 
-export default function CardCard({ card }: { card: CardResult }) {
+interface CardCardProps {
+  card: CardResult;
+  onCardClick?: (card: CardResult) => void;
+}
+
+export default function CardCard({ card, onCardClick }: CardCardProps) {
   const [isCheckingLink, setIsCheckingLink] = useState(false);
   const initialImageSrc = card.image_uris.normal || card.image_uris.small || "";
   const [imageSrc, setImageSrc] = useState(initialImageSrc);
   const [imageFailed, setImageFailed] = useState(false);
 
   const handleClick = () => {
-    window.open(card.scryfall_uri, "_blank", "noopener,noreferrer");
+    if (onCardClick) {
+      onCardClick(card);
+    } else {
+      window.open(card.scryfall_uri, "_blank", "noopener,noreferrer");
+    }
   };
 
   const handleCardTraderClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {

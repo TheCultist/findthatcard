@@ -228,12 +228,19 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
   const queryWithoutPrefer = stripPreferBestPrefix(baseQuery);
   const withArchetypeTags = injectArchetypeTagsFromResolvedFragments(ir, queryWithoutPrefer);
   const tagContext = await getTaggerTagContext(ir.naturalQuery);
-  let query = finalizeScryfallQuery({
-    naturalQuery: ir.naturalQuery,
-    rawQuery: withArchetypeTags,
-    tagContext,
-    maxLength: EFFECTIVE_MAX_QUERY_LENGTH,
-  });
+
+  // For direct Scryfall syntax, use the query exactly as typed — no strategy expansion or other post-processing.
+  let query: string;
+  if (ir.intent === "direct-scryfall") {
+    query = withArchetypeTags;
+  } else {
+    query = finalizeScryfallQuery({
+      naturalQuery: ir.naturalQuery,
+      rawQuery: withArchetypeTags,
+      tagContext,
+      maxLength: EFFECTIVE_MAX_QUERY_LENGTH,
+    });
+  }
 
   let invalidTags: Array<{ type: "art" | "function"; tag: string }> = [];
 

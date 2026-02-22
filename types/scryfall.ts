@@ -102,3 +102,53 @@ export interface ErrorResponse {
   details?: string;
   scryfallQuery?: string; // Include the generated query even on error
 }
+
+// Detailed card face data (from single-card Scryfall API)
+export interface CardDetailFace {
+  name: string;
+  mana_cost?: string;
+  type_line?: string;
+  oracle_text?: string;
+  flavor_text?: string;
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  defense?: string;
+  artist?: string;
+  image_uris?: ScryfallImageUris;
+}
+
+// Full card detail data returned by the Scryfall single-card endpoint
+export interface CardDetailData {
+  id: string;
+  name: string;
+  mana_cost?: string;
+  type_line: string;
+  oracle_text?: string;
+  flavor_text?: string;
+  power?: string;
+  toughness?: string;
+  loyalty?: string;
+  defense?: string;
+  image_uris?: ScryfallImageUris;
+  card_faces?: CardDetailFace[];
+  set: string;
+  set_name: string;
+  collector_number: string;
+  rarity: string;
+  artist?: string;
+  keywords?: string[];
+  legalities?: Record<string, string>;
+  colors?: string[];
+  color_identity?: string[];
+  cmc?: number;
+  scryfall_uri: string;
+  purchase_uris?: {
+    tcgplayer?: string;
+    cardhoarder?: string;
+    cardmarket?: string;
+  };
+  tcgplayer_id?: number;
+  released_at?: string;
+  lang?: string;
+}

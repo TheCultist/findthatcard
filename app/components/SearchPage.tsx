@@ -4,7 +4,7 @@ import { useState, FormEvent, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheckIcon, PaintBrushIcon, QueueListIcon } from "@heroicons/react/24/outline";
-import { SearchResponse, ErrorResponse } from "@/types/scryfall";
+import { SearchResponse, ErrorResponse, CardResult } from "@/types/scryfall";
 import { getRandomExamples } from "@/lib/example-queries";
 import { getRandomProTip } from "@/lib/pro-tips";
 import CookieBanner from "@/app/components/CookieBanner";
@@ -13,6 +13,7 @@ import useAdBlockDetection from "@/app/hooks/useAdBlockDetection";
 import CardCard from "@/app/components/CardCard";
 import AdBanner from "@/app/components/AdBanner";
 import QueryTokenPreview from "@/app/components/QueryTokenPreview";
+import CardDetailPanel from "@/app/components/CardDetailPanel";
 
 type SearchOptions = {
   updateUrl?: boolean;
@@ -68,6 +69,7 @@ export default function SearchPage() {
   const [proTip, setProTip] = useState("");
   const [sourceQuery, setSourceQuery] = useState("");
   const [isEditingQuery, setIsEditingQuery] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<CardResult | null>(null);
   const adBlockDetected = useAdBlockDetection();
 
   const getQueryFromUrl = useCallback(() => {
@@ -518,7 +520,13 @@ export default function SearchPage() {
 
                     results.cards.forEach((card, index) => {
                       // Add the card
-                      items.push(<CardCard key={card.id} card={card} />);
+                      items.push(
+                        <CardCard
+                          key={card.id}
+                          card={card}
+                          onCardClick={setSelectedCard}
+                        />
+                      );
 
                       // Insert ad banner after 20th card if we have 30+ results
                       if (cardCount >= 30 && index === 19) {
@@ -670,6 +678,14 @@ export default function SearchPage() {
 
       {/* Cookie Consent Banner */}
       <CookieBanner />
+
+      {/* Card Detail Panel */}
+      {selectedCard && (
+        <CardDetailPanel
+          card={selectedCard}
+          onClose={() => setSelectedCard(null)}
+        />
+      )}
     </main>
   );
 }

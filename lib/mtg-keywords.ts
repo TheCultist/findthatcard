@@ -6,6 +6,7 @@ import { ensureScryfallCatalogCache, getCatalog } from "@/lib/scryfall/catalogs"
 type MtgKeywordEntry = {
   name: string;
   slug: string;
+  reminderText?: string;
 };
 
 type MtgKeywordCacheFile = {
@@ -75,6 +76,7 @@ function buildKeywordIndex(entries: MtgKeywordEntry[]): MtgKeywordIndex {
       const normalized: MtgKeywordEntry = {
         name: entry.name,
         slug,
+        ...(entry.reminderText != null && { reminderText: entry.reminderText }),
       };
       bySlug.set(slug, normalized);
       list.push(normalized);
@@ -94,13 +96,22 @@ async function readKeywordFile(): Promise<MtgKeywordCacheFile | null> {
     if (Array.isArray(parsed)) {
       const keywords = parsed
         .filter(
-          (entry): entry is MtgKeywordEntry =>
+          (entry): entry is MtgKeywordEntry & { reminderText?: string; definition?: string } =>
             entry && typeof entry.name === "string",
         )
-        .map((entry) => ({
-          name: entry.name,
-          slug: normalizeKeywordName(entry.slug || entry.name),
-        }));
+        .map((entry) => {
+          const reminderText =
+            typeof (entry as { reminderText?: string }).reminderText === "string"
+              ? (entry as { reminderText: string }).reminderText
+              : typeof (entry as { definition?: string }).definition === "string"
+                ? (entry as { definition: string }).definition
+                : undefined;
+          return {
+            name: entry.name,
+            slug: normalizeKeywordName(entry.slug || entry.name),
+            ...(reminderText != null && { reminderText }),
+          };
+        });
       return { updatedAt: "", keywords };
     }
 
@@ -113,13 +124,22 @@ async function readKeywordFile(): Promise<MtgKeywordCacheFile | null> {
     const keywords = Array.isArray(parsed.keywords)
       ? parsed.keywords
           .filter(
-            (entry: MtgKeywordEntry): entry is MtgKeywordEntry =>
+            (entry: MtgKeywordEntry & { reminderText?: string; definition?: string }): entry is MtgKeywordEntry & { reminderText?: string; definition?: string } =>
               entry && typeof entry.name === "string",
           )
-          .map((entry: MtgKeywordEntry) => ({
-            name: entry.name,
-            slug: normalizeKeywordName(entry.slug || entry.name),
-          }))
+          .map((entry: MtgKeywordEntry & { reminderText?: string; definition?: string }) => {
+            const reminderText =
+              typeof entry.reminderText === "string"
+                ? entry.reminderText
+                : typeof entry.definition === "string"
+                  ? entry.definition
+                  : undefined;
+            return {
+              name: entry.name,
+              slug: normalizeKeywordName(entry.slug || entry.name),
+              ...(reminderText != null && { reminderText }),
+            };
+          })
       : [];
 
     return { updatedAt, keywords };
@@ -160,6 +180,7 @@ function mergeKeywords(
   const merged = existing.map((entry) => ({
     name: entry.name,
     slug: normalizeKeywordName(entry.slug || entry.name),
+    ...(entry.reminderText != null && { reminderText: entry.reminderText }),
   }));
 
   const existingMap = new Map(
@@ -182,7 +203,7 @@ function mergeKeywords(
 
     const existingName = existingMap.get(slug);
     if (!existingName) {
-      merged.push({ name: entry.name, slug });
+      merged.push({ name: entry.name, slug } as MtgKeywordEntry);
       mergedMap.set(slug, entry.name);
       addedSlugs.push(slug);
       continue;
@@ -287,7 +308,7 @@ async function initializeKeywordCache(): Promise<void> {
   if (existing) {
     keywordCache = existing.keywords;
     keywordCacheUpdatedAt = existing.updatedAt || null;
-    keywordIndex = buildKeywordIndex(existing.keywords);
+    keywordIndex = buildKeywordIndex(keywordCache);
   }
 
   const todayStamp = formatTodayStamp();
@@ -401,6 +422,21 @@ export async function getMtgKeywordSlugMap(): Promise<Record<string, string>> {
   const map: Record<string, string> = {};
   for (const [slug, entry] of bySlug.entries()) {
     map[slug] = entry.name;
+  }
+  return map;
+}
+
+/**
+ * Returns a map of keyword slug -> reminder text for tooltips.
+ * Only includes entries that have reminderText in the catalog.
+ */
+export async function getKeywordDefinitionsMap(): Promise<Record<string, string>> {
+  const { list } = await getKeywordIndex();
+  const map: Record<string, string> = {};
+  for (const entry of list) {
+    if (entry.reminderText) {
+      map[entry.slug] = entry.reminderText;
+    }
   }
   return map;
 }
