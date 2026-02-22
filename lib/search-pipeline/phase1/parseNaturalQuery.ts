@@ -569,6 +569,12 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   //    Also bare "token generation", "token creation", "token production"
   capture(/\btoken\s+(?:generat(?:ion|or|ors)|creat(?:ion|or|ors)|produc(?:tion|er|ers)|maker|makers)\b/gi);
 
+  // 8. Grant/give targets — the type after "give[s]/grant[s] [quantifier]" is the recipient,
+  //    not the card type being searched for.
+  //    e.g. "give your creatures haste" → "creatures" (not t:creature)
+  //         "grant all permanents indestructible" → "permanents" (not t:permanent)
+  capture(/\b(?:gives?|grants?|make[sd]?)\s+(?:your|all|each|every|target|a|an|any|friendly)?\s*([a-z][a-z-]*)\b/gi);
+
   return tokens;
 }
 
@@ -1396,11 +1402,14 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   const negatedTypes: string[] = [];
   for (const type of TYPE_TOKENS) {
     const typeForms = getTermForms(type);
-    if (synergySubjects.has(type) || semanticRoleTokens.has(type)) {
+    // Check both singular ("creature") and plural ("creatures") forms against the semantic-role set,
+    // because captured tokens may have been stored in plural form.
+    const isSemanticRole = typeForms.some((f) => semanticRoleTokens.has(f));
+    if (synergySubjects.has(type) || isSemanticRole) {
       // Don't strip synergy subjects here — let resolveSynergyFunctionClauses
       // strip them only if tags are found; otherwise they fall through to AI resolution.
       // Semantic-role tokens (subject/object markers) are noise and can be stripped.
-      if (semanticRoleTokens.has(type)) strippedTerms.push(...typeForms);
+      if (isSemanticRole) strippedTerms.push(...typeForms);
       continue;
     }
     if (buildTermFormsPattern(typeForms).test(naturalQuery)) {
