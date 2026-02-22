@@ -1656,6 +1656,11 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   if (artistMatch) {
     mustClauses.push({ value: `artist:"${artistMatch.name}"`, source: "phase1:artist" });
     strippedTerms.push(artistMatch.matchedText, artistMatch.name.toLowerCase(), "by", "artist");
+    // Strip attribution verbs that precede "by [artist]" (e.g. "illustrated by", "drawn by", "painted by")
+    const attributionPrefix = /\b(illustrat\w*|drawn|painted|created|artwork?)\s+by\b/i.exec(naturalQuery);
+    if (attributionPrefix) {
+      strippedTerms.push(attributionPrefix[1].toLowerCase());
+    }
   }
 
   const keywordList = await getMtgKeywordList();
