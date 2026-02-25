@@ -93,9 +93,11 @@ const COLOR_IDENTITY: Record<string, string> = {
   "5 color": "wubrg",
   fivecolor: "wubrg",
   fivecolors: "wubrg",
+  // Colorless — Scryfall uses "c" as the colorless identity indicator
+  colorless: "c",
 };
 
-const SINGLE_COLOR_NAMES = new Set(["white", "blue", "black", "red", "green"]);
+const SINGLE_COLOR_NAMES = new Set(["white", "blue", "black", "red", "green", "colorless"]);
 
 const STOPWORDS = new Set([
   "a",
@@ -705,7 +707,10 @@ const WUBRG_ORDER = "wubrg";
 
 function combineColorLetters(letters: Iterable<string>): string {
   const set = new Set(letters);
-  return WUBRG_ORDER.split("").filter((c) => set.has(c)).join("");
+  const wubrg = WUBRG_ORDER.split("").filter((c) => set.has(c)).join("");
+  // "c" (colorless) is not part of WUBRG but is a valid Scryfall color identity
+  // letter. Append it after the WUBRG portion when present.
+  return set.has("c") ? `${wubrg}c` : wubrg;
 }
 
 function extractColorIdentityFromText(lowerQuery: string): string | null {
@@ -845,7 +850,7 @@ function detectColorNegations(lowerQuery: string): {
     }
   }
 
-  const negatedColorLetters = WUBRG_ORDER.split("").filter((c) => negatedLetters.has(c)).join("");
+  const negatedColorLetters = [...WUBRG_ORDER.split(""), "c"].filter((c) => negatedLetters.has(c)).join("");
   return { negatedColorLetters, maskedQuery: masked };
 }
 
@@ -2198,6 +2203,191 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       for (const oracleValue of rule.oracle) {
         if (!mustClauses.some((c) => c.value === oracleValue)) {
           mustClauses.push({ value: oracleValue, source: "phase1:oracle" });
+        }
+      }
+      strippedTerms.push(...rule.strip);
+    }
+  }
+
+  // --- Card face / layout IS-flag detection ---
+  // Specific abbreviations and layout terms that map unambiguously to Scryfall
+  // is: flags. Handled deterministically so they never reach the AI as fragments.
+  {
+    const IS_FLAG_RULES: Array<{
+      detect: RegExp;
+      flag: string;
+      strip: string[];
+    }> = [
+      {
+        // "mdfc", "modal double-faced", "double-faced modal"
+        detect: /\b(?:mdfc|modal\s+double[-\s]faced|double[-\s]faced\s+modal)\b/i,
+        flag: "is:mdfc",
+        strip: ["mdfc", "modal double-faced", "double faced modal", "modal", "double-faced", "double faced"],
+      },
+      {
+        // "tdfc", "transform double-faced", "transforming double-faced"
+        detect: /\b(?:tdfc|transform(?:ing)?\s+double[-\s]faced|double[-\s]faced\s+transform(?:ing)?)\b/i,
+        flag: "is:tdfc",
+        strip: ["tdfc", "transform double-faced", "transforming double-faced", "double faced transform"],
+      },
+      {
+        // "dfc", "double-faced card(s)" — generic, catches both tdfc and mdfc
+        // Disqualify when a more specific term (mdfc/tdfc) was already detected
+        detect: /\b(?:dfc|double[-\s]faced\s+cards?)\b/i,
+        flag: "is:dfc",
+        strip: ["dfc", "double-faced card", "double faced card", "double-faced cards", "double faced cards"],
+      },
+      {
+        // "meld card(s)", "is meld", "are meld"
+        detect: /\b(?:meld\s+cards?|(?:is|are)\s+(?:a\s+)?meld)\b/i,
+        flag: "is:meld",
+        strip: ["meld"],
+      },
+      {
+        // "split card(s)"
+        detect: /\bsplit\s+cards?\b/i,
+        flag: "is:split",
+        strip: ["split"],
+      },
+      {
+        // "flip card(s)"
+        detect: /\bflip\s+cards?\b/i,
+        flag: "is:flip",
+        strip: ["flip"],
+      },
+      {
+        // "saga card(s)" — Scryfall uses t:saga but this ensures deterministic handling
+        detect: /\bsaga\s+cards?\b/i,
+        flag: "t:saga",
+        strip: ["saga"],
+      },
+    ];
+
+    // Track which flags were already emitted so more-specific rules win over generic ones
+    const emittedIsFlags = new Set<string>();
+    for (const rule of IS_FLAG_RULES) {
+      if (!rule.detect.test(naturalQuery)) continue;
+      // Skip is:dfc if is:mdfc or is:tdfc was already emitted (more specific wins)
+      if (rule.flag === "is:dfc" && (emittedIsFlags.has("is:mdfc") || emittedIsFlags.has("is:tdfc"))) {
+        continue;
+      }
+      if (!mustClauses.some((c) => c.value === rule.flag)) {
+        mustClauses.push({ value: rule.flag, source: "phase1:is-flag" });
+      }
+      emittedIsFlags.add(rule.flag);
+      strippedTerms.push(...rule.strip);
+    }
+  }
+
+  // --- Named land cycle detection ---
+  // Specific MTG land cycle names and "N color land" patterns that map
+  // unambiguously to function: tags. Prevents the AI from mis-classifying
+  // e.g. "3 color lands" as function:color-count-matters.
+  {
+    const LAND_CYCLE_RULES: Array<{
+      detect: RegExp;
+      tags: string[];
+      strip: string[];
+    }> = [
+      {
+        // "triland(s)", "triome(s)", "tri-land(s)", "3 color land(s)", "three color land(s)"
+        detect: /\b(?:trilands?|triomes?|tri-lands?|(?:3|three)[-\s]?color(?:ed)?\s+lands?|lands?\s+(?:that\s+(?:produce|add|tap\s+for)\s+)?(?:three|3)\s+colors?)\b/i,
+        tags: ["function:triland"],
+        // Strip both compound phrases AND the individual residual tokens so that
+        // after type-detection removes "lands", the leftover "3 color" / "three color"
+        // doesn't survive as an unresolved fragment.
+        strip: [
+          "triland", "trilands", "triome", "triomes", "tri-land", "tri-lands",
+          "3 color lands", "3 color land", "three color lands", "three color land",
+          "3-color lands", "3-color land", "three-color lands", "three-color land",
+          "3", "three", "color", "colors", "colored", "colour", "colours", "coloured",
+        ],
+      },
+      {
+        // "dual land(s)", "original dual(s)", "ABU dual(s)" — the Power 9 era duals
+        detect: /\b(?:dual\s+lands?|original\s+duals?|abu\s+duals?|original\s+dual\s+lands?|abu\s+dual\s+lands?)\b/i,
+        tags: ["function:dual-land"],
+        strip: ["dual land", "dual lands", "original dual", "original duals", "abu dual", "abu duals", "original dual land", "original dual lands", "abu dual land", "abu dual lands"],
+      },
+      {
+        // "fetchland(s)", "fetch land(s)"
+        detect: /\b(?:fetchlands?|fetch\s+lands?)\b/i,
+        tags: ["function:fetchland"],
+        strip: ["fetchland", "fetchlands", "fetch land", "fetch lands"],
+      },
+      {
+        // "shockland(s)", "shock land(s)"
+        detect: /\b(?:shocklands?|shock\s+lands?)\b/i,
+        tags: ["function:shockland"],
+        strip: ["shockland", "shocklands", "shock land", "shock lands"],
+      },
+      {
+        // "painland(s)", "pain land(s)"
+        detect: /\b(?:painlands?|pain\s+lands?)\b/i,
+        tags: ["function:painland"],
+        strip: ["painland", "painlands", "pain land", "pain lands"],
+      },
+      {
+        // "filterland(s)", "filter land(s)"
+        detect: /\b(?:filterlands?|filter\s+lands?)\b/i,
+        tags: ["function:filterland"],
+        strip: ["filterland", "filterlands", "filter land", "filter lands"],
+      },
+      {
+        // "bounceland(s)", "bounce land(s)"
+        detect: /\b(?:bouncelands?|bounce\s+lands?)\b/i,
+        tags: ["function:bounceland"],
+        strip: ["bounceland", "bouncelands", "bounce land", "bounce lands"],
+      },
+      {
+        // "manland(s)", "man land(s)", "creatureland(s)", "creature land(s)"
+        detect: /\b(?:manlands?|man\s+lands?|creaturelands?|creature\s+lands?)\b/i,
+        tags: ["is:manland"],
+        strip: ["manland", "manlands", "man land", "man lands", "creatureland", "creaturelands", "creature land", "creature lands"],
+      },
+      {
+        // "checkland(s)", "check land(s)"
+        detect: /\b(?:checklands?|check\s+lands?)\b/i,
+        tags: ["function:cycle-checkland"],
+        strip: ["checkland", "checklands", "check land", "check lands"],
+      },
+      {
+        // "fastland(s)", "fast land(s)"
+        detect: /\b(?:fastlands?|fast\s+lands?)\b/i,
+        tags: ["function:cycle-fastland"],
+        strip: ["fastland", "fastlands", "fast land", "fast lands"],
+      },
+      {
+        // "tangoland(s)", "tango land(s)", "battle land(s)" (BFZ dual tap-lands)
+        detect: /\b(?:tangolands?|tango\s+lands?|battle\s+lands?)\b/i,
+        tags: ["function:cycle-tangoland"],
+        strip: ["tangoland", "tangolands", "tango land", "tango lands", "battle land", "battle lands"],
+      },
+      {
+        // "scryland(s)", "scry land(s)"
+        detect: /\b(?:scrylands?|scry\s+lands?)\b/i,
+        tags: ["function:cycle-scryland"],
+        strip: ["scryland", "scrylands", "scry land", "scry lands"],
+      },
+      {
+        // "canopyland(s)", "canopy land(s)"
+        detect: /\b(?:canopylands?|canopy\s+lands?)\b/i,
+        tags: ["function:cycle-canopy-land"],
+        strip: ["canopyland", "canopylands", "canopy land", "canopy lands"],
+      },
+      {
+        // "slowland(s)", "slow land(s)"
+        detect: /\b(?:slowlands?|slow\s+lands?)\b/i,
+        tags: ["function:slowland"],
+        strip: ["slowland", "slowlands", "slow land", "slow lands"],
+      },
+    ];
+
+    for (const rule of LAND_CYCLE_RULES) {
+      if (!rule.detect.test(naturalQuery)) continue;
+      for (const tag of rule.tags) {
+        if (!mustClauses.some((c) => c.value === tag)) {
+          mustClauses.push({ value: tag, source: "phase1:is-flag" });
         }
       }
       strippedTerms.push(...rule.strip);

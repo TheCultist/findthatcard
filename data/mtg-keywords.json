@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-02-22",
+  "updatedAt": "2026-02-25",
   "keywords": [
     {
       "name": "Abandon",
@@ -31,8 +31,7 @@
     },
     {
       "name": "Afterlife",
-      "slug": "afterlife",
-      "reminderText": "When this creature dies, create a 1/1 white and black Spirit creature token with flying."
+      "slug": "afterlife"
     },
     {
       "name": "Aftermath",
@@ -48,8 +47,7 @@
     },
     {
       "name": "Amass",
-      "slug": "amass",
-      "reminderText": "Put a +1/+1 counter on an Army you control. If you don't control one, create a 0/0 black Zombie Army creature token first."
+      "slug": "amass"
     },
     {
       "name": "Amplify",
@@ -61,8 +59,7 @@
     },
     {
       "name": "Ascend",
-      "slug": "ascend",
-      "reminderText": "If you control ten or more permanents and don't have the city's blessing, you get the city's blessing for the rest of the game."
+      "slug": "ascend"
     },
     {
       "name": "Assemble",
@@ -86,8 +83,7 @@
     },
     {
       "name": "Backup",
-      "slug": "backup",
-      "reminderText": "Put a +1/+1 counter on target creature. When this creature leaves the battlefield, put a +1/+1 counter on that creature for each backup counter it had from this creature."
+      "slug": "backup"
     },
     {
       "name": "Banding",
@@ -123,8 +119,7 @@
     },
     {
       "name": "Blitz",
-      "slug": "blitz",
-      "reminderText": "You may pay the blitz cost rather than the mana cost. If you cast this spell for its blitz cost, it gains haste and 'When this creature dies, draw a card.' Sacrifice it at the beginning of the next end step."
+      "slug": "blitz"
     },
     {
       "name": "Bloodrush",
@@ -132,8 +127,7 @@
     },
     {
       "name": "Bloodthirst",
-      "slug": "bloodthirst",
-      "reminderText": "This permanent enters the battlefield with a +1/+1 counter on it for each opponent who was dealt damage this turn."
+      "slug": "bloodthirst"
     },
     {
       "name": "Boast",
@@ -153,8 +147,7 @@
     },
     {
       "name": "Cascade",
-      "slug": "cascade",
-      "reminderText": "When you cast this spell, exile cards from the top of your library until you exile a nonland card whose mana value is less than this spell's. You may cast that card without paying its mana cost. Put the exiled cards on the bottom in a random order."
+      "slug": "cascade"
     },
     {
       "name": "Casualty",
@@ -226,8 +219,7 @@
     },
     {
       "name": "Connive",
-      "slug": "connive",
-      "reminderText": "Draw a card, then discard a card. If you discarded a nonland card, put a +1/+1 counter on this creature."
+      "slug": "connive"
     },
     {
       "name": "Conspire",
@@ -247,8 +239,7 @@
     },
     {
       "name": "Convoke",
-      "slug": "convoke",
-      "reminderText": "Your creatures can help cast this spell. Each creature you tap while casting this spell pays for one mana of that creature's color or one generic mana."
+      "slug": "convoke"
     },
     {
       "name": "Corrupted",
@@ -268,8 +259,7 @@
     },
     {
       "name": "Crew",
-      "slug": "crew",
-      "reminderText": "Tap any number of creatures you control with total power equal to or greater than this vehicle's power. This vehicle becomes an artifact creature until end of turn."
+      "slug": "crew"
     },
     {
       "name": "Cumulative upkeep",
@@ -281,8 +271,7 @@
     },
     {
       "name": "Dash",
-      "slug": "dash",
-      "reminderText": "You may cast this spell for its dash cost. If you do, it gains haste, and it's returned from the battlefield to its owner's hand at the beginning of the next end step."
+      "slug": "dash"
     },
     {
       "name": "Daybound",
@@ -290,18 +279,15 @@
     },
     {
       "name": "Deathtouch",
-      "slug": "deathtouch",
-      "reminderText": "Any amount of damage this deals to a creature is enough to destroy it."
+      "slug": "deathtouch"
     },
     {
       "name": "Decayed",
-      "slug": "decayed",
-      "reminderText": "This creature can't block. When this creature attacks, sacrifice it at end of combat."
+      "slug": "decayed"
     },
     {
       "name": "Defender",
-      "slug": "defender",
-      "reminderText": "This creature can't attack."
+      "slug": "defender"
     },
     {
       "name": "Delirium",
@@ -345,8 +331,7 @@
     },
     {
       "name": "Discover",
-      "slug": "discover",
-      "reminderText": "Exile cards from the top of your library until you exile a nonland card with mana value less than or equal to the discover value. You may cast that card without paying its mana cost. Put the rest on the bottom in a random order."
+      "slug": "discover"
     },
     {
       "name": "Disguise",
@@ -354,8 +339,7 @@
     },
     {
       "name": "Disturb",
-      "slug": "disturb",
-      "reminderText": "You may cast this card from your graveyard transformed for its disturb cost."
+      "slug": "disturb"
     },
     {
       "name": "Doctor's companion",
@@ -371,8 +355,7 @@
     },
     {
       "name": "Double strike",
-      "slug": "double-strike",
-      "reminderText": "This creature deals both first-strike and regular combat damage."
+      "slug": "double-strike"
     },
     {
       "name": "Double team",
@@ -396,8 +379,7 @@
     },
     {
       "name": "Embalm",
-      "slug": "embalm",
-      "reminderText": "You may exile this card from your graveyard and pay its embalm cost. If you do, create a token that's a copy of it, except it's a white Zombie with no mana cost."
+      "slug": "embalm"
     },
     {
       "name": "Emerge",
@@ -413,8 +395,7 @@
     },
     {
       "name": "Encore",
-      "slug": "encore",
-      "reminderText": "You may exile this card from your graveyard and pay its encore cost. If you do, create a token copy of it for each opponent. Those tokens gain haste. Sacrifice them at the beginning of the next end step."
+      "slug": "encore"
     },
     {
       "name": "Endure",
@@ -446,18 +427,15 @@
     },
     {
       "name": "Escape",
-      "slug": "escape",
-      "reminderText": "You may cast this card from your graveyard for its escape cost. If you do, exile this card as it resolves."
+      "slug": "escape"
     },
     {
       "name": "Eternalize",
-      "slug": "eternalize",
-      "reminderText": "You may exile this card from your graveyard and pay its eternalize cost. If you do, create a token that's a copy of it, except it's a 4/4 black Zombie with no mana cost."
+      "slug": "eternalize"
     },
     {
       "name": "Evoke",
-      "slug": "evoke",
-      "reminderText": "You may cast this spell for its evoke cost. If you do, it's sacrificed when it enters the battlefield."
+      "slug": "evoke"
     },
     {
       "name": "Evolve",
@@ -477,8 +455,7 @@
     },
     {
       "name": "Exploit",
-      "slug": "exploit",
-      "reminderText": "When this creature enters the battlefield, you may sacrifice a creature."
+      "slug": "exploit"
     },
     {
       "name": "Explore",
@@ -518,8 +495,7 @@
     },
     {
       "name": "First strike",
-      "slug": "first-strike",
-      "reminderText": "This creature deals combat damage before creatures without first strike."
+      "slug": "first-strike"
     },
     {
       "name": "Flanking",
@@ -527,13 +503,11 @@
     },
     {
       "name": "Flash",
-      "slug": "flash",
-      "reminderText": "You may cast this spell any time you could cast an instant."
+      "slug": "flash"
     },
     {
       "name": "Flashback",
-      "slug": "flashback",
-      "reminderText": "You may cast this card from your graveyard for its flashback cost. Then exile it."
+      "slug": "flashback"
     },
     {
       "name": "Flurry",
@@ -541,8 +515,7 @@
     },
     {
       "name": "Flying",
-      "slug": "flying",
-      "reminderText": "This creature can't be blocked except by creatures with flying or reach."
+      "slug": "flying"
     },
     {
       "name": "Food",
@@ -570,8 +543,7 @@
     },
     {
       "name": "Foretell",
-      "slug": "foretell",
-      "reminderText": "During your turn, you may pay {2} and exile this card from your hand face down. Cast it on a later turn for its foretell cost."
+      "slug": "foretell"
     },
     {
       "name": "Formidable",
@@ -615,8 +587,7 @@
     },
     {
       "name": "Gravestorm",
-      "slug": "gravestorm",
-      "reminderText": "When you cast this spell, copy it for each permanent that was put into a graveyard from the battlefield this turn."
+      "slug": "gravestorm"
     },
     {
       "name": "Harmonize",
@@ -624,8 +595,7 @@
     },
     {
       "name": "Haste",
-      "slug": "haste",
-      "reminderText": "This creature can attack and {T} as soon as it comes under your control."
+      "slug": "haste"
     },
     {
       "name": "Haunt",
@@ -649,8 +619,7 @@
     },
     {
       "name": "Hexproof",
-      "slug": "hexproof",
-      "reminderText": "This permanent can't be the target of spells or abilities your opponents control."
+      "slug": "hexproof"
     },
     {
       "name": "Hexproof from",
@@ -662,8 +631,7 @@
     },
     {
       "name": "Hideaway",
-      "slug": "hideaway",
-      "reminderText": "This permanent enters the battlefield tapped. When it does, look at the top four cards of your library, exile one face down, then put the rest on the bottom in a random order."
+      "slug": "hideaway"
     },
     {
       "name": "Horsemanship",
@@ -679,8 +647,7 @@
     },
     {
       "name": "Improvise",
-      "slug": "improvise",
-      "reminderText": "Your artifacts can help cast this spell. Each artifact you tap after you're done activating mana abilities pays for one generic mana."
+      "slug": "improvise"
     },
     {
       "name": "Incubate",
@@ -688,8 +655,7 @@
     },
     {
       "name": "Indestructible",
-      "slug": "indestructible",
-      "reminderText": "Effects that say 'destroy' don't destroy this permanent. If it's a creature, it can't be destroyed by damage."
+      "slug": "indestructible"
     },
     {
       "name": "Infect",
@@ -733,13 +699,11 @@
     },
     {
       "name": "Jump-start",
-      "slug": "jump-start",
-      "reminderText": "You may cast this card from your graveyard by discarding a card in addition to paying its other costs. Then exile this card."
+      "slug": "jump-start"
     },
     {
       "name": "Kicker",
-      "slug": "kicker",
-      "reminderText": "You may pay an additional kicker cost as you cast this spell."
+      "slug": "kicker"
     },
     {
       "name": "Kinfall",
@@ -755,8 +719,7 @@
     },
     {
       "name": "Landfall",
-      "slug": "landfall",
-      "reminderText": "Whenever a land enters the battlefield under your control, [effect]."
+      "slug": "landfall"
     },
     {
       "name": "Landship",
@@ -768,8 +731,7 @@
     },
     {
       "name": "Learn",
-      "slug": "learn",
-      "reminderText": "You may reveal a Lesson card you own from outside the game and put it into your hand, or discard a card to draw a card."
+      "slug": "learn"
     },
     {
       "name": "Legacy",
@@ -789,8 +751,7 @@
     },
     {
       "name": "Lifelink",
-      "slug": "lifelink",
-      "reminderText": "Damage dealt by this creature also causes its controller to gain that much life."
+      "slug": "lifelink"
     },
     {
       "name": "Living metal",
@@ -802,8 +763,7 @@
     },
     {
       "name": "Madness",
-      "slug": "madness",
-      "reminderText": "If you discard this card, you may cast it for its madness cost instead of putting it into your graveyard."
+      "slug": "madness"
     },
     {
       "name": "Magecraft",
@@ -839,13 +799,11 @@
     },
     {
       "name": "Menace",
-      "slug": "menace",
-      "reminderText": "This creature can't be blocked except by two or more creatures."
+      "slug": "menace"
     },
     {
       "name": "Mentor",
-      "slug": "mentor",
-      "reminderText": "Whenever this creature attacks, put a +1/+1 counter on target attacking creature with lesser power."
+      "slug": "mentor"
     },
     {
       "name": "Metalcraft",
@@ -853,8 +811,7 @@
     },
     {
       "name": "Mill",
-      "slug": "mill",
-      "reminderText": "That player puts the top card of their library into their graveyard."
+      "slug": "mill"
     },
     {
       "name": "Miracle",
@@ -882,8 +839,7 @@
     },
     {
       "name": "Morph",
-      "slug": "morph",
-      "reminderText": "You may cast this card face down as a 2/2 creature for {3}. Turn it face up any time for its morph cost."
+      "slug": "morph"
     },
     {
       "name": "Mountaincycling",
@@ -899,13 +855,11 @@
     },
     {
       "name": "Mutate",
-      "slug": "mutate",
-      "reminderText": "If you cast this spell for its mutate cost, put it over or under target non-Human creature you own. They mutate into the creature on top plus all abilities from under it."
+      "slug": "mutate"
     },
     {
       "name": "Myriad",
-      "slug": "myriad",
-      "reminderText": "Whenever this creature attacks, for each opponent, create a token that's a copy of this creature that's tapped and attacking that player or a planeswalker they control. Exile those tokens at end of combat."
+      "slug": "myriad"
     },
     {
       "name": "Nightbound",
@@ -933,13 +887,11 @@
     },
     {
       "name": "Outlast",
-      "slug": "outlast",
-      "reminderText": "{T}: Put a +1/+1 counter on this creature. Activate only as a sorcery."
+      "slug": "outlast"
     },
     {
       "name": "Overload",
-      "slug": "overload",
-      "reminderText": "You may cast this spell for its overload cost. If you do, change its text by replacing all instances of 'target' with 'each'."
+      "slug": "overload"
     },
     {
       "name": "Pack tactics",
@@ -963,8 +915,7 @@
     },
     {
       "name": "Persist",
-      "slug": "persist",
-      "reminderText": "When this creature dies, if it had no -1/-1 counters on it, return it to the battlefield under its owner's control with a -1/-1 counter on it."
+      "slug": "persist"
     },
     {
       "name": "Phasing",
@@ -1012,8 +963,7 @@
     },
     {
       "name": "Prowess",
-      "slug": "prowess",
-      "reminderText": "Whenever you cast a noncreature spell, this creature gets +1/+1 until end of turn."
+      "slug": "prowess"
     },
     {
       "name": "Prowl",
@@ -1041,8 +991,7 @@
     },
     {
       "name": "Reach",
-      "slug": "reach",
-      "reminderText": "This creature can block creatures with flying."
+      "slug": "reach"
     },
     {
       "name": "Read Ahead",
@@ -1054,8 +1003,7 @@
     },
     {
       "name": "Reconfigure",
-      "slug": "reconfigure",
-      "reminderText": "Equipped creature gets the listed bonuses. Reconfigure {cost}: Attach to target creature you control; or unattach. Activate only as a sorcery."
+      "slug": "reconfigure"
     },
     {
       "name": "Recover",
@@ -1071,8 +1019,7 @@
     },
     {
       "name": "Renown",
-      "slug": "renown",
-      "reminderText": "When this creature deals combat damage to a player, if it isn't renowned, put a +1/+1 counter on it and it becomes renowned."
+      "slug": "renown"
     },
     {
       "name": "Replicate",
@@ -1084,13 +1031,11 @@
     },
     {
       "name": "Revolt",
-      "slug": "revolt",
-      "reminderText": "Revolt — [effect] if a permanent you controlled left the battlefield this turn."
+      "slug": "revolt"
     },
     {
       "name": "Riot",
-      "slug": "riot",
-      "reminderText": "This creature enters the battlefield with your choice of a +1/+1 counter or haste."
+      "slug": "riot"
     },
     {
       "name": "Ripple",
@@ -1114,8 +1059,7 @@
     },
     {
       "name": "Scry",
-      "slug": "scry",
-      "reminderText": "Look at the top N cards of your library. Put any number of them on the bottom of your library in any order and the rest on top in any order."
+      "slug": "scry"
     },
     {
       "name": "Secret council",
@@ -1139,8 +1083,7 @@
     },
     {
       "name": "Skulk",
-      "slug": "skulk",
-      "reminderText": "This creature can't be blocked by creatures with greater power."
+      "slug": "skulk"
     },
     {
       "name": "Slivercycling",
@@ -1156,8 +1099,7 @@
     },
     {
       "name": "Soulbond",
-      "slug": "soulbond",
-      "reminderText": "When this creature enters the battlefield, you may pair it with another unpaired creature you control. They remain paired for as long as you control both of them."
+      "slug": "soulbond"
     },
     {
       "name": "Soulshift",
@@ -1169,8 +1111,7 @@
     },
     {
       "name": "Spectacle",
-      "slug": "spectacle",
-      "reminderText": "You may cast this spell for its spectacle cost rather than its mana cost if an opponent lost life this turn."
+      "slug": "spectacle"
     },
     {
       "name": "Spell mastery",
@@ -1182,8 +1123,7 @@
     },
     {
       "name": "Split second",
-      "slug": "split-second",
-      "reminderText": "As long as this spell is on the stack, players can't cast spells or activate abilities that aren't mana abilities."
+      "slug": "split-second"
     },
     {
       "name": "Spree",
@@ -1203,8 +1143,7 @@
     },
     {
       "name": "Storm",
-      "slug": "storm",
-      "reminderText": "When you cast this spell, copy it for each spell cast before it this turn. You may choose new targets for the copies."
+      "slug": "storm"
     },
     {
       "name": "Strive",
@@ -1224,8 +1163,7 @@
     },
     {
       "name": "Surveil",
-      "slug": "surveil",
-      "reminderText": "Look at the top card of your library. You may put it into your graveyard."
+      "slug": "surveil"
     },
     {
       "name": "Survival",
@@ -1237,8 +1175,7 @@
     },
     {
       "name": "Suspend",
-      "slug": "suspend",
-      "reminderText": "Rather than cast this card from your hand, you may pay its suspend cost and exile it with N time counters. At the beginning of your upkeep, remove a time counter. When the last is removed, cast it without paying its mana cost."
+      "slug": "suspend"
     },
     {
       "name": "Swampcycling",
@@ -1278,13 +1215,11 @@
     },
     {
       "name": "Training",
-      "slug": "training",
-      "reminderText": "Whenever this creature attacks with another creature with greater power, put a +1/+1 counter on this creature."
+      "slug": "training"
     },
     {
       "name": "Trample",
-      "slug": "trample",
-      "reminderText": "Excess damage dealt by this creature can be assigned to the defending player or planeswalker."
+      "slug": "trample"
     },
     {
       "name": "Transfigure",
@@ -1292,8 +1227,7 @@
     },
     {
       "name": "Transform",
-      "slug": "transform",
-      "reminderText": "Turn this permanent over to its other face."
+      "slug": "transform"
     },
     {
       "name": "Transmute",
@@ -1329,18 +1263,15 @@
     },
     {
       "name": "Undying",
-      "slug": "undying",
-      "reminderText": "When this creature dies, if it had no +1/+1 counters on it, return it to the battlefield under its owner's control with a +1/+1 counter on it."
+      "slug": "undying"
     },
     {
       "name": "Unearth",
-      "slug": "unearth",
-      "reminderText": "{Cost}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery."
+      "slug": "unearth"
     },
     {
       "name": "Unleash",
-      "slug": "unleash",
-      "reminderText": "You may have this creature enter the battlefield with a +1/+1 counter on it. It can't block as long as it has a +1/+1 counter on it."
+      "slug": "unleash"
     },
     {
       "name": "Valiant",
@@ -1356,8 +1287,7 @@
     },
     {
       "name": "Vigilance",
-      "slug": "vigilance",
-      "reminderText": "This creature doesn't tap when attacking."
+      "slug": "vigilance"
     },
     {
       "name": "Vivid",
@@ -1369,8 +1299,7 @@
     },
     {
       "name": "Ward",
-      "slug": "ward",
-      "reminderText": "Whenever this permanent becomes the target of a spell or ability an opponent controls, counter that spell or ability unless that player pays the ward cost."
+      "slug": "ward"
     },
     {
       "name": "Warp",

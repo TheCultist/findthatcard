@@ -12,6 +12,7 @@ export type ClauseSource =
   | "phase1:oracle"
   | "phase1:stat"
   | "phase1:cardname"
+  | "phase1:is-flag"
   | "phase1:direct"
   | "phase2:resolver"
   | "phase3:sanitize";
