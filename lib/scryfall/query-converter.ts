@@ -812,6 +812,38 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     ],
     strayPattern: /\bfunction:(tutor(?:-[a-z0-9-]+)?|hate-tutor)\b/gi,
   },
+  {
+    name: "group-slug",
+    description: "Deal damage or impose costs on all opponents simultaneously",
+    detect: /\bgroup[-\s]slug\b/i,
+    defaultTags: ["group-slug"],
+    strayPattern: /\bfunction:group-slug\b/gi,
+  },
+  {
+    name: "group-hug",
+    description: "Benefit all players equally: draw cards for everyone, accelerate everyone's mana, etc.",
+    detect: /\b(?:group[-\s]hug|benefit\s+(?:all|every(?:one)?|each)\s+(?:players?|opponents?)|(?:draw|give|gain)\s+(?:cards?|mana|life)\s+for\s+(?:everyone|all\s+players?)|everyone\s+(?:draws?|gets?|gains?)|politic(?:al)?\s+(?:card|deck|effect)|makes?\s+friends?|be\s+(?:the\s+)?nice\s+(?:player|guy))\b/i,
+    defaultTags: ["group-hug", "selective-group-hug"],
+    strayPattern: /\bfunction:(group-hug|selective-group-hug)\b/gi,
+  },
+  {
+    name: "hate-magnet",
+    description: "Cards that make you the archenemy: group slug, stax, extra turns, land destruction, lockdown, storm, or infect strategies that antagonise the whole table",
+    detect: /\b(?:archenemy\s+(?:card|effect|magnet|effect)|make\s+(?:everyone|all\s+(?:players?|opponents?))\s+(?:hate|target|attack)\s+(?:you|me)|paint\s+a\s+target\s+on\s+(?:your|my)\s+back|everyone\s+hates?\s+(?:you|me)|become\s+(?:the\s+)?archenemy|table\s+(?:archenemy|target|hate)|make\s+(?:people|opponents?|players?)\s+hate\s+(?:you|me)|cards?\s+(?:that\s+)?(?:everyone|people|opponents?)\s+hates?|most\s+hated\s+cards?|most\s+annoying\s+cards?)\b/i,
+    defaultTags: [
+      "group-slug",
+      "extra-turn",
+      "mass-land-denial",
+      "lockdown",
+      "lockdown-permanent",
+      "storm",
+      "storm-like",
+      "tax",
+      "cast-tax",
+      "infect",
+    ],
+    strayPattern: /\bfunction:(group-slug|extra-turn|mass-land-denial|lockdown(?:-[a-z0-9-]+)?|storm(?:-[a-z0-9-]+)?|tax|cast-tax|infect)\b/gi,
+  },
   // ── Hate archetypes ────────────────────────────────────────────────────────
   {
     name: "hate-etb",

@@ -180,6 +180,63 @@ const STOPWORDS = new Set([
   "neither",
   "versus",
   "vs",
+  // Modal / auxiliary verbs missing from the original list.
+  // "will" is a Planeswalker subtype (Will Kenrith) and gets matched by the
+  // subtype catalog when it appears as an auxiliary verb ("that will make…").
+  "will",
+  "shall",
+  "did",
+  "does",
+  "do",
+  "might",
+  "may",
+  // Conversational social pronouns that carry no card-search meaning.
+  "everyone",
+  "someone",
+  "anybody",
+  "anybody",
+  "nobody",
+  "somebody",
+  "ourselves",
+  "themselves",
+  "myself",
+  "yourself",
+  // Common filler adjectives / adverbs in casual phrasing.
+  "really",
+  "super",
+  "very",
+  "totally",
+  "absolutely",
+  "pretty",
+  "quite",
+  "actually",
+  "basically",
+  "literally",
+  // Vibe / mood descriptors — describe desired game feel, not a Scryfall filter.
+  // "funny" in NL means "entertaining effect", NOT is:funny (Un-set/acorn cards).
+  "funny",
+  "fun",
+  "cool",
+  "hilarious",
+  "crazy",
+  "insane",
+  "wild",
+  "broken",
+  "busted",
+  "op",
+  "overpowered",
+  "underrated",
+  "underplayed",
+  "spicy",
+  "spice",
+  "unique",
+  "interesting",
+  "weird",
+  "strange",
+  "unusual",
+  "powerful",
+  "epic",
+  "awesome",
 ]);
 
 const WORD_TO_NUMBER: Record<string, number> = {
@@ -2260,6 +2317,15 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
         detect: /\bsaga\s+cards?\b/i,
         flag: "t:saga",
         strip: ["saga"],
+      },
+      {
+        // Only trigger is:funny for explicit Un-set / silver-border / acorn requests.
+        // Generic vibe words like "funny" or "hilarious" are handled by STOPWORDS
+        // so they don't become unresolved fragments — they describe desired game feel,
+        // not a request for literally silver-bordered / acorn cards.
+        detect: /\b(?:silver[-\s]border(?:ed)?|acorn\s+cards?|un[-\s]?sets?(?:\s+cards?)?|un-?glued|un-?hinged|un-?stable|un-?finityy?|undone)\b/i,
+        flag: "is:funny",
+        strip: ["silver border", "silver-border", "silver bordered", "acorn", "un-set", "unset", "unglued", "un-glued", "unhinged", "un-hinged", "unstable", "un-stable", "unfinity", "un-finity"],
       },
     ];
 
