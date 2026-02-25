@@ -813,6 +813,13 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     strayPattern: /\bfunction:(tutor(?:-[a-z0-9-]+)?|hate-tutor)\b/gi,
   },
   {
+    name: "finisher",
+    description: "End the game on the spot: 'you win the game' effects, Craterhoof-style overrun pumps, or primary win conditions",
+    detect: /\b(?:finishers?|game[-\s]enders?|win[-\s]?cons?|win\s+conditions?|wincons?|close(?:s|d|ing)?\s+(?:out\s+)?(?:the\s+)?game|end(?:s|ed|ing)?\s+(?:the\s+)?game|alpha\s+strikes?|overrun\s+effects?|craterhoof\s+effects?|swing\s+(?:for\s+)?(?:lethal|the\s+win)|lethal\s+(?:blow|damage|swing|attack)|seal(?:s|ed|ing)?\s+(?:the\s+)?game)\b/i,
+    defaultTags: ["win-condition", "alternate-win-condition", "automatic-win", "overrun"],
+    strayPattern: /\bfunction:(win-condition|alternate-win-condition|automatic-win|overrun)\b/gi,
+  },
+  {
     name: "group-slug",
     description: "Deal damage or impose costs on all opponents simultaneously",
     detect: /\bgroup[-\s]slug\b/i,

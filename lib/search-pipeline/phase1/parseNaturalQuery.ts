@@ -1131,6 +1131,22 @@ function resolveAversionOracleIntents(naturalQuery: string): {
   return { mustNotClauses, strippedTerms };
 }
 
+/**
+ * Common English words that are valid search terms in MTG queries but happen
+ * to be within 1 edit of a real MTG keyword. Exempting them prevents false
+ * keyword corrections (e.g. "leave" → "cleave", "heave" → "cleave").
+ */
+const FUZZY_KEYWORD_CORRECTION_BLOCKLIST = new Set([
+  // "leave / leaves / leaving" sit 1 edit from "cleave"
+  "leave", "leaves", "leaving",
+  // other common verbs / prepositions near keywords
+  "invoke",   // 1 edit from "convoke" (swap in→co)
+  "evoke",    // 1 edit from "invoke" but also triggers on its own — keep safe
+  "revoke",   // 1 edit from "convoke"
+  "weave",    // 1 edit from "cleave"
+  "heave",    // 1 edit from "cleave"
+]);
+
 function applyFuzzyKeywordCorrections(
   naturalQuery: string,
   keywordList: string[]
@@ -1148,6 +1164,7 @@ function applyFuzzyKeywordCorrections(
 
   for (const token of tokens) {
     if (candidates.includes(token)) continue;
+    if (FUZZY_KEYWORD_CORRECTION_BLOCKLIST.has(token)) continue;
     const best = candidates.find((candidate) => shouldUseFuzzyMatch(token, candidate));
     if (!best) continue;
     replacements.set(token, best);
