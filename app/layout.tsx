@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <script
           async
@@ -29,8 +29,18 @@ export default function RootLayout({
           name="impact-site-verification"
           content="fe0d142c-1e97-427f-9abb-35dd9ed1c38f"
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                const theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                document.documentElement.classList.toggle('dark', theme === 'dark');
+              })();
+            `,
+          }}
+        />
       </head>
-      <body suppressHydrationWarning className="min-h-screen bg-gray-950 text-gray-100 antialiased">
+      <body suppressHydrationWarning className="min-h-screen bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100">
         {children}
         <Analytics />
       </body>

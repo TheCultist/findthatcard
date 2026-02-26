@@ -14,6 +14,7 @@ import CardCard from "@/app/components/CardCard";
 import AdBanner from "@/app/components/AdBanner";
 import QueryTokenPreview from "@/app/components/QueryTokenPreview";
 import CardDetailPanel from "@/app/components/CardDetailPanel";
+import ThemeToggle from "@/app/components/ThemeToggle";
 
 type SearchOptions = {
   updateUrl?: boolean;
@@ -270,7 +271,12 @@ export default function SearchPage() {
   return (
     <main className="min-h-screen px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <section className="relative overflow-hidden rounded-2xl border border-gray-800/60 bg-gray-950/80 px-4 py-6 shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_20px_60px_-30px_rgba(15,23,42,0.9)] sm:rounded-3xl sm:px-10 sm:py-14">
+        {/* Theme Toggle - Top Right */}
+        <div className="mb-4 flex justify-end">
+          <ThemeToggle />
+        </div>
+
+        <section className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white/80 px-4 py-6 shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_20px_60px_-30px_rgba(0,0,0,0.1)] dark:border-gray-800/60 dark:bg-gray-950/80 dark:shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_20px_60px_-30px_rgba(15,23,42,0.9)] sm:rounded-3xl sm:px-10 sm:py-14">
           <div className="relative">
             {/* Header */}
             <div className="text-center">
@@ -278,11 +284,11 @@ export default function SearchPage() {
                 href="/"
                 className="inline-flex justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
               >
-                <h1 className="mb-2 text-3xl font-bold tracking-tight text-gray-100 sm:text-5xl lg:text-6xl">
+                <h1 className="mb-2 text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-5xl lg:text-6xl">
                   Find That Card
                 </h1>
               </Link>
-              <p className="mx-auto max-w-2xl text-base text-gray-400 sm:text-xl">
+              <p className="mx-auto max-w-2xl text-base text-gray-600 dark:text-gray-400 sm:text-xl">
                 Search Magic: The Gathering cards using natural language.
               </p>
             </div>
@@ -295,7 +301,7 @@ export default function SearchPage() {
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder='Try "white creatures" or "dragons in the art"'
-                  className="flex-1 rounded-xl border border-gray-700/80 bg-gray-950/70 px-4 py-3.5 text-base text-gray-100 placeholder-gray-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:py-3"
+                  className="flex-1 rounded-xl border border-gray-300 bg-white/70 px-4 py-3.5 text-base text-gray-900 placeholder-gray-400 shadow-[inset_0_1px_0_rgba(0,0,0,0.04)] focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-gray-700/80 dark:bg-gray-950/70 dark:text-gray-100 dark:placeholder-gray-500 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:py-3"
                   disabled={loading}
                   enterKeyHint="search"
                   autoComplete="off"
@@ -320,7 +326,7 @@ export default function SearchPage() {
                     key={`${example}-${index}`}
                     onClick={() => handleChipClick(example)}
                     disabled={loading}
-                    className="rounded-full border border-gray-700/70 bg-gray-900/60 px-4 py-2.5 text-sm text-gray-300 shadow-sm transition-colors hover:border-blue-500/40 hover:bg-gray-800/80 disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 sm:text-base"
+                    className="rounded-full border border-gray-300 bg-gray-50/60 px-4 py-2.5 text-sm text-gray-700 shadow-sm transition-colors hover:border-blue-500/40 hover:bg-gray-100/80 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700/70 dark:bg-gray-900/60 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-gray-800/80 sm:py-1.5 sm:text-base"
                   >
                     {example}
                   </button>
@@ -331,13 +337,13 @@ export default function SearchPage() {
         </section>
 
         {/* Static intro content */}
-        <section className="mb-8 mt-6 text-base text-gray-400 sm:mb-10 sm:mt-10">
+        <section className="mb-8 mt-6 text-base text-gray-600 dark:text-gray-400 sm:mb-10 sm:mt-10">
           <div className="mx-auto max-w-4xl text-center">
-            <p className="text-base text-gray-200 sm:text-lg">
+            <p className="text-base text-gray-800 dark:text-gray-200 sm:text-lg">
               Find That Card is a Magic: The Gathering search tool that lets you describe cards in
               plain language.
             </p>
-            <p className="mt-2 text-sm text-gray-500">
+            <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
               Find That Card is a project by{" "}
               <Link href="/about" className="text-blue-400 hover:underline">
                 Cardboard Cultist
@@ -345,36 +351,36 @@ export default function SearchPage() {
               .
             </p>
             <div className="mt-4 grid grid-cols-1 gap-3 text-center sm:mt-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-              <div className="rounded-xl border border-gray-800/80 bg-gray-900/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
+              <div className="rounded-xl border border-gray-200 bg-gray-50/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] transition hover:border-blue-500/30 hover:bg-gray-50/60 dark:border-gray-800/80 dark:bg-gray-900/40 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] dark:hover:border-blue-500/30 dark:hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
                 <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400 sm:mb-4 sm:h-12 sm:w-12">
                   <ShieldCheckIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
                   Card intent
                 </p>
-                <p className="mt-1.5 text-sm text-gray-300 sm:mt-2 sm:text-base">
+                <p className="mt-1.5 text-sm text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
                   Removal, ramp, tutors, tokens, or any role you can describe.
                 </p>
               </div>
-              <div className="rounded-xl border border-gray-800/80 bg-gray-900/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
+              <div className="rounded-xl border border-gray-200 bg-gray-50/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] transition hover:border-blue-500/30 hover:bg-gray-50/60 dark:border-gray-800/80 dark:bg-gray-900/40 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] dark:hover:border-blue-500/30 dark:hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
                 <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400 sm:mb-4 sm:h-12 sm:w-12">
                   <PaintBrushIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
                   Art and flavor
                 </p>
-                <p className="mt-1.5 text-sm text-gray-300 sm:mt-2 sm:text-base">
+                <p className="mt-1.5 text-sm text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
                   Dragons, angels, swords, landscapes, or other artwork subjects.
                 </p>
               </div>
-              <div className="rounded-xl border border-gray-800/80 bg-gray-900/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] transition hover:border-blue-500/30 hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
+              <div className="rounded-xl border border-gray-200 bg-gray-50/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] transition hover:border-blue-500/30 hover:bg-gray-50/60 dark:border-gray-800/80 dark:bg-gray-900/40 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] dark:hover:border-blue-500/30 dark:hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
                 <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400 sm:mb-4 sm:h-12 sm:w-12">
                   <QueueListIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
                   Formats and rules
                 </p>
-                <p className="mt-1.5 text-sm text-gray-300 sm:mt-2 sm:text-base">
+                <p className="mt-1.5 text-sm text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
                   Commander, Modern, Pauper, plus colors, keywords, and mechanics.
                 </p>
               </div>
@@ -389,13 +395,13 @@ export default function SearchPage() {
         {trimmedQuery && (
           <div className="mb-8 flex justify-center">
             {adBlockDetected ? (
-              <div className="w-full max-w-2xl rounded-lg border border-gray-700 bg-gray-900/50 p-4 text-center">
-                <p className="text-base text-gray-400">
-                  <span className="font-medium text-gray-300">Find That Card is supported by ads.</span>
+              <div className="w-full max-w-2xl rounded-lg border border-gray-300 bg-gray-50/50 p-4 text-center dark:border-gray-700 dark:bg-gray-900/50">
+                <p className="text-base text-gray-600 dark:text-gray-400">
+                  <span className="font-medium text-gray-800 dark:text-gray-300">Find That Card is supported by ads.</span>
                   <br />
                   <span className="text-sm text-gray-500">
                     A single, non-intrusive ad helps keep this site free. Please consider whitelisting{" "}
-                    <span className="font-medium text-gray-400">findthat.card</span> in your ad blocker.
+                    <span className="font-medium text-gray-700 dark:text-gray-400">findthat.card</span> in your ad blocker.
                   </span>
                 </p>
               </div>
@@ -409,7 +415,7 @@ export default function SearchPage() {
         {(editableQuery || sourceQuery || results) && !loading && (
           <div id="query-display" className="relative z-50 mb-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-800 bg-gray-900 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 sm:px-4 sm:py-2">
+              <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-gray-800 dark:bg-gray-900 sm:px-4 sm:py-2">
                 <span className="text-sm text-gray-500 whitespace-nowrap">Query:</span>
                 <div className="relative flex-1 min-w-0">
                   <input
@@ -425,7 +431,7 @@ export default function SearchPage() {
                     }}
                     onFocus={handleEditableQueryFocus}
                     onBlur={handleEditableQueryBlur}
-                    className={`w-full bg-transparent text-sm text-blue-400 focus:outline-none font-mono sm:text-base ${
+                    className={`w-full bg-transparent text-sm text-blue-600 focus:outline-none font-mono dark:text-blue-400 sm:text-base ${
                       isEditingQuery
                         ? "relative z-10 opacity-100"
                         : "absolute inset-0 opacity-0 pointer-events-none"
@@ -435,7 +441,7 @@ export default function SearchPage() {
                   />
                   {!isEditingQuery && (
                     <div
-                      className="text-blue-300 cursor-text"
+                      className="text-blue-500 cursor-text dark:text-blue-300"
                       onClick={handleTokenOverlayClick}
                     >
                       <QueryTokenPreview
@@ -460,7 +466,7 @@ export default function SearchPage() {
                   href={`https://scryfall.com/search?q=${encodeURIComponent(editableQuery)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 rounded-lg border border-gray-700 bg-gray-800 px-4 py-2.5 text-center text-sm text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-700 sm:flex-none sm:py-2 sm:text-base"
+                  className="flex-1 rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 text-center text-sm text-gray-700 transition-colors hover:border-gray-400 hover:bg-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700 sm:flex-none sm:py-2 sm:text-base"
                 >
                   <span className="sm:hidden">Scryfall</span>
                   <span className="hidden sm:inline">View on Scryfall</span>
@@ -472,7 +478,7 @@ export default function SearchPage() {
 
         {/* Error State */}
         {error && (
-          <div className="mb-6 rounded-lg border border-red-800 bg-red-950/30 p-4 text-red-400">
+          <div className="mb-6 rounded-lg border border-red-300 bg-red-50/30 p-4 text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
             <p className="font-medium">Error</p>
             <p className="text-base">{error}</p>
           </div>
@@ -481,13 +487,13 @@ export default function SearchPage() {
         {/* Loading State */}
         {loading && (
           <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-700 border-t-blue-600"></div>
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600 dark:border-gray-700 dark:border-t-blue-600"></div>
             {proTip && (
-              <div className="w-full max-w-2xl rounded-2xl border border-gray-800/70 bg-gray-900/50 px-5 py-4 text-sm text-gray-400 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
-                <span className="text-xs font-semibold uppercase tracking-wide text-blue-400">
+              <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-gray-50/50 px-5 py-4 text-sm text-gray-600 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] dark:border-gray-800/70 dark:bg-gray-900/50 dark:text-gray-400 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
+                <span className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
                   Pro tip
                 </span>
-                <p className="mt-2 text-base text-gray-300">{proTip}</p>
+                <p className="mt-2 text-base text-gray-700 dark:text-gray-300">{proTip}</p>
               </div>
             )}
           </div>
@@ -496,11 +502,11 @@ export default function SearchPage() {
         {/* Results */}
         {results && (
           <div id="results-section" className="mb-10">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-3 py-2.5 text-sm text-gray-300 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] sm:mb-5 sm:gap-3 sm:px-4 sm:py-3 sm:text-base">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-gray-200 bg-gray-50/40 px-3 py-2.5 text-sm text-gray-700 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] dark:border-gray-800/70 dark:bg-gray-900/40 dark:text-gray-300 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] sm:mb-5 sm:gap-3 sm:px-4 sm:py-3 sm:text-base">
               <div>
                 Found {results.total.toLocaleString()} card{results.total !== 1 ? "s" : ""}
                 {results.total > 0 && (
-                  <span className="ml-1 text-gray-500 sm:ml-2 sm:text-gray-300">
+                  <span className="ml-1 text-gray-500 dark:text-gray-500 sm:ml-2 sm:text-gray-400 dark:sm:text-gray-300">
                     (p.{results.page}, {results.cards.length} shown)
                   </span>
                 )}
@@ -508,7 +514,7 @@ export default function SearchPage() {
             </div>
 
             {results.cards.length === 0 ? (
-              <div className="rounded-2xl border border-gray-800/80 bg-gray-900/50 p-10 text-center text-gray-300 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
+              <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-10 text-center text-gray-700 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] dark:border-gray-800/80 dark:bg-gray-900/50 dark:text-gray-300 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
                 No cards found. Try a different search query.
               </div>
             ) : (
@@ -531,7 +537,7 @@ export default function SearchPage() {
                       // Insert ad banner after 20th card if we have 30+ results
                       if (cardCount >= 30 && index === 19) {
                         items.push(
-                          <div key="ad-20" className="col-span-full my-4 rounded-2xl border border-gray-800/70 bg-gray-900/40 p-4">
+                          <div key="ad-20" className="col-span-full my-4 rounded-2xl border border-gray-200 bg-gray-50/40 p-4 dark:border-gray-800/70 dark:bg-gray-900/40">
                             <AdBanner slot="1553106733" className="w-full" />
                           </div>
                         );
@@ -540,7 +546,7 @@ export default function SearchPage() {
                       // Insert ad banner after 40th card if we have 50+ results
                       if (cardCount >= 50 && index === 39) {
                         items.push(
-                          <div key="ad-40" className="col-span-full my-4 rounded-2xl border border-gray-800/70 bg-gray-900/40 p-4">
+                          <div key="ad-40" className="col-span-full my-4 rounded-2xl border border-gray-200 bg-gray-50/40 p-4 dark:border-gray-800/70 dark:bg-gray-900/40">
                             <AdBanner slot="1553106733" className="w-full" />
                           </div>
                         );
@@ -554,15 +560,15 @@ export default function SearchPage() {
                 {/* Pagination Controls */}
                 {(results.has_more || results.page > 1) && (
                   <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:mt-8 sm:gap-4">
-                    <div className="flex w-full items-center justify-center gap-3 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-3 py-3 text-base text-gray-300 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] sm:w-auto sm:gap-4 sm:px-4">
+                    <div className="flex w-full items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-gray-50/40 px-3 py-3 text-base text-gray-700 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] dark:border-gray-800/70 dark:bg-gray-900/40 dark:text-gray-300 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] sm:w-auto sm:gap-4 sm:px-4">
                       <button
                         onClick={() => handlePageChange(results.page - 1)}
                         disabled={loading || results.page === 1}
-                        className="min-h-[44px] rounded-lg border border-gray-700 bg-gray-950/60 px-3 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:px-4 sm:text-base"
+                        className="min-h-[44px] rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-sm font-medium text-gray-800 transition-colors hover:border-gray-400 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950/60 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800 sm:min-h-0 sm:px-4 sm:text-base"
                       >
                         Previous
                       </button>
-                      <span className="text-sm text-gray-400 sm:text-base">
+                      <span className="text-sm text-gray-600 dark:text-gray-400 sm:text-base">
                         {results.page} / {Math.ceil(results.total / results.per_page)}
                       </span>
                       <div className="hidden flex-wrap items-center gap-2 sm:flex">
@@ -586,8 +592,8 @@ export default function SearchPage() {
                               disabled={loading || page === results.page}
                               className={
                                 page === results.page
-                                  ? "rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 text-base font-semibold text-blue-300"
-                                  : "rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-base text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                  ? "rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 text-base font-semibold text-blue-600 dark:text-blue-300"
+                                  : "rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-base text-gray-700 transition-colors hover:border-gray-400 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-800"
                               }
                             >
                               {page}
@@ -598,13 +604,13 @@ export default function SearchPage() {
                       <button
                         onClick={() => handlePageChange(results.page + 1)}
                         disabled={loading || !results.has_more}
-                        className="min-h-[44px] rounded-lg border border-gray-700 bg-gray-950/60 px-3 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:px-4 sm:text-base"
+                        className="min-h-[44px] rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-sm font-medium text-gray-800 transition-colors hover:border-gray-400 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950/60 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800 sm:min-h-0 sm:px-4 sm:text-base"
                       >
                         Next
                       </button>
                     </div>
                     {Math.ceil(results.total / results.per_page) >= 5 && (
-                      <div className="flex items-center gap-2 rounded-2xl border border-gray-800/70 bg-gray-900/40 px-3 py-2.5 text-sm text-gray-300 sm:px-4 sm:py-3 sm:text-base">
+                      <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50/40 px-3 py-2.5 text-sm text-gray-700 dark:border-gray-800/70 dark:bg-gray-900/40 dark:text-gray-300 sm:px-4 sm:py-3 sm:text-base">
                         <label htmlFor="page-jump" className="text-xs text-gray-500 sm:text-sm">
                           Jump to
                         </label>
@@ -621,14 +627,14 @@ export default function SearchPage() {
                               handleJumpToPage();
                             }
                           }}
-                          className="w-16 rounded-lg border border-gray-700 bg-gray-950/60 px-2 py-2 text-sm text-gray-200 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 sm:w-20 sm:px-3 sm:text-base"
+                          className="w-16 rounded-lg border border-gray-300 bg-white/60 px-2 py-2 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-950/60 dark:text-gray-200 sm:w-20 sm:px-3 sm:text-base"
                           disabled={loading}
                           inputMode="numeric"
                         />
                         <button
                           onClick={handleJumpToPage}
                           disabled={loading}
-                          className="min-h-[44px] rounded-lg border border-gray-700 bg-gray-950/60 px-3 py-2 text-sm text-gray-200 transition-colors hover:border-gray-600 hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:text-base"
+                          className="min-h-[44px] rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-sm text-gray-800 transition-colors hover:border-gray-400 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950/60 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800 sm:min-h-0 sm:text-base"
                         >
                           Go
                         </button>
@@ -642,7 +648,7 @@ export default function SearchPage() {
         )}
 
         {/* Footer */}
-        <footer className="mt-10 border-t border-gray-800 pt-6 pb-24 text-center text-xs text-gray-500 sm:mt-16 sm:pt-8 sm:text-sm">
+        <footer className="mt-10 border-t border-gray-200 pt-6 pb-24 text-center text-xs text-gray-500 dark:border-gray-800 sm:mt-16 sm:pt-8 sm:text-sm">
           <p>
             Unofficial fan content. Card data and images from{" "}
             <a

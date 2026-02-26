@@ -72,11 +72,11 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
   return (
     <div
       onClick={handleClick}
-      className="group cursor-pointer rounded-lg border border-gray-800 bg-gray-900 p-2 transition-all hover:border-gray-700 hover:shadow-lg hover:shadow-blue-500/10 sm:p-4"
+      className="group cursor-pointer rounded-lg border border-gray-200 bg-gray-50 p-2 transition-all hover:border-gray-300 hover:shadow-lg hover:shadow-blue-500/10 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 sm:p-4"
     >
       {/* Card Image */}
       {imageSrc && !imageFailed ? (
-        <div className="mb-2 aspect-[5/7] overflow-hidden rounded border border-gray-800 bg-gray-950 relative sm:mb-3">
+        <div className="mb-2 aspect-[5/7] overflow-hidden rounded border border-gray-300 bg-gray-100 relative dark:border-gray-800 dark:bg-gray-950 sm:mb-3">
           <Image
             src={imageSrc}
             alt={card.name}
@@ -94,14 +94,14 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
           />
         </div>
       ) : (
-        <div className="mb-2 flex aspect-[5/7] items-center justify-center rounded border border-gray-800 bg-gray-950 text-xs text-gray-600 sm:mb-3">
+        <div className="mb-2 flex aspect-[5/7] items-center justify-center rounded border border-gray-300 bg-gray-100 text-xs text-gray-400 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-600 sm:mb-3">
           No image
         </div>
       )}
 
       {/* Card Name & Mana Cost */}
       <div className="mb-2 flex items-start justify-between gap-1 sm:mb-3 sm:gap-2">
-        <h3 className="flex-1 min-w-0 text-xs font-semibold text-gray-100 group-hover:text-blue-400 line-clamp-2 sm:text-base sm:pr-2">
+        <h3 className="flex-1 min-w-0 text-xs font-semibold text-gray-900 group-hover:text-blue-600 line-clamp-2 dark:text-gray-100 dark:group-hover:text-blue-400 sm:text-base sm:pr-2">
           {card.name}
         </h3>
         <div className="hidden flex-shrink-0 mt-0.5 min-w-[60px] items-center justify-end sm:flex">
@@ -113,7 +113,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
         </div>
       </div>
 
-      <div className="hidden text-center text-xs font-semibold uppercase tracking-wide text-gray-400 sm:block">
+      <div className="hidden text-center text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:block">
         Buy this card
       </div>
       <div className="mt-1 flex gap-1.5 sm:mt-2 sm:gap-2">
@@ -128,7 +128,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleCardTraderClick}
-          className={`flex flex-1 items-center justify-center rounded border border-gray-700 bg-gray-800/50 p-2 transition-colors hover:border-blue-600 hover:bg-gray-800 sm:p-3 ${
+          className={`flex flex-1 items-center justify-center rounded border border-gray-300 bg-gray-200/70 p-2 transition-colors hover:border-blue-600 hover:bg-gray-200 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-blue-600 dark:hover:bg-gray-800 sm:p-3 ${
             isCheckingLink ? "cursor-wait opacity-60" : "hover:opacity-100"
           }`}
           aria-label="Buy on CardTrader"
@@ -143,7 +143,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
             width={120}
             height={24}
             unoptimized
-            className="h-4 w-auto sm:h-6"
+            className="h-4 w-auto sm:h-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6),0_2px_4px_rgba(0,0,0,0.5)] dark:drop-shadow-none"
           />
         </a>
 
@@ -153,7 +153,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleTcgPlayerClick}
-          className={`flex flex-1 items-center justify-center rounded border border-gray-700 bg-gray-800/50 p-2 transition-colors hover:border-blue-600 hover:bg-gray-800 sm:p-3 ${
+          className={`flex flex-1 items-center justify-center rounded border border-gray-300 bg-gray-200/70 p-2 transition-colors hover:border-blue-600 hover:bg-gray-200 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-blue-600 dark:hover:bg-gray-800 sm:p-3 ${
             tcgPlayerUrl ? "hover:opacity-100" : "cursor-not-allowed opacity-50"
           }`}
           aria-label="Buy on TCGPlayer"
@@ -166,7 +166,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
             width={120}
             height={24}
             unoptimized
-            className="h-4 w-auto sm:h-6"
+            className="h-4 w-auto sm:h-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6),0_2px_4px_rgba(0,0,0,0.5)] dark:drop-shadow-none"
           />
         </a>
       </div>
