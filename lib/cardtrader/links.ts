@@ -95,7 +95,7 @@ export function getCardTraderLink(
   void _collectorNumber;
 
   const shareCode =
-    process.env.TCG_PLAYER_PARTNER_LINK || "thecultist";
+    process.env.NEXT_PUBLIC_CARDTRADER_SHARE_CODE || "thecultist";
 
   // Try to construct card-specific URL if we have set name and card name
   if (setName && cardName) {
@@ -133,6 +133,6 @@ export function getCardTraderLink(
  */
 export function getCardTraderHomepageLink(): string {
   const shareCode =
-    process.env.TCG_PLAYER_PARTNER_LINK || "thecultist";
+    process.env.NEXT_PUBLIC_CARDTRADER_SHARE_CODE || "thecultist";
   return `https://www.cardtrader.com/en/magic?share_code=${shareCode}`;
 }
