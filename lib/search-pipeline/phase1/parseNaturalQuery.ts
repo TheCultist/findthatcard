@@ -1302,6 +1302,9 @@ const FUZZY_KEYWORD_CORRECTION_BLOCKLIST = new Set([
   "revoke",   // 1 edit from "convoke"
   "weave",    // 1 edit from "cleave"
   "heave",    // 1 edit from "cleave"
+  // anatomy / art subjects near keywords
+  "skull",    // 1 edit from "skulk"
+  "skulls",   // 1 edit from "skulks"
 ]);
 
 function applyFuzzyKeywordCorrections(
@@ -2352,6 +2355,14 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       naturalQuery
     );
   strippedTerms.push(...collectMatchedColorTerms(lower));
+  // Strip single-color modifier prefixes that are made redundant once the color
+  // term itself is stripped. "mono-blue" → "blue" is stripped above, leaving "mono"
+  // as an orphaned fragment that confuses the Phase 2 AI into picking tags like
+  // function:color-count-matters. Strip these modifiers unconditionally so they
+  // never reach Phase 2 as unresolved noise.
+  if (/\bmono[-\s]/i.test(lower)) strippedTerms.push("mono");
+  if (/\bpure[-\s]/i.test(lower)) strippedTerms.push("pure");
+  if (/\bsingle[-\s]color(?:ed)?\b/i.test(lower)) strippedTerms.push("single");
   const commanderDeck = hasCommanderDeckContext(naturalQuery);
 
   // Detect colors that are explicitly negated ("not blue", "without red", etc.)

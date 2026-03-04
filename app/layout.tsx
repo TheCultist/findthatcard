@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Source_Sans_3 } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
+import ScrollToTop from "./components/ScrollToTop";
 import "./globals.css";
 
 const sourceSans = Source_Sans_3({
@@ -54,7 +55,7 @@ export default function RootLayout({
           content="fe0d142c-1e97-427f-9abb-35dd9ed1c38f"
         />
       </head>
-      <body suppressHydrationWarning className={`${sourceSans.className} min-h-screen bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100`}>
+      <body suppressHydrationWarning className={`${sourceSans.className} min-h-screen bg-white text-gray-900 subpixel-antialiased dark:antialiased dark:bg-gray-950 dark:text-gray-100`}>
         <Script
           id="schema-org"
           type="application/ld+json"
@@ -93,6 +94,7 @@ export default function RootLayout({
           strategy="afterInteractive"
         />
         {children}
+        <ScrollToTop />
         <Analytics />
       </body>
     </html>

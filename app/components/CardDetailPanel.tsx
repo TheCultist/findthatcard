@@ -75,7 +75,7 @@ function CardFaceView({ face }: {
       </div>
 
       {face.type_line && (
-        <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide border-b border-gray-300 dark:border-gray-800 pb-2">
+        <p className="text-xs font-medium text-gray-700 dark:text-gray-400 uppercase tracking-wide border-b border-gray-300 dark:border-gray-800 pb-2">
           {face.type_line}
         </p>
       )}
@@ -332,7 +332,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                       </div>
 
                       {/* Type line */}
-                      <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide border-b border-gray-300 dark:border-gray-800 pb-2">
+                      <p className="text-xs font-medium text-gray-700 dark:text-gray-400 uppercase tracking-wide border-b border-gray-300 dark:border-gray-800 pb-2">
                         {detailData.type_line}
                       </p>
 
@@ -386,11 +386,11 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                   )}
 
                   {/* Set / Collector / Artist */}
-                  <div className="border-t border-gray-300 dark:border-gray-800 pt-3 space-y-1 text-xs text-gray-500 hidden sm:block">
+                  <div className="border-t border-gray-300 dark:border-gray-800 pt-3 space-y-1 text-xs hidden sm:block">
                     <div className="flex items-center gap-1.5">
                       <span className="text-gray-500 dark:text-gray-600">Set</span>
                       <span className="text-gray-800 dark:text-gray-300 font-medium">{detailData.set_name}</span>
-                      <span className="text-gray-500 dark:text-gray-600">
+                      <span className="text-gray-600 dark:text-gray-600">
                         ({detailData.set.toUpperCase()} #{detailData.collector_number})
                       </span>
                     </div>
@@ -403,7 +403,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                     {detailData.released_at && (
                       <div className="flex items-center gap-1.5">
                         <span className="text-gray-500 dark:text-gray-600">Released</span>
-                        <span className="text-gray-600 dark:text-gray-400">{detailData.released_at}</span>
+                        <span className="text-gray-700 dark:text-gray-400">{detailData.released_at}</span>
                       </div>
                     )}
                   </div>
@@ -422,7 +422,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                               key={key}
                               className={`flex items-center justify-between px-2 py-1 rounded border text-xs ${style.bg}`}
                             >
-                              <span className="text-gray-600 dark:text-gray-400">{label}</span>
+                              <span className="text-gray-700 dark:text-gray-400">{label}</span>
                               <span className={`font-medium ${style.text}`}>{style.label}</span>
                             </div>
                           );
@@ -491,7 +491,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
               target="_blank"
               rel="noopener noreferrer"
               onClick={handleCardTraderClick}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-gray-200/70 px-3 py-2.5 text-xs font-medium text-gray-700 transition-colors hover:border-blue-600 hover:bg-gray-200 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300 dark:hover:border-blue-600 dark:hover:bg-gray-800 dark:hover:text-white ${
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 transition-colors hover:border-blue-400 hover:bg-gray-700 dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-blue-500 dark:hover:bg-gray-800 ${
                 isCheckingLink ? "cursor-wait opacity-60" : ""
               }`}
             >
@@ -501,7 +501,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                 width={100}
                 height={20}
                 unoptimized
-                className="h-4 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.6),0_2px_4px_rgba(0,0,0,0.5)] dark:drop-shadow-none"
+                className="h-4 w-auto"
               />
               <span className="sr-only">Buy on CardTrader</span>
             </a>
@@ -512,7 +512,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => { if (!tcgPlayerUrl) e.preventDefault(); e.stopPropagation(); }}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-300 bg-gray-200/70 px-3 py-2.5 text-xs font-medium text-gray-700 transition-colors hover:border-blue-600 hover:bg-gray-200 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-800/50 dark:text-gray-300 dark:hover:border-blue-600 dark:hover:bg-gray-800 dark:hover:text-white ${
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 transition-colors hover:border-blue-400 hover:bg-gray-700 dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-blue-500 dark:hover:bg-gray-800 ${
                 !tcgPlayerUrl ? "cursor-not-allowed opacity-50" : ""
               }`}
             >
@@ -522,7 +522,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                 width={100}
                 height={20}
                 unoptimized
-                className="h-4 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.6),0_2px_4px_rgba(0,0,0,0.5)] dark:drop-shadow-none"
+                className="h-4 w-auto"
               />
               <span className="sr-only">Buy on TCGPlayer</span>
             </a>

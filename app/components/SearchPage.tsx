@@ -57,7 +57,7 @@ export default function SearchPage() {
   const searchParams = useSearchParams();
   const params = useParams<{ slug?: string | string[] }>();
   const lastUrlQueryRef = useRef("");
-  const editableInputRef = useRef<HTMLInputElement | null>(null);
+  const editableInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [query, setQuery] = useState("");
   const [editableQuery, setEditableQuery] = useState("");
@@ -178,6 +178,15 @@ export default function SearchPage() {
     }
   }, [loading]);
 
+  // Auto-resize the textarea to fit its content whenever the query or editing state changes
+  useEffect(() => {
+    if (isEditingQuery && editableInputRef.current) {
+      const el = editableInputRef.current;
+      el.style.height = "auto";
+      el.style.height = `${el.scrollHeight}px`;
+    }
+  }, [editableQuery, isEditingQuery]);
+
   const handleEditableQuerySearch = () => {
     if (!editableQuery.trim()) {
       return;
@@ -269,14 +278,14 @@ export default function SearchPage() {
   const trimmedQuery = query.trim();
 
   return (
-    <main className="min-h-screen px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
+    <main className="min-h-screen bg-gradient-to-b from-blue-50/50 via-white to-white px-3 py-6 dark:from-gray-950 dark:via-gray-950 dark:to-gray-950 sm:px-6 sm:py-10 lg:px-8">
       <div className="mx-auto max-w-7xl">
         {/* Theme Toggle - Top Right */}
         <div className="mb-4 flex justify-end">
           <ThemeToggle />
         </div>
 
-        <section className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white/80 px-4 py-6 shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_20px_60px_-30px_rgba(0,0,0,0.1)] dark:border-gray-800/60 dark:bg-gray-950/80 dark:shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_20px_60px_-30px_rgba(15,23,42,0.9)] sm:rounded-3xl sm:px-10 sm:py-14">
+        <section className="relative overflow-hidden rounded-2xl border border-gray-200/80 bg-gradient-to-b from-white to-blue-50/30 px-4 py-6 shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_20px_60px_-20px_rgba(59,130,246,0.08),0_8px_24px_-8px_rgba(0,0,0,0.06)] dark:border-gray-800/60 dark:from-gray-950/80 dark:to-gray-900/60 dark:shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_20px_60px_-30px_rgba(15,23,42,0.9)] sm:rounded-3xl sm:px-10 sm:py-14">
           <div className="relative">
             {/* Header */}
             <div className="text-center">
@@ -284,11 +293,11 @@ export default function SearchPage() {
                 href="/"
                 className="inline-flex justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
               >
-                <h1 className="mb-2 text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-5xl lg:text-6xl">
+                <h1 className="mb-2 text-3xl font-bold tracking-tight bg-gradient-to-r from-gray-900 via-blue-800 to-indigo-900 bg-clip-text text-transparent dark:from-gray-100 dark:via-blue-300 dark:to-indigo-200 sm:text-5xl lg:text-6xl">
                   Find That Card
                 </h1>
               </Link>
-              <p className="mx-auto max-w-2xl text-base text-gray-600 dark:text-gray-400 sm:text-xl">
+              <p className="mx-auto max-w-2xl text-base font-medium text-gray-700 dark:text-gray-400 sm:text-xl">
                 Search Magic: The Gathering cards using natural language.
               </p>
             </div>
@@ -311,7 +320,7 @@ export default function SearchPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="rounded-xl bg-blue-600 px-7 py-3.5 font-medium text-white shadow-[0_10px_30px_-16px_rgba(59,130,246,0.8)] transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50 sm:py-3"
+                  className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-7 py-3.5 font-semibold text-white shadow-[0_10px_30px_-16px_rgba(59,130,246,0.8)] transition-all hover:from-blue-500 hover:to-indigo-500 hover:shadow-[0_14px_34px_-14px_rgba(99,102,241,0.7)] disabled:cursor-not-allowed disabled:opacity-50 sm:py-3"
                 >
                   {loading ? "Searching..." : "Search"}
                 </button>
@@ -326,7 +335,7 @@ export default function SearchPage() {
                     key={`${example}-${index}`}
                     onClick={() => handleChipClick(example)}
                     disabled={loading}
-                    className="rounded-full border border-gray-300 bg-gray-50/60 px-4 py-2.5 text-sm text-gray-700 shadow-sm transition-colors hover:border-blue-500/40 hover:bg-gray-100/80 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700/70 dark:bg-gray-900/60 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-gray-800/80 sm:py-1.5 sm:text-base"
+                    className="rounded-full border border-gray-300 bg-gray-50/60 px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-blue-500/40 hover:bg-blue-50/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700/70 dark:bg-gray-900/60 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-gray-800/80 sm:py-1.5 sm:text-base"
                   >
                     {example}
                   </button>
@@ -336,10 +345,11 @@ export default function SearchPage() {
           </div>
         </section>
 
-        {/* Static intro content */}
-        <section className="mb-8 mt-6 text-base text-gray-600 dark:text-gray-400 sm:mb-10 sm:mt-10">
+        {/* Static intro content - hidden during search */}
+        {!loading && !results && !editableQuery && (
+        <section className="mb-8 mt-6 text-base text-gray-700 dark:text-gray-400 sm:mb-10 sm:mt-10">
           <div className="mx-auto max-w-4xl text-center">
-            <p className="text-base text-gray-800 dark:text-gray-200 sm:text-lg">
+            <p className="text-base font-medium text-gray-800 dark:text-gray-200 sm:text-lg">
               Find That Card is a Magic: The Gathering search tool that lets you describe cards in
               plain language.
             </p>
@@ -358,29 +368,29 @@ export default function SearchPage() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
                   Card intent
                 </p>
-                <p className="mt-1.5 text-sm text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
+                <p className="mt-1.5 text-sm leading-relaxed text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
                   Removal, ramp, tutors, tokens, or any role you can describe.
                 </p>
               </div>
-              <div className="rounded-xl border border-gray-200 bg-gray-50/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] transition hover:border-blue-500/30 hover:bg-gray-50/60 dark:border-gray-800/80 dark:bg-gray-900/40 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] dark:hover:border-blue-500/30 dark:hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
-                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400 sm:mb-4 sm:h-12 sm:w-12">
+              <div className="rounded-xl border border-gray-200 bg-gray-50/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] transition hover:border-violet-500/30 hover:bg-gray-50/60 dark:border-gray-800/80 dark:bg-gray-900/40 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] dark:hover:border-violet-500/30 dark:hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-400 sm:mb-4 sm:h-12 sm:w-12">
                   <PaintBrushIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
                   Art and flavor
                 </p>
-                <p className="mt-1.5 text-sm text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
+                <p className="mt-1.5 text-sm leading-relaxed text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
                   Dragons, angels, swords, landscapes, or other artwork subjects.
                 </p>
               </div>
-              <div className="rounded-xl border border-gray-200 bg-gray-50/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] transition hover:border-blue-500/30 hover:bg-gray-50/60 dark:border-gray-800/80 dark:bg-gray-900/40 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] dark:hover:border-blue-500/30 dark:hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
-                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400 sm:mb-4 sm:h-12 sm:w-12">
+              <div className="rounded-xl border border-gray-200 bg-gray-50/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] transition hover:border-amber-500/30 hover:bg-gray-50/60 dark:border-gray-800/80 dark:bg-gray-900/40 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] dark:hover:border-amber-500/30 dark:hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-500 sm:mb-4 sm:h-12 sm:w-12">
                   <QueueListIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
                 </div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
                   Formats and rules
                 </p>
-                <p className="mt-1.5 text-sm text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
+                <p className="mt-1.5 text-sm leading-relaxed text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
                   Commander, Modern, Pauper, plus colors, keywords, and mechanics.
                 </p>
               </div>
@@ -390,6 +400,7 @@ export default function SearchPage() {
             </p>
           </div>
         </section>
+        )}
 
         {/* Ad Space / Adblock Message */}
         {trimmedQuery && (
@@ -414,15 +425,19 @@ export default function SearchPage() {
         {/* Query Display - Editable */}
         {(editableQuery || sourceQuery || results) && !loading && (
           <div id="query-display" className="relative z-50 mb-6">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-gray-800 dark:bg-gray-900 sm:px-4 sm:py-2">
-                <span className="text-sm text-gray-500 whitespace-nowrap">Query:</span>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+              <div className="flex-1 flex items-start gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-gray-800 dark:bg-gray-900 sm:px-4 sm:py-2.5">
+                <span className="mt-0.5 text-sm text-gray-500 whitespace-nowrap">Query:</span>
                 <div className="relative flex-1 min-w-0">
-                  <input
+                  <textarea
                     ref={editableInputRef}
-                    type="text"
                     value={editableQuery}
-                    onChange={(e) => setEditableQuery(e.target.value)}
+                    rows={1}
+                    onChange={(e) => {
+                      setEditableQuery(e.target.value);
+                      e.target.style.height = "auto";
+                      e.target.style.height = `${e.target.scrollHeight}px`;
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
@@ -431,10 +446,10 @@ export default function SearchPage() {
                     }}
                     onFocus={handleEditableQueryFocus}
                     onBlur={handleEditableQueryBlur}
-                    className={`w-full bg-transparent text-sm text-blue-600 focus:outline-none font-mono dark:text-blue-400 sm:text-base ${
+                    className={`w-full bg-transparent text-sm text-blue-600 focus:outline-none font-mono dark:text-blue-400 sm:text-base resize-none overflow-hidden leading-relaxed ${
                       isEditingQuery
                         ? "relative z-10 opacity-100"
-                        : "absolute inset-0 opacity-0 pointer-events-none"
+                        : "absolute inset-0 opacity-0 pointer-events-none h-full"
                     }`}
                     disabled={loading}
                     placeholder="Edit Scryfall query..."
@@ -487,7 +502,7 @@ export default function SearchPage() {
         {/* Loading State */}
         {loading && (
           <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600 dark:border-gray-700 dark:border-t-blue-600"></div>
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600 dark:border-gray-700 dark:border-t-blue-500"></div>
             {proTip && (
               <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-gray-50/50 px-5 py-4 text-sm text-gray-600 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] dark:border-gray-800/70 dark:bg-gray-900/50 dark:text-gray-400 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
                 <span className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">

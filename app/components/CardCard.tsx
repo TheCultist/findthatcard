@@ -128,8 +128,8 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleCardTraderClick}
-          className={`flex flex-1 items-center justify-center rounded border border-gray-300 bg-gray-200/70 p-2 transition-colors hover:border-blue-600 hover:bg-gray-200 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-blue-600 dark:hover:bg-gray-800 sm:p-3 ${
-            isCheckingLink ? "cursor-wait opacity-60" : "hover:opacity-100"
+          className={`flex flex-1 items-center justify-center rounded border border-gray-700 bg-gray-800 p-2 transition-colors hover:border-blue-400 hover:bg-gray-700 dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-blue-500 dark:hover:bg-gray-800 sm:p-3 ${
+            isCheckingLink ? "cursor-wait opacity-60" : ""
           }`}
           aria-label="Buy on CardTrader"
           aria-disabled={isCheckingLink}
@@ -143,7 +143,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
             width={120}
             height={24}
             unoptimized
-            className="h-4 w-auto sm:h-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6),0_2px_4px_rgba(0,0,0,0.5)] dark:drop-shadow-none"
+            className="h-4 w-auto sm:h-6"
           />
         </a>
 
@@ -153,8 +153,8 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleTcgPlayerClick}
-          className={`flex flex-1 items-center justify-center rounded border border-gray-300 bg-gray-200/70 p-2 transition-colors hover:border-blue-600 hover:bg-gray-200 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-blue-600 dark:hover:bg-gray-800 sm:p-3 ${
-            tcgPlayerUrl ? "hover:opacity-100" : "cursor-not-allowed opacity-50"
+          className={`flex flex-1 items-center justify-center rounded border border-gray-700 bg-gray-800 p-2 transition-colors hover:border-blue-400 hover:bg-gray-700 dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-blue-500 dark:hover:bg-gray-800 sm:p-3 ${
+            !tcgPlayerUrl ? "cursor-not-allowed opacity-50" : ""
           }`}
           aria-label="Buy on TCGPlayer"
           aria-disabled={!tcgPlayerUrl}
@@ -166,7 +166,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
             width={120}
             height={24}
             unoptimized
-            className="h-4 w-auto sm:h-6 drop-shadow-[0_1px_2px_rgba(0,0,0,0.6),0_2px_4px_rgba(0,0,0,0.5)] dark:drop-shadow-none"
+            className="h-4 w-auto sm:h-6"
           />
         </a>
       </div>
