@@ -796,21 +796,41 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     qualifiers: [
       {
         name: "creature",
-        detect: /\b(?:tutor|fetch|find)\s+(?:a\s+|for\s+a\s+)?creatures?\b/i,
-        tags: ["tutor", "tutor-creature", "tutor-to-hand"],
+        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?creatures?\b|\bcreatures?\s+tutors?\b/i,
+        tags: ["tutor-creature"],
+      },
+      {
+        name: "enchantment",
+        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?enchantments?\b|\benchantments?\s+tutors?\b/i,
+        tags: ["tutor-enchantment"],
       },
       {
         name: "land",
-        detect: /\b(?:tutor|fetch|find)\s+(?:a\s+|for\s+a\s+)?lands?\b/i,
-        tags: ["tutor", "tutor-land", "tutor-to-hand"],
+        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?lands?\b|\blands?\s+tutors?\b/i,
+        tags: ["tutor-land"],
       },
       {
         name: "artifact",
-        detect: /\b(?:tutor|fetch|find)\s+(?:a\s+|for\s+a\s+)?artifacts?\b/i,
-        tags: ["tutor", "tutor-artifact", "tutor-to-hand"],
+        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?artifacts?\b|\bartifacts?\s+tutors?\b/i,
+        tags: ["tutor-artifact"],
+      },
+      {
+        name: "instant",
+        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?instants?\b|\binstants?\s+tutors?\b/i,
+        tags: ["tutor-instant"],
+      },
+      {
+        name: "sorcery",
+        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?sorcer(?:y|ies)\b|\bsorcer(?:y|ies)\s+tutors?\b/i,
+        tags: ["tutor-sorcery"],
+      },
+      {
+        name: "planeswalker",
+        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?planeswalkers?\b|\bplaneswalkers?\s+tutors?\b/i,
+        tags: ["tutor-planeswalker"],
       },
     ],
-    strayPattern: /\bfunction:(tutor(?:-[a-z0-9-]+)?|hate-tutor)\b/gi,
+    strayPattern: /\bfunction:(tutor(?!-land)(?:-[a-z0-9-]+)?|hate-tutor)\b/gi,
   },
   {
     name: "finisher",
@@ -987,7 +1007,9 @@ function normalizeArchetypeIntents(
     }
 
     for (const tag of desiredTags) {
-      const tagPattern = new RegExp(`\\bfunction:${escapeRegex(tag)}\\b`, "gi");
+      // Use (?!-) instead of \b so we don't accidentally strip a compound tag that
+      // starts with this tag name (e.g. "function:tutor" must not strip "function:tutor-land").
+      const tagPattern = new RegExp(`\\bfunction:${escapeRegex(tag)}(?!-)`, "gi");
       updated = updated.replace(tagPattern, " ");
     }
     // Remove parenthetical groups that are now empty or contain only "or" separators

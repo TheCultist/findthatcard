@@ -659,6 +659,16 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   //         "grant all permanents indestructible" → "permanents" (not t:permanent)
   capture(/\b(?:gives?|grants?|make[sd]?)\s+(?:your|all|each|every|target|a|an|any|friendly)?\s*([a-z][a-z-]*)\b/gi);
 
+  // 9. Library search targets — the card type being FETCHED is an object of the action,
+  //    not a descriptor of the spell. "search your library for a land" → "land" (not t:land).
+  //    "fetch a forest from your library" → "forest" (not t:forest / land-subtype filter).
+  capture(/\b(?:search(?:es|ing)?|fetch(?:es|ing)?|finds?|tutor(?:s|ing)?(?:\s+for)?)\b.{0,40}\b(?:library|deck)\b.{0,30}\bfor\s+(?:a\s+|an\s+|any\s+|the\s+)?([a-z][a-z-]*)/gi);
+  capture(/\b(?:search(?:es|ing)?|fetch(?:es|ing)?|finds?|tutor(?:s|ing)?(?:\s+for)?)\s+(?:a\s+|an\s+|any\s+|the\s+)?([a-z][a-z-]*)\s+(?:from|in)\s+(?:your|the|a|my)?\s*(?:library|deck)\b/gi);
+  // "tutor for a land/creature/enchantment" without explicit library mention
+  capture(/\b(?:tutor(?:s|ing)?(?:\s+for)?|tutors?\s+up)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z-]*)/gi);
+  // "creature/enchantment/artifact tutor(s)" — target type precedes "tutor(s)"
+  capture(/\b([a-z][a-z-]*)\s+tutors?\b/gi);
+
   return tokens;
 }
 
@@ -1164,6 +1174,45 @@ function applyOracleIntentHeuristics(
       });
       strippedTerms.push("max speed");
     }
+    return;
+  }
+
+  // --- "Search library for a land" → land-tutor ---
+  // "search your library for a land" / "tutor for a land" / "fetch a land from your library"
+  // These are the canonical MTG ramp phrases. We must resolve them BEFORE the generic
+  // type-detection pass, otherwise "land" would be picked up as a t:land filter and the
+  // Phase 2 AI would produce the wrong query ("land cards that tutor" instead of
+  // "cards that tutor for lands").
+  const SEARCH_LIBRARY_FOR_LAND =
+    // "search [your/the/a] [library/deck] for [a/the] land"
+    /\bsearch(?:es|ing)?\b.{0,30}\b(?:library|deck)\b.{0,30}\blands?\b/i.test(naturalQuery) ||
+    // "find [a/the] land in [your/the] library/deck"
+    /\bfinds?\b.{0,25}\bland.{0,25}\b(?:library|deck)\b/i.test(naturalQuery) ||
+    // "fetch [a/the/any] land [from/in] [your/the] library"
+    /\bfetch(?:es|ing)?\b.{0,25}\bland.{0,25}\b(?:library|deck)\b/i.test(naturalQuery) ||
+    // "tutor [for] [a] land" / "land tutor"
+    /\b(?:tutor(?:s|ing)?(?:\s+for)?|tutors?\s+up)\s+(?:a\s+|an?\s+|the\s+)?lands?\b/i.test(naturalQuery) ||
+    /\blands?\s+tutor\b/i.test(naturalQuery);
+
+  if (SEARCH_LIBRARY_FOR_LAND) {
+    mustClauses.push({
+      value: "function:tutor-land",
+      source: "phase1:function",
+    });
+    strippedTerms.push(
+      "search your library", "search the library", "search my library",
+      "search library", "searches library", "searching library",
+      "search your deck", "search the deck",
+      "find a land", "find the land", "find lands",
+      "fetch a land", "fetch the land", "fetch lands",
+      "tutor for a land", "tutor for the land", "tutor for lands",
+      "tutor a land", "tutor lands", "land tutor",
+      "from your library", "from the library", "from your deck",
+      "in your library", "in the library",
+      "for a land", "for the land", "for lands",
+      "a land", "the land", "land", "lands",
+      "library", "deck",
+    );
     return;
   }
 

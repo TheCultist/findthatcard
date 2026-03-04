@@ -97,6 +97,7 @@ STRATEGY TAGS: If the query asks for a common MTG strategy, use the placeholder 
     `Non-aristocrats Orzhov -> id:wb -strategy:Aristocrats`,
     `Cards like Lightning Bolt -> o:/deals [0-9]+ damage to any target/ (NOT function:boltland)`,
     `Tutor for lands -> function:land-tutor (NOT function:tutor)`,
+    `Search your library for a land -> function:land-tutor (NOT t:land function:tutor — "land" here is the OBJECT being fetched, not the card's own type)`,
   ],
 };
 

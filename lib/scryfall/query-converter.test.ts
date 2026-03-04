@@ -45,30 +45,30 @@ const finalizeCases: FinalizeTestCase[] = [
     name: "replaces tutor with land-specific tag",
     naturalQuery: "tutor for lands",
     rawQuery: "function:tutor",
-    expected: "function:land-tutor (function:tutor or function:tutor-to-hand)",
+    expected: "function:tutor-land",
     tagContext: {
       art: [],
-      function: ["land-tutor", "tutor-to-hand"],
+      function: ["tutor-land", "tutor-to-hand"],
     },
   },
   {
     name: "adds tutor-to-hand tag when requested",
     naturalQuery: "tutor a land to hand",
     rawQuery: "function:tutor",
-    expected: "function:land-tutor (function:tutor or function:tutor-land or function:tutor-to-hand)",
+    expected: "function:tutor-land",
     tagContext: {
       art: [],
-      function: ["land-tutor", "tutor-to-hand"],
+      function: ["tutor-land", "tutor-to-hand"],
     },
   },
   {
     name: "adds tutor-to-battlefield tag when requested",
     naturalQuery: "tutor a land onto the battlefield",
     rawQuery: "function:tutor",
-    expected: "function:land-tutor (function:tutor or function:tutor-land or function:tutor-to-hand)",
+    expected: "function:tutor-land",
     tagContext: {
       art: [],
-      function: ["land-tutor", "tutor-to-battlefield"],
+      function: ["tutor-land", "tutor-to-battlefield"],
     },
   },
   {
