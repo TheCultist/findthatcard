@@ -21,7 +21,8 @@ export type QueryIntent =
   | "search"
   | "commander-deck"
   | "commander-creature"
-  | "direct-scryfall";
+  | "direct-scryfall"
+  | "similar-cards";
 
 export type QueryClause = {
   value: string;
@@ -52,6 +53,8 @@ export type ResolvedFragment = {
 export type SearchPipelineIR = {
   naturalQuery: string;
   intent: QueryIntent;
+  /** Present when intent is "similar-cards" — the resolved canonical card name. */
+  similarToCardName?: string;
   tokenizedQuery: string[];
   noiseTokens: string[];
   mustClauses: QueryClause[];

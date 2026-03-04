@@ -260,6 +260,45 @@ export function hasCardNameIndex(): boolean {
   return cardNameIndexPair !== null;
 }
 
+/**
+ * Returns the shortest canonical card name whose simplified form starts with
+ * the given prefix followed by a word boundary (space, comma, or end-of-string).
+ *
+ * Used when a user types a partial name such as "Animar" instead of the full
+ * "Animar, Soul of Elements". Picks the shortest match to minimise false
+ * positives when the prefix is ambiguous (e.g. "Sol" → "Sol Ring" not
+ * "Sol'kanar the Swamp King").
+ *
+ * Returns null if no name starts with the given prefix.
+ */
+export function lookupCardNameByPrefix(prefix: string): string | null {
+  if (!cardNameIndexPair) return null;
+  const norm = simplifyForNameLookup(prefix);
+  if (norm.length < 2) return null;
+
+  let shortest: string | null = null;
+
+  // Check the exact map first (lowercase card names)
+  for (const [key, canonical] of cardNameIndexPair.exact) {
+    if (key === norm || key.startsWith(norm + " ") || key.startsWith(norm + ",")) {
+      if (shortest === null || canonical.length < shortest.length) {
+        shortest = canonical;
+      }
+    }
+  }
+  if (shortest) return shortest;
+
+  // Fall back to simplified map (punctuation-stripped forms)
+  for (const [key, canonical] of cardNameIndexPair.simplified) {
+    if (key === norm || key.startsWith(norm + " ")) {
+      if (shortest === null || canonical.length < shortest.length) {
+        shortest = canonical;
+      }
+    }
+  }
+  return shortest;
+}
+
 ensureCatalogIndex().catch((error) => {
   console.warn("[Catalog Index] Warm-up failed:", error);
 });

@@ -7,6 +7,7 @@ import {
   fuzzyMatchSubtype,
   getArtistIndex,
   lookupCardName,
+  lookupCardNameByPrefix,
   hasCardNameIndex,
 } from "@/lib/scryfall/catalog-index";
 import { isScryfallQuery } from "@/lib/scryfall/query-converter";
@@ -1981,6 +1982,80 @@ function detectCardNameList(
   };
 }
 
+/**
+ * Detects queries of the form "cards similar to X", "cards like X",
+ * "similar to X", "alternatives to X", etc., where X resolves to a known
+ * card name in the catalog.
+ *
+ * Returns the canonical card name when a match is found, or null otherwise.
+ */
+function detectSimilarToCardQuery(naturalQuery: string): { cardName: string } | null {
+  if (!hasCardNameIndex()) return null;
+
+  // Patterns that introduce a card-name reference in a "similar to" context.
+  // Each captures everything after the marker; we then find the longest
+  // catalog-matching prefix within that text.
+  const SIMILAR_PATTERNS: RegExp[] = [
+    // "cards similar to X", "spells similar to X", etc.
+    /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?)\s+similar\s+to\s+([\s\S]+)/i,
+    // "similar to X", "similar cards to X"
+    /\bsimilar\s+(?:cards?\s+)?to\s+([\s\S]+)/i,
+    // "cards like X", "something like X", "anything like X", "spells like X"
+    /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?|something|anything)\s+like\s+([\s\S]+)/i,
+    // "alternatives to X", "alternatives for X"
+    /\balternatives?\s+(?:to|for)\s+([\s\S]+)/i,
+  ];
+
+  // Context words that end a card-name reference when encountered in the
+  // captured text (e.g. "in modern", "for commander").
+  const CONTEXT_STOPS = new Set([
+    "in", "for", "from", "on", "at", "is", "are", "was", "were", "but",
+    "which", "that", "where", "when", "if", "to",
+  ]);
+
+  for (const pattern of SIMILAR_PATTERNS) {
+    const match = naturalQuery.match(pattern);
+    if (!match) continue;
+
+    const rawText = match[1].trim();
+    const words = rawText
+      .toLowerCase()
+      .replace(/[^a-z0-9'\s-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    // Pass 1 — greedy longest exact/simplified catalog match (handles full names)
+    for (let len = Math.min(words.length, 8); len >= 1; len--) {
+      const candidate = words.slice(0, len).join(" ");
+      const canonical = lookupCardName(candidate);
+      if (canonical) {
+        return { cardName: canonical };
+      }
+    }
+
+    // Pass 2 — prefix lookup: "Animar" alone won't exact-match "Animar, Soul
+    // of Elements", but the prefix search finds it.  Build the longest prefix
+    // up to the first context stop-word, then try prefix lookup.
+    const nameWords: string[] = [];
+    for (const w of words) {
+      if (CONTEXT_STOPS.has(w)) break;
+      nameWords.push(w);
+      if (nameWords.length >= 6) break;
+    }
+    if (nameWords.length > 0) {
+      const prefixCandidate = nameWords.join(" ");
+      const canonical = lookupCardNameByPrefix(prefixCandidate);
+      if (canonical) {
+        return { cardName: canonical };
+      }
+    }
+  }
+
+  return null;
+}
+
 export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Result> {
   const tokenizedQuery = tokenizeNaturalQuery(naturalQuery);
   const strippedTerms: string[] = [];
@@ -2013,6 +2088,29 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   // Ensure catalog indexes (subtypes, card names, etc.) are ready before any
   // parsing step that depends on them.
   await ensureCatalogIndex();
+
+  // Early exit: "cards similar to X" / "cards like X" / "alternatives to X"
+  const similarToResult = detectSimilarToCardQuery(naturalQuery);
+  if (similarToResult) {
+    return {
+      naturalQuery,
+      intent: "similar-cards",
+      similarToCardName: similarToResult.cardName,
+      tokenizedQuery,
+      noiseTokens: [],
+      mustClauses: [],
+      shouldClauses: [],
+      mustNotClauses: [],
+      unresolvedFragments: [],
+      resolvedFragments: [],
+      debug: {
+        strippedTerms: [],
+        aiBatchCalls: 0,
+        aiSequentialCalls: 0,
+        invalidTagsRemoved: 0,
+      },
+    };
+  }
 
   // Early exit: comma-separated card name list ("Bolt, Counterspell, Growth")
   const cardNameList = detectCardNameList(naturalQuery);
@@ -2117,8 +2215,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   ]);
 
   // Collect supertypes first (position tracked via original query token)
-  type CatalogMatch = { canonical: string; queryToken: string };
-  const supertypeMatches: CatalogMatch[] = [];
+  const supertypeMatches: { canonical: string; queryToken: string }[] = [];
 
   for (const token of catalogTokens) {
     if (STOPWORDS.has(token) || alreadyHandled.has(token)) continue;
