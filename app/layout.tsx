@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Source_Sans_3 } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
+import Script from "next/script";
 import "./globals.css";
 
 const sourceSans = Source_Sans_3({
@@ -48,7 +49,14 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={sourceSans.variable}>
       <head>
-        <script
+        <meta
+          name="impact-site-verification"
+          content="fe0d142c-1e97-427f-9abb-35dd9ed1c38f"
+        />
+      </head>
+      <body suppressHydrationWarning className={`${sourceSans.className} min-h-screen bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100`}>
+        <Script
+          id="schema-org"
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
@@ -65,16 +73,9 @@ export default function RootLayout({
             }),
           }}
         />
-        <script
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1161939859067558"
-          crossOrigin="anonymous"
-        />
-        <meta
-          name="impact-site-verification"
-          content="fe0d142c-1e97-427f-9abb-35dd9ed1c38f"
-        />
-        <script
+        <Script
+          id="theme-script"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
@@ -84,8 +85,13 @@ export default function RootLayout({
             `,
           }}
         />
-      </head>
-      <body suppressHydrationWarning className={`${sourceSans.className} min-h-screen bg-white text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100`}>
+        <Script
+          id="adsense"
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1161939859067558"
+          crossOrigin="anonymous"
+          strategy="afterInteractive"
+        />
         {children}
         <Analytics />
       </body>

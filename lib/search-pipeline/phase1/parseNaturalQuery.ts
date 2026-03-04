@@ -1,5 +1,5 @@
 import { hasCommanderDeckContext, resolveCommanderColorIdentity } from "@/lib/commander-context";
-import { getMtgKeywordList, resolveKeywordFilters } from "@/lib/mtg-keywords";
+import { getMtgKeywordList, resolveKeywordFilters, KEYWORD_SYNONYM_STRIPS } from "@/lib/mtg-keywords";
 import {
   ensureCatalogIndex,
   matchSubtype,
@@ -315,6 +315,15 @@ function resolveNumericStatFilters(naturalQuery: string): {
     }
   }
 
+  // "[num] [mv alias]" — e.g. "3 cmc", "2 mv" (reversed order)
+  const numMvAlias = new RegExp(`\\b(${NUM_PAT})\\s+(${MV_ALIASES})\\b`, "gi");
+  for (const m of lower.matchAll(numMvAlias)) {
+    const num = wordOrDigitToNumber(m[1] ?? "");
+    if (num !== null && !strippedTerms.some((t) => t.includes(m[0]))) {
+      emitIfNew("mv", "=", num, m[0]);
+    }
+  }
+
   // "[num]-drop" or "[num] drop" — e.g. "2-drop", "three drop", "three-drop"
   const dropPat = new RegExp(`\\b(${NUM_PAT})[-\\s]drops?\\b`, "gi");
   for (const m of lower.matchAll(dropPat)) {
@@ -619,7 +628,7 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   // 1. Art subjects — capture 1-3 words immediately before art/artwork/illustration anchors.
   //    e.g. "with forest art" → "forest", "sword and shield art" → ["sword", "shield"]
   capture(/\b([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})\s+(?:art|artwork|illustration|depict(?:ion|ing|s|ed)?)\b/gi);
-  capture(/\b(?:depict(?:ing|s)?|illustrat(?:ed|ing|es)|pictured\s+with)\s+([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})\b/gi);
+  capture(/\b(?:depict(?:ing|s)?|illustrat(?:ed|ing|es)|pictured\s+with|featuring|shows|showing)\s+([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})\b/gi);
 
   // 2. Oracle-text targets — "that destroy/exile/bounce/create/make/... a/an/each X"
   capture(/\bthat\s+(?:destroy|exile|bounce|target|counter|sacrifice|kill|remove|discard|copy|tap|untap|create|make|generate|produce|add)\s+(?:a\s+|an\s+|all\s+|each\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s+(?:card|permanent|spell|ability|token)\b|\s+or\b|\s+and\b|\s+from\b|\s+in\b|\s+you\b|$)/gi);
@@ -627,10 +636,10 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   // 3. Damage targets — "deals/deal damage to a/an/each X"
   capture(/\bdeals?\s+(?:\w+\s+)?damage\s+to\s+(?:a\s+|an\s+|each\s+|any\s+|all\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s|$)/gi);
 
-  // 4. Protection source — "protection from X"
+  // 5. Protection source — "protection from X"
   capture(/\bprotection\s+from\s+([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s|$)/gi);
 
-  // 5. Synergy / support / matters subjects
+  // 6. Synergy / support / matters subjects
   capture(/\b([a-z][a-z-]{2,}(?:\s+(?:or|and)\s+[a-z][a-z-]{2,})*)\s+(?:synerg(?:y|ies)|support|matters?|payoffs?|tribal)\b/gi);
   capture(/\bsupport(?:ing)?\s+([a-z][a-z-]{2,})\b/gi);
 
@@ -651,6 +660,27 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
 
   return tokens;
 }
+
+/**
+ * Extracts tokens that appear in trigger position ("when a zombie enters",
+ * "whenever an artifact enters") — these must NOT become t: tags, but must
+ * remain in the unresolved fragment text so the AI can understand the context.
+ */
+function extractTriggerSubjectTokens(naturalQuery: string): Set<string> {
+  const tokens = new Set<string>();
+  const lower = naturalQuery.toLowerCase();
+
+  const re = /\b(?:when(?:ever)?|if)\s+(?:a|an|another|one|or\s+more|target|equipped|enchanted)?\s*([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})\s+(?:enters?|dies?|attacks?|blocks?|leaves?|is\s+put|deals?|becomes?)\b/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(lower)) !== null) {
+    const phrase = (m[1] ?? "").trim();
+    for (const tok of phrase.split(/\s+/).filter(Boolean)) {
+      if (!STOPWORDS.has(tok)) tokens.add(tok);
+    }
+  }
+  return tokens;
+}
+
 
 function detectCategory(fragment: string): ResolverCategory {
   if (/\b(art|depict|artwork|illustration|pictured)\b/i.test(fragment)) {
@@ -958,13 +988,36 @@ function applyOracleIntentHeuristics(
       naturalQuery
     );
 
-  // --- ETB + draw ---
+  // --- "When a/an/another X enters" — trigger off OTHER permanents entering ---
+  // Detect explicit non-self trigger subjects ("when an artifact enters",
+  // "whenever a land enters the battlefield"). These should use plain o:enters,
+  // NOT o:"~ enters" which is the self-referential form.
+  const otherEtbMatch = naturalQuery
+    .toLowerCase()
+    .match(
+      /\b(?:when(?:ever)?|if)\s+(?:a|an|another|one|or\s+more)\s+([a-z][a-z-]+(?:\s+[a-z][a-z-]+){0,1})\s+enters?\b/i
+    );
+
+  if (hasEtbIntent && otherEtbMatch) {
+    const subject = otherEtbMatch[1].trim();
+    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: `o:${subject}`, source: "phase1:oracle" });
+    strippedTerms.push(
+      ...ETB_TERMS,
+      subject,
+      "trigger", "triggers", "triggered", "triggering", "that trigger",
+      "when a", "when an", "when another", "whenever a", "whenever an",
+    );
+    return;
+  }
+
+
   const hasDrawIntent =
     /\bdraw(?:s|n|ing)?\b/i.test(naturalQuery) ||
     /\bdraw\s+(?:a|one|two|three|\d+)?\s*cards?\b/i.test(naturalQuery);
 
   if (hasEtbIntent && hasDrawIntent) {
-    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"~ enters"', source: "phase1:oracle" });
     mustClauses.push({ value: "o:draw", source: "phase1:oracle" });
     strippedTerms.push(...ETB_TERMS, "draw", "draws", "draw cards", "draw a card");
     return;
@@ -978,7 +1031,7 @@ function applyOracleIntentHeuristics(
     );
 
   if (hasEtbIntent && hasManaProductionIntent) {
-    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"~ enters"', source: "phase1:oracle" });
     mustClauses.push({ value: 'o:"add"', source: "phase1:oracle" });
     strippedTerms.push(...ETB_TERMS, "mana", "give", "gives", "add", "adds", "produce", "produces", "generates", "generate");
     return;
@@ -992,7 +1045,7 @@ function applyOracleIntentHeuristics(
     );
 
   if (hasEtbIntent && hasLifegainIntent) {
-    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"~ enters"', source: "phase1:oracle" });
     mustClauses.push({ value: 'o:"gain"', source: "phase1:oracle" });
     strippedTerms.push(...ETB_TERMS, "gain", "gains", "gain life", "lifegain", "life gain", "heal", "heals");
     return;
@@ -1006,7 +1059,7 @@ function applyOracleIntentHeuristics(
     );
 
   if (hasEtbIntent && hasDamageIntent) {
-    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"~ enters"', source: "phase1:oracle" });
     mustClauses.push({ value: 'o:"deals"', source: "phase1:oracle" });
     strippedTerms.push(...ETB_TERMS, "deal", "deals", "damage", "pings", "ping");
     return;
@@ -1020,7 +1073,7 @@ function applyOracleIntentHeuristics(
     );
 
   if (hasEtbIntent && hasTokenIntent) {
-    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"~ enters"', source: "phase1:oracle" });
     mustClauses.push({ value: 'o:"create"', source: "phase1:oracle" });
     strippedTerms.push(...ETB_TERMS, "create", "creates", "token", "tokens", "make", "makes");
     return;
@@ -1034,7 +1087,7 @@ function applyOracleIntentHeuristics(
     );
 
   if (hasEtbIntent && hasDiscardIntent) {
-    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"~ enters"', source: "phase1:oracle" });
     mustClauses.push({ value: "o:discard", source: "phase1:oracle" });
     strippedTerms.push(...ETB_TERMS, "discard", "discards", "hand", "disruption");
     return;
@@ -1048,9 +1101,112 @@ function applyOracleIntentHeuristics(
     );
 
   if (hasEtbIntent && hasDestroyIntent) {
-    mustClauses.push({ value: "o:enters", source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"~ enters"', source: "phase1:oracle" });
     strippedTerms.push(...ETB_TERMS);
     // leave destroy/exile for the AI/strategy resolver to handle more precisely
+    return;
+  }
+
+  // --- Mana rocks ---
+  // Only fire for explicit "mana rock(s)" or "mana-generating artifact" phrasing.
+  // "artifact ramp" / "artifact mana" are intentionally excluded: the user may want
+  // any artifact that accelerates mana (including artifact creatures), not just
+  // dedicated mana rocks. Those fall through to the general ramp archetype.
+  const hasManaRockIntent =
+    /\bmana\s+rocks?\b/i.test(naturalQuery) ||
+    /\bmana[-\s]generating\s+artifacts?\b/i.test(naturalQuery);
+
+  if (hasManaRockIntent) {
+    mustClauses.push({
+      value: "(function:mana-rock or function:manarock or function:utility-mana-rock or function:mana-rock-with-sets-mechanic)",
+      source: "phase1:function",
+    });
+    strippedTerms.push("mana rocks", "mana rock", "mana generating artifact", "mana generating artifacts");
+    return;
+  }
+
+  // --- Alternate/alternative casting cost ---
+  // e.g. "alternative casting cost", "alternate cost", "alternating casting cost"
+  const hasAlternateCastingCostIntent =
+    /\b(?:alternate|alternating|alternative)\s+(?:casting\s+)?cost\b/i.test(naturalQuery) ||
+    /\bcast\s+(?:it\s+)?(?:for\s+)?(?:free|without\s+paying|at\s+(?:reduced|alternate|alternative))\b/i.test(naturalQuery);
+
+  if (hasAlternateCastingCostIntent) {
+    mustClauses.push({
+      value: "(function:potentially-free or o:\"without paying\" or o:\"alternative cost\" or o:\"rather than\")",
+      source: "phase1:function",
+    });
+    strippedTerms.push(
+      "alternate", "alternating", "alternative", "casting cost", "alternate cost",
+      "alternative cost", "alternating casting cost", "alternative casting cost",
+      "cast for free", "without paying",
+    );
+    return;
+  }
+
+  // --- Thunder Junction ability words: "start your engines" / "max speed" ---
+  // These are OTJ mechanic references, not haste synonyms.
+  const hasStartYourEnginesIntent =
+    /\bstart\s+your\s+engines?\b/i.test(naturalQuery);
+  const hasMaxSpeedIntent =
+    /\bmax\s+speed\b/i.test(naturalQuery);
+
+  if (hasStartYourEnginesIntent || hasMaxSpeedIntent) {
+    if (hasStartYourEnginesIntent) {
+      mustClauses.push({ value: 'o:"start your engines"', source: "phase1:oracle" });
+      strippedTerms.push("start your engines", "start your engine");
+    }
+    if (hasMaxSpeedIntent) {
+      mustClauses.push({
+        value: '(o:"max speed" or function:synergy-speed)',
+        source: "phase1:oracle",
+      });
+      strippedTerms.push("max speed");
+    }
+    return;
+  }
+
+  // --- Library peeking / spying ---
+  // "look at / peek / reveal / spy on [opponent's] library"
+  const hasLibraryLookIntent =
+    /\b(peek(?:ing)?|spy(?:ing)?|look\s+at|reveal[sd]?|see[s]?)\b.{0,30}\b(library|deck|top\s+of)\b/i.test(naturalQuery) ||
+    /\b(library|deck|top\s+of).{0,30}\b(peek(?:ing)?|spy(?:ing)?|look\s+at|reveal[sd]?|see[s]?)\b/i.test(naturalQuery);
+
+  if (hasLibraryLookIntent) {
+    const targetsOpponentLibrary =
+      /\bopponent[s']?\s+(?:library|deck)\b|\b(?:library|deck)\s+(?:of|belonging\s+to)\s+(?:an?\s+)?opponent\b/i.test(naturalQuery) ||
+      /\b(?:reveal|look\s+at|peek|spy)\b.{0,20}\bopponent/i.test(naturalQuery);
+
+    mustClauses.push({
+      value: "(function:spy-library or function:peek-library or function:library-manipulation)",
+      source: "phase1:function",
+    });
+    if (targetsOpponentLibrary) {
+      mustClauses.push({ value: 'o:"opponent\'s library"', source: "phase1:oracle" });
+    }
+    strippedTerms.push(
+      "peek", "peeks", "peeking", "spy", "spies", "spying",
+      "look at", "reveal", "reveals", "see",
+      "library", "deck", "top of",
+      "opponent", "opponents", "opponent's",
+    );
+    return;
+  }
+
+  // --- Aristocrats ---
+  // e.g. "aristocrats commander", "aristocrat payoffs", "aristocratic strategy"
+  const hasAristocratsIntent =
+    /\baristo(?:cra(?:ts?|cts?|tic)|arts?)\b/i.test(naturalQuery);
+
+  if (hasAristocratsIntent) {
+    mustClauses.push({
+      value: "(function:sacrifice-outlet or function:sac-outlet or function:death-trigger or function:death-trigger-self or function:synergy-sacrifice)",
+      source: "phase1:function",
+    });
+    strippedTerms.push(
+      "aristocrats", "aristocrat", "aristocratic",
+      "aristocract", "aristocracts", "aristocarts",
+    );
     return;
   }
 }
@@ -1400,7 +1556,7 @@ async function resolveSynergyFunctionClauses(
       functionTags.has(tag)
     );
     const related = available
-      .filter((tag) => tag.toLowerCase().includes("synergy"))
+      .filter((tag) => tag.toLowerCase().includes("synergy") || tag.toLowerCase().includes("-matter"))
       .filter((tag) => tagContainsSubject(tag, subject))
       .sort((a, b) => a.length - b.length);
 
@@ -1895,6 +2051,9 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   // Extract all semantic-role tokens BEFORE any type/subtype matching so they are
   // consistently excluded from both TYPE_TOKENS and catalog catalog loops.
   const semanticRoleTokens = extractSemanticRoleTokens(naturalQuery);
+  // Trigger subjects ("when a zombie enters") must block type matching but must NOT
+  // be stripped from unresolved fragment text — the AI needs those words for context.
+  const triggerSubjectTokens = extractTriggerSubjectTokens(naturalQuery);
 
   // Pre-pass: detect multi-word card names before structural parsing so that
   // individual words of the name (e.g. "Giant" in "Giant Growth") are not
@@ -1918,11 +2077,13 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     // Check both singular ("creature") and plural ("creatures") forms against the semantic-role set,
     // because captured tokens may have been stored in plural form.
     const isSemanticRole = typeForms.some((f) => semanticRoleTokens.has(f));
-    if (synergySubjects.has(type) || isSemanticRole) {
+    const isTriggerSubject = typeForms.some((f) => triggerSubjectTokens.has(f));
+    if (synergySubjects.has(type) || isSemanticRole || isTriggerSubject) {
       // Don't strip synergy subjects here — let resolveSynergyFunctionClauses
       // strip them only if tags are found; otherwise they fall through to AI resolution.
       // Semantic-role tokens (subject/object markers) are noise and can be stripped.
-      if (isSemanticRole) strippedTerms.push(...typeForms);
+      // Trigger-subject tokens must NOT be stripped — AI needs them for context.
+      if (isSemanticRole && !isTriggerSubject) strippedTerms.push(...typeForms);
       continue;
     }
     if (buildTermFormsPattern(typeForms).test(naturalQuery)) {
@@ -1952,6 +2113,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     ...FORMAT_TOKENS.map((f) => f.toLowerCase()),
     ...Object.keys(COLOR_IDENTITY),
     ...semanticRoleTokens,
+    ...triggerSubjectTokens,
   ]);
 
   // Collect supertypes first (position tracked via original query token)
@@ -1987,6 +2149,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   }
 
   // Collect subtypes (bigrams, exact, fuzzy) — position tracked via matched query token
+  type CatalogMatch = { canonical: string; queryToken: string; isWithContext?: boolean };
   const subtypeMatches: CatalogMatch[] = [];
 
   for (let i = 0; i < catalogTokens.length; i++) {
@@ -1998,22 +2161,40 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
         ? `${catalogTokens[i]} ${catalogTokens[i + 1]}`
         : null;
 
-    const addSubtypeMatch = (stLower: string, queryToken: string, extraStrip?: string) => {
+    const addSubtypeMatch = (stLower: string, queryToken: string, matchIndex: number, extraStrip?: string) => {
       if (matchedSubtypes.has(stLower)) return;
       matchedSubtypes.add(stLower);
       strippedTerms.push(...getTermForms(stLower));
       if (extraStrip) strippedTerms.push(extraStrip);
+
+      let isWithContext = false;
+      let prevIndex = matchIndex - 1;
+      while (prevIndex >= 0) {
+        const pt = catalogTokens[prevIndex];
+        if (pt === "with") {
+          isWithContext = true;
+          if (!strippedTerms.includes("with")) {
+            strippedTerms.push("with");
+          }
+          break;
+        }
+        if (!STOPWORDS.has(pt) && !matchedSubtypes.has(pt) && !matchedSubtypes.has(singularizeSubject(pt))) {
+          break;
+        }
+        prevIndex--;
+      }
+
       if (isTermNegated(naturalQuery, stLower)) {
         mustNotClauses.push({ value: `t:${quoteIfNeeded(stLower)}`, source: "phase1:subtype" });
       } else {
-        subtypeMatches.push({ canonical: stLower, queryToken });
+        subtypeMatches.push({ canonical: stLower, queryToken, isWithContext });
       }
     };
 
     if (bigram) {
       const bigramMatch = matchSubtype(bigram);
       if (bigramMatch && !synergySubjects.has(bigramMatch.name.toLowerCase())) {
-        addSubtypeMatch(bigramMatch.name.toLowerCase(), bigram, bigram);
+        addSubtypeMatch(bigramMatch.name.toLowerCase(), bigram, i, bigram);
         continue;
       }
     }
@@ -2027,7 +2208,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
         // remain in the text so it reaches the AI resolver as an unresolved fragment.
         continue;
       }
-      addSubtypeMatch(stLower, token);
+      addSubtypeMatch(stLower, token, i);
       continue;
     }
 
@@ -2036,7 +2217,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       if (fuzzy) {
         const stLower = fuzzy.name.toLowerCase();
         if (!synergySubjects.has(stLower)) {
-          addSubtypeMatch(stLower, token, token);
+          addSubtypeMatch(stLower, token, i, token);
         }
       }
     }
@@ -2044,14 +2225,24 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
 
   if (subtypeMatches.length > 0) {
     const overrides = new Map(subtypeMatches.map((m) => [m.canonical, m.queryToken]));
-    mustClauses.push(
-      ...buildGroupedClauses(
-        groupByConnector(naturalQuery, subtypeMatches.map((m) => m.canonical), overrides),
-        "t",
-        "phase1:subtype",
-        quoteIfNeeded
-      )
-    );
+    const groups = groupByConnector(naturalQuery, subtypeMatches.map((m) => m.canonical), overrides);
+
+    for (const group of groups) {
+      const mappedTerms = group.map((term) => {
+        const match = subtypeMatches.find((m) => m.canonical === term);
+        const quoted = quoteIfNeeded(term);
+        if (match?.isWithContext) {
+          return `(t:${quoted} or art:${quoted})`;
+        }
+        return `t:${quoted}`;
+      });
+
+      if (mappedTerms.length === 1) {
+        mustClauses.push({ value: mappedTerms[0], source: "phase1:subtype" });
+      } else {
+        mustClauses.push({ value: `(${mappedTerms.join(" or ")})`, source: "phase1:subtype" });
+      }
+    }
   }
 
   const lower = naturalQuery.toLowerCase();
@@ -2195,6 +2386,13 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   for (const keyword of keywordFilters) {
     const kw = keyword.toLowerCase();
     strippedTerms.push(kw);
+    // Also strip any synonym phrase that expanded to this keyword
+    for (const { pattern, keyword: synKeyword } of KEYWORD_SYNONYM_STRIPS) {
+      if (synKeyword === kw) {
+        const matches = naturalQuery.match(pattern);
+        if (matches) strippedTerms.push(...matches.map((m) => m.toLowerCase()));
+      }
+    }
     if (isTermNegated(naturalQuery, kw)) {
       mustNotClauses.push({
         value: `kw:${/\s/.test(kw) ? `"${kw}"` : kw}`,

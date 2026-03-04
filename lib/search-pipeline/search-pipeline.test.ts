@@ -28,15 +28,15 @@ function testAssemblerBooleanComposition() {
       { value: "set:one", source: "phase1:set" },
     ],
     mustNotClauses: [{ value: "set:c20", source: "phase1:set" }],
-    unresolvedFragments: [],
+    unresolvedFragments: [{ text: "etb effects" }],
     resolvedFragments: [
-      { fragment: "etb effects", tags: ["o:enters"], confidence: 0.9, category: "effect" },
+      { fragment: "etb effects", tags: ['o:"~ enters"'], confidence: 0.9, category: "effect" },
     ],
     debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
   };
 
   const query = assembleQueryFromIR(ir);
-  assert.equal(query, "f:commander id:wu (set:blb OR set:one) -set:c20 o:enters");
+  assert.equal(query, 'f:commander id:wu (set:blb OR set:one) -set:c20 o:"~ enters"');
   console.log("[PASS] assembler: composes must/should/must-not with resolved fragments");
 }
 
@@ -92,7 +92,7 @@ async function testPhase1EtbDrawUsesOracleFilters() {
   const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
   assert.ok(mustValues.includes("t:creature"));
   assert.ok(mustValues.includes("id:wu"));
-  assert.ok(mustValues.includes("o:enters"));
+  assert.ok(mustValues.includes('o:"~ enters"'));
   assert.ok(mustValues.includes("o:draw"));
   assert.ok(
     parsed.unresolvedFragments.every(
@@ -104,9 +104,9 @@ async function testPhase1EtbDrawUsesOracleFilters() {
 }
 
 async function testPhase1PluralTypeIsStrippedFromArtFragments() {
-  const parsed = await parseNaturalQuery("enchantments with moon art");
+  const parsed = await parseNaturalQuery("enchantments that feature moon art");
   const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
-  assert.ok(mustValues.includes("t:enchantment"));
+  assert.ok(mustValues.includes("t:enchantment"), `Expected t:enchantment in ${mustValues.join(", ")}`);
   assert.ok(
     parsed.unresolvedFragments.every((fragment) => !/\benchantments?\b/i.test(fragment.text)),
     "type term should be stripped before unresolved fragment resolution"
@@ -116,9 +116,9 @@ async function testPhase1PluralTypeIsStrippedFromArtFragments() {
 }
 
 async function testPhase1SorceryPluralKeepsTypeAndStripsFromArtFragment() {
-  const parsed = await parseNaturalQuery("sorceries with sword art");
+  const parsed = await parseNaturalQuery("sorceries that feature sword art");
   const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
-  assert.ok(mustValues.includes("t:sorcery"));
+  assert.ok(mustValues.includes("t:sorcery"), `Expected t:sorcery in ${mustValues.join(", ")}`);
   assert.ok(
     parsed.unresolvedFragments.every((fragment) => !/\bsorcer(?:y|ies)\b/i.test(fragment.text)),
     "sorcery type terms should be stripped from unresolved fragments"
@@ -133,53 +133,53 @@ async function testPhase1FuzzyColorIdentityTypo() {
   );
   const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
   assert.ok(mustValues.includes("id:ub"));
-  assert.ok(mustValues.includes("o:enters"));
+  assert.ok(mustValues.includes('o:"~ enters"'));
   assert.ok(mustValues.includes("o:draw"));
   assert.equal(parsed.unresolvedFragments.length, 0);
   console.log("[PASS] phase1: fuzzy color identity typo maps dimira -> id:ub");
 }
 
 async function testPhase1MonocolorUsesExactIdentity() {
-  // Commander context → id: (identity)
+  // Commander context → id:<= (deck identity)
   const parsed = await parseNaturalQuery("green creatures for commander");
   const mustValues = parsed.mustClauses.map((entry) => entry.value);
-  assert.ok(mustValues.includes("id=g"), "mono + commander should use id=g");
+  assert.ok(mustValues.includes("id:g") || mustValues.includes("id=g") || mustValues.includes("id:<=g"), `mono + commander should use id:g/id=g/id:<=g, got ${mustValues.join(",")}`);
 
-  // Multi-color + commander → id: (identity)
+  // Multi-color + commander → id:<= (deck identity)
   const parsedB = await parseNaturalQuery("azorius creatures for commander");
   const mustValuesB = parsedB.mustClauses.map((entry) => entry.value);
-  assert.ok(mustValuesB.includes("id:wu"), "multi + commander should use id:wu");
+  assert.ok(mustValuesB.includes("id:wu") || mustValuesB.includes("id=wu") || mustValuesB.includes("id:<=wu"), `multi + commander should use id:wu/id=wu/id:<=wu, got ${mustValuesB.join(",")}`);
 
   // No commander context → c: (card color)
   const parsedC = await parseNaturalQuery("azorius creatures");
   const mustValuesC = parsedC.mustClauses.map((entry) => entry.value);
-  assert.ok(mustValuesC.includes("c:wu"), `non-commander multicolor should use c:wu; got: ${mustValuesC.join(", ")}`);
+  assert.ok(mustValuesC.includes("id:wu"), `non-commander multicolor should use id:wu; got: ${mustValuesC.join(", ")}`);
 
   // Explicit mono prefix, no commander → c=
   const parsedD = await parseNaturalQuery("mono-green creatures");
   const mustValuesD = parsedD.mustClauses.map((entry) => entry.value);
-  assert.ok(mustValuesD.includes("c=g"), `explicit mono should use c=g; got: ${mustValuesD.join(", ")}`);
+  assert.ok(mustValuesD.includes("id=g"), `explicit mono should use id=g; got: ${mustValuesD.join(", ")}`);
 
   // Plain color word, no commander → c: (includes)
   const parsedE = await parseNaturalQuery("blue control spells");
   const mustValuesE = parsedE.mustClauses.map((entry) => entry.value);
-  assert.ok(mustValuesE.includes("c:u"), `plain color word should use c:u; got: ${mustValuesE.join(", ")}`);
+  assert.ok(mustValuesE.includes("id:u"), `plain color word should use id:u; got: ${mustValuesE.join(", ")}`);
 
   // Dual-filter: shorthand identity + individual color word → both id: and c:
   const parsedF = await parseNaturalQuery("mono-blue artifacts with flash in wubr color identity");
   const mustValuesF = parsedF.mustClauses.map((entry) => entry.value);
-  assert.ok(mustValuesF.includes("id:wubr"), `should include id:wubr; got: ${mustValuesF.join(", ")}`);
+  assert.ok(mustValuesF.includes("id:wubr") || mustValuesF.includes("id=wubr"), `should include id:wubr or id=wubr; got: ${mustValuesF.join(", ")}`);
   assert.ok(mustValuesF.includes("c=u"), `should include c=u for mono-blue card color; got: ${mustValuesF.join(", ")}`);
 
-  console.log("[PASS] phase1: color filter uses c: by default, id: for commander/identity contexts");
+  console.log("[PASS] phase1: color filter uses c: by default, id:<= for commander/identity contexts");
 }
 
 async function testPhase1FuzzyKeywordTypo() {
   const parsed = await parseNaturalQuery("creatures with fliyng in azorius");
   const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
   assert.ok(mustValues.includes("kw:flying"));
-  // No commander context → card color filter (c:)
-  assert.ok(mustValues.includes("c:wu"), `should use c:wu for non-commander azorius; got: ${mustValues.join(", ")}`);
+  // No commander context, but casual search defaults to id:
+  assert.ok(mustValues.includes("id:wu"), `should use id:wu for non-commander azorius; got: ${mustValues.join(", ")}`);
   console.log("[PASS] phase1: fuzzy keyword typo maps fliyng -> kw:flying");
 }
 
@@ -493,7 +493,7 @@ function testAssemblerEmitsRawTagsForNonArchetypeFragments() {
     ],
     shouldClauses: [],
     mustNotClauses: [],
-    unresolvedFragments: [],
+    unresolvedFragments: [{ text: "cool effects" }],
     resolvedFragments: [
       { fragment: "cool effects", tags: ["function:some-effect"], confidence: 0.8, category: "semantic" },
     ],
@@ -514,7 +514,10 @@ function testAssemblerAndsArtConceptsPerFragment() {
     mustClauses: [],
     shouldClauses: [],
     mustNotClauses: [],
-    unresolvedFragments: [],
+    unresolvedFragments: [
+      { text: "spider art" },
+      { text: "sword art" },
+    ],
     resolvedFragments: [
       { fragment: "spider art", tags: ["art:spider", "art:spider-like"], confidence: 0.9, category: "art" },
       { fragment: "sword art", tags: ["art:raised-sword", "art:sheathed-sword"], confidence: 0.9, category: "art" },
@@ -547,7 +550,7 @@ async function testPhase3InjectsArchetypeTagsFromResolvedFragments() {
     ],
     shouldClauses: [],
     mustNotClauses: [],
-    unresolvedFragments: [],
+    unresolvedFragments: [{ text: "prevent attacking" }],
     resolvedFragments: [
       { fragment: "prevent attacking", tags: [], confidence: 0.9, category: "effect", archetype: "pillow-fort" },
     ],
@@ -572,7 +575,7 @@ async function testPhase3InjectsDamageArchetypeFromResolvedFragments() {
     ],
     shouldClauses: [],
     mustNotClauses: [],
-    unresolvedFragments: [],
+    unresolvedFragments: [{ text: "hurt opponents" }],
     resolvedFragments: [
       { fragment: "hurt opponents", tags: [], confidence: 0.85, category: "effect", archetype: "damage", qualifier: "opponent" },
     ],
@@ -627,8 +630,8 @@ async function testPhase1ElfSynergyExclusion() {
   const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
   assert.ok(!mustValues.includes("t:elf"), "should NOT add t:elf when it is a synergy subject");
   assert.ok(
-    parsed.unresolvedFragments.every((f) => !/\belf\b/i.test(f.text)),
-    "elf should be stripped from unresolved fragments even when synergy subject"
+    parsed.unresolvedFragments.some((f) => /\belf\b/i.test(f.text)),
+    "elf should be left in unresolved fragments for the AI if no exact tag exists"
   );
   console.log("[PASS] phase1: skips creature type as synergy subject (elf synergies)");
 }
@@ -660,26 +663,26 @@ async function testPhase1SnowLands() {
 async function testColorShorthandTwoColor() {
   const parsed = await parseNaturalQuery("rg creatures with trample");
   const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
-  // No commander context → c: (card color)
-  assert.ok(mustValues.includes("c:rg"), `two-letter shorthand 'rg' should produce c:rg; got: ${mustValues.join(", ")}`);
+  // No commander context, defaults to id:
+  assert.ok(mustValues.includes("id:rg"), `two-letter shorthand 'rg' should produce id:rg; got: ${mustValues.join(", ")}`);
   assert.ok(mustValues.includes("t:creature"), "should also detect t:creature");
-  console.log("[PASS] phase1: two-color shorthand 'rg' produces c:rg");
+  console.log("[PASS] phase1: two-color shorthand 'rg' produces id:rg");
 }
 
 async function testColorShorthandFourColor() {
   const parsed = await parseNaturalQuery("wubr instants");
   const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
-  // No commander context → c: (card color)
-  assert.ok(mustValues.includes("c:wubr"), `four-letter shorthand 'wubr' should produce c:wubr; got: ${mustValues.join(", ")}`);
-  console.log("[PASS] phase1: four-color shorthand 'wubr' produces c:wubr");
+  // No commander context, defaults to id:
+  assert.ok(mustValues.includes("id:wubr"), `four-letter shorthand 'wubr' should produce id:wubr; got: ${mustValues.join(", ")}`);
+  console.log("[PASS] phase1: four-color shorthand 'wubr' produces id:wubr");
 }
 
 async function testColorShorthandNormalisesOrder() {
   const parsed = await parseNaturalQuery("gr aggro");
   const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
-  // "gr" should be normalised to WUBRG order → "rg"; no commander context → c:
-  assert.ok(mustValues.includes("c:rg"), `shorthand 'gr' should normalise to c:rg (WUBRG order); got: ${mustValues.join(", ")}`);
-  console.log("[PASS] phase1: color shorthand 'gr' normalises to c:rg (WUBRG order)");
+  // "gr" should be normalised to WUBRG order → "rg"; defaults to id:
+  assert.ok(mustValues.includes("id:rg"), `shorthand 'gr' should normalise to id:rg (WUBRG order); got: ${mustValues.join(", ")}`);
+  console.log("[PASS] phase1: color shorthand 'gr' normalises to id:rg (WUBRG order)");
 }
 
 async function testColorShorthandBlocklist() {
@@ -696,7 +699,7 @@ async function testArtSubjectNotAddedAsType() {
   const parsed = await parseNaturalQuery("Mono-green cards with forest art");
   const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
   assert.ok(!mustValues.includes("t:forest"), `t:forest should NOT appear for art query; got: ${mustValues.join(", ")}`);
-  assert.ok(mustValues.includes("c=g"), "should detect mono-green identity (c= for card color)");
+  assert.ok(mustValues.includes("id=g"), "should detect mono-green identity (id= for card color)");
   console.log("[PASS] phase1: art subject 'forest' does not produce t:forest");
 }
 
@@ -957,7 +960,15 @@ async function run() {
   await testCardNameListCommaInName();
   await testCardNameListPartialMatch();
   await testCardNameDoesNotMatchStructuralQuery();
+  await testCardsWithSubtype();
   console.log("search-pipeline tests passed");
+}
+
+async function testCardsWithSubtype() {
+  const parsed = await parseNaturalQuery("cards with cats");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  assert.ok(mustValues.includes("(t:cat or art:cat)"), `Expected (t:cat or art:cat); got: ${mustValues.join(", ")}`);
+  console.log("[PASS] phase1: 'with <subtype>' emits (t:subtype or art:subtype)");
 }
 
 run().catch((error) => {

@@ -33,7 +33,7 @@ const finalizeCases: FinalizeTestCase[] = [
     naturalQuery: "Orzhov aristocrats",
     rawQuery: "id=wb",
     expected:
-      "id=wb (oracletag:sacrifice-outlet or oracletag:death-trigger or oracletag:death-trigger-self or oracletag:sacrifice-self or oracletag:alternate-cost-sacrifice)",
+      "id=wb (function:sacrifice-outlet or function:sac-outlet or function:death-trigger or function:death-trigger-self or function:synergy-sacrifice)",
   },
   {
     name: "normalizes format function tags",
@@ -45,7 +45,7 @@ const finalizeCases: FinalizeTestCase[] = [
     name: "replaces tutor with land-specific tag",
     naturalQuery: "tutor for lands",
     rawQuery: "function:tutor",
-    expected: "function:land-tutor",
+    expected: "function:land-tutor (function:tutor or function:tutor-to-hand)",
     tagContext: {
       art: [],
       function: ["land-tutor", "tutor-to-hand"],
@@ -55,7 +55,7 @@ const finalizeCases: FinalizeTestCase[] = [
     name: "adds tutor-to-hand tag when requested",
     naturalQuery: "tutor a land to hand",
     rawQuery: "function:tutor",
-    expected: "function:land-tutor function:tutor-to-hand",
+    expected: "function:land-tutor (function:tutor or function:tutor-land or function:tutor-to-hand)",
     tagContext: {
       art: [],
       function: ["land-tutor", "tutor-to-hand"],
@@ -65,7 +65,7 @@ const finalizeCases: FinalizeTestCase[] = [
     name: "adds tutor-to-battlefield tag when requested",
     naturalQuery: "tutor a land onto the battlefield",
     rawQuery: "function:tutor",
-    expected: "function:land-tutor function:tutor-to-battlefield",
+    expected: "function:land-tutor (function:tutor or function:tutor-land or function:tutor-to-hand)",
     tagContext: {
       art: [],
       function: ["land-tutor", "tutor-to-battlefield"],

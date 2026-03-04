@@ -138,11 +138,12 @@ export function assembleQueryFromIR(ir: SearchPipelineIR): string {
       if (!unresolved.orConnected) flushOrGroup();
       continue;
     }
+    const joinedEmitted = emitted.join(" ");
     if (unresolved.orConnected && orGroupTags.length > 0) {
-      orGroupTags.push(...emitted);
+      orGroupTags.push(joinedEmitted);
     } else {
       flushOrGroup();
-      orGroupTags.push(...emitted);
+      orGroupTags.push(joinedEmitted);
     }
   }
   flushOrGroup();

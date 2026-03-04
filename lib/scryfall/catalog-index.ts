@@ -215,6 +215,8 @@ const SUBTYPE_FUZZY_BLOCKLIST = new Set([
   // Common relational / grammar words that sit within edit-distance of creature types
   "target", "player", "players", "spell", "spells", "effect", "effects",
   "power", "token", "tokens", "counter", "counters", "trigger", "triggers",
+  // "matter" / "matters" → "master" / "masters" (Master creature type, levenshtein 1)
+  "matter", "matters",
 ]);
 
 export function fuzzyMatchSubtype(

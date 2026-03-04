@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-02-26",
+  "updatedAt": "2026-03-04",
   "catalogs": {
     "artist-names": [
       "6VCR",
@@ -24911,8 +24911,8 @@
       "+1",
       "1.5",
       "2+*",
-      "2",
       "+2",
+      "2",
       "2.5",
       "3",
       "+3",
@@ -25107,7 +25107,6 @@
       "Casualty",
       "Protection",
       "Compleated",
-      "Sneak",
       "Enchant",
       "Flash",
       "Boast",
@@ -25167,6 +25166,7 @@
       "Web-slinging",
       "Prowl",
       "Solved",
+      "Sneak",
       "Firebending"
     ],
     "keyword-actions": [
@@ -59591,11 +59591,11 @@
       "_____",
       "_____ Balls of Fire",
       "_____ Bird Gets the Worm",
-      "_____ Goblin",
       "_____ _____ Rocketship",
       "_____ _____ _____ Trespasser",
       "_____-o-saurus",
       "______",
+      "________ Goblin",
       "capital offense",
       "sAnS mERcY",
       "Éomer of the Riddermark",

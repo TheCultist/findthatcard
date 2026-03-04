@@ -820,6 +820,13 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     strayPattern: /\bfunction:(win-condition|alternate-win-condition|automatic-win|overrun)\b/gi,
   },
   {
+    name: "aristocrats",
+    description: "Sacrifice creatures for value: sacrifice outlets, death triggers, and payoffs when creatures die",
+    detect: /\baristo(?:cra(?:ts?|cts?|tic)|arts?)\b/i,
+    defaultTags: ["sacrifice-outlet", "sac-outlet", "death-trigger", "death-trigger-self", "synergy-sacrifice"],
+    strayPattern: /\b(?:oracletag:(?:sacrifice-outlet|death-trigger-self|death-trigger|sacrifice-self|alternate-cost-sacrifice)|function:(?:sacrifice-outlet|sac-outlet|death-trigger-self|death-trigger|synergy-sacrifice))\b/gi,
+  },
+  {
     name: "group-slug",
     description: "Deal damage or impose costs on all opponents simultaneously",
     detect: /\bgroup[-\s]slug\b/i,
@@ -983,6 +990,9 @@ function normalizeArchetypeIntents(
       const tagPattern = new RegExp(`\\bfunction:${escapeRegex(tag)}\\b`, "gi");
       updated = updated.replace(tagPattern, " ");
     }
+    // Remove parenthetical groups that are now empty or contain only "or" separators
+    // after stripping tags (e.g. "( or or or )" left over from an expanded OR chain).
+    updated = updated.replace(/\(\s*(?:-?(?:and|or)\s*)*\)/gi, " ");
     updated = normalizeWhitespace(updated);
 
     const orChain = desiredTags.map((t) => `function:${t}`);
@@ -1188,9 +1198,11 @@ function normalizeTokenGenerationIntent(
 }
 
 function normalizeEtbOracleText(query: string): string {
+  // If the query specifically has "enters the battlefield" (old phrasing)
+  // we map it to self-ETB ("~ enters") to avoid matching other cards entering.
   return query.replace(
     /\b(?:o|oracle):\s*"enters the battlefield"/gi,
-    "o:enters"
+    'o:"~ enters"'
   );
 }
 

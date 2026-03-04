@@ -90,13 +90,6 @@ function parseColorIdentityFromPhrase(phrase: string): string | null {
  */
 export function resolveCommanderColorIdentity(naturalQuery: string): string | null {
   const lower = naturalQuery.toLowerCase();
-  if (
-    !/\bmy\s+commander\b|\bcommander\s+is\b|\bcommander\s+being\b|\bthe\s+commander\b|\bmy\s+general\b/i.test(
-      lower
-    )
-  ) {
-    return null;
-  }
 
   // "my commander is green and white" / "commander is green white" / "commander being green white"
   const colorMatch = lower.match(
@@ -128,6 +121,27 @@ export function resolveCommanderColorIdentity(naturalQuery: string): string | nu
     if (id) return id;
   }
 
+  // "for a red commander" / "for my red commander" / "playable with golgari commander"
+  const cleanedFor = lower.replace(/\b(?:looking|search(?:ing)?)\s+for\b/g, "");
+  const forMatch = cleanedFor.match(
+    /\b(?:for|in|playable\s+with|goes\s+in)\s+(?:a\s+|my\s+|an\s+)?([^.]+?)\s+commander\b/i
+  );
+  if (forMatch) {
+    const phrase = forMatch[1] || "";
+    const id = parseColorIdentityFromPhrase(phrase);
+    if (id) return id;
+  }
+
+  // "red commander deck"
+  const deckMatch = lower.match(
+    /\b([a-z\s,]+?)\s+commander\s+deck\b/i
+  );
+  if (deckMatch) {
+    const phrase = deckMatch[1] || "";
+    const id = parseColorIdentityFromPhrase(phrase);
+    if (id) return id;
+  }
+
   return null;
 }
 
@@ -136,12 +150,26 @@ export function resolveCommanderColorIdentity(naturalQuery: string): string | nu
  * Used to infer f:commander and to skip unrelated set matching.
  */
 export function hasCommanderDeckContext(naturalQuery: string): boolean {
-  return (
-    /\bmy\s+commander\b|\bcommander\s+is\b|\bcommander\s+being\b|\bthe\s+commander\b|\bmy\s+general\b/i.test(
-      naturalQuery
-    ) ||
-    /\b(?:have|run|play|use)\s+(?:a\s+)?[^.]+?\s+commander\b/i.test(naturalQuery)
-  );
+  const lower = naturalQuery.toLowerCase();
+  
+  if (/\bmy\s+commander\b|\bcommander\s+is\b|\bcommander\s+being\b|\bthe\s+commander\b|\bmy\s+general\b/i.test(lower)) {
+    return true;
+  }
+  
+  if (/\b(?:have|run|play|use|build(?:ing)?)\s+(?:a\s+)?[^.]+?\s+commander\b/i.test(lower)) {
+    return true;
+  }
+  
+  if (/\bcommander\s+deck\b/i.test(lower)) {
+    return true;
+  }
+  
+  const cleanedFor = lower.replace(/\b(?:looking|search(?:ing)?)\s+for\b/g, "");
+  if (/\b(?:for|in|playable\s+with|goes\s+in)\s+(?:a\s+|my\s+|an\s+)?[^.]+?\s+commander\b/i.test(cleanedFor)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**

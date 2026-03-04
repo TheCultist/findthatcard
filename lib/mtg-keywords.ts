@@ -252,6 +252,17 @@ const BLOCKED_KEYWORD_ACTIONS = new Set([
   "sacrifice", "search", "shuffle", "tap", "untap", "vote", "fateseal",
 ]);
 
+/**
+ * Synonym phrases that should be expanded to MTG keywords.
+ * Used both for query matching and for stripping the original phrase from
+ * unresolved fragments after the keyword has been resolved.
+ */
+export const KEYWORD_SYNONYM_STRIPS: Array<{ pattern: RegExp; keyword: string }> = [
+  { pattern: /\bflyers?\b/gi, keyword: "flying" },
+  { pattern: /\btramplers?\b/gi, keyword: "trample" },
+  { pattern: /\bground\s*pound(?:ers?)?\b/gi, keyword: "trample" },
+];
+
 async function fetchCatalogKeywordExtras(): Promise<MtgKeywordEntry[]> {
   try {
     await ensureScryfallCatalogCache();
@@ -521,6 +532,16 @@ function hasKeywordPositiveIntent(
   ) {
     return true;
   }
+  // Synonym was expanded: if keyword now appears in the expanded query but wasn't in the
+  // original, treat that as bare positive intent (e.g. "max speed" → "haste")
+  if (
+    expandedQuery !== undefined &&
+    expandedQuery.toLowerCase() !== naturalQuery.toLowerCase() &&
+    new RegExp(`\\b${kwEscaped(kwLower)}s?\\b`, "i").test(lower) &&
+    !new RegExp(`\\b${kwEscaped(kwLower)}s?\\b`, "i").test(naturalQuery.toLowerCase())
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -582,7 +603,9 @@ export async function resolveKeywordFilters(naturalQuery: string): Promise<strin
   // Expand common synonyms (e.g. "flyers" = creatures with flying)
   const queryForMatch = lowerQuery
     .replace(/\bflyers?\b/gi, "flying")
-    .replace(/\btramplers?\b/gi, "trample");
+    .replace(/\btramplers?\b/gi, "trample")
+    .replace(/\bno\s*flying\b/gi, "flying")
+    .replace(/\bground\s*pound(?:ers?)?\b/gi, "trample");
 
   for (const entry of byLength) {
     const name = entry.name;

@@ -84,7 +84,7 @@ CAST FOR FREE: If the user asks for a card that can be cast for free, use functi
 MANA VALUE FILTERS: For mana cost thresholds (e.g., "under 3 mana", "3 mana or less", "at most 4"), use mv comparisons (mv<3, mv<=3, mv<=4). Do NOT use cost-reduction regex unless discounting is explicitly requested.
 MANA COST SYMBOLS: If the user asks for cards with a specific mana cost symbol or pattern in the printed cost (e.g., "with X in the mana cost", "with two green pips"), use m: (mana cost) like m:X, m:{G}{G}. This is NOT mv.
 IGNORE SUBJECTIVE QUALIFIERS: "Easy", "for new players", "beginner-friendly", "simple", "accessible" have no reliable Scryfall/function equivalent. Do NOT add function:any-player-ability or similar for these—omit such filters entirely.
-ETB (enters the battlefield): Oracle text now uses "enters" (e.g., "When this creature enters"). Use o:enters, NOT o:"enters the battlefield".
+ETB (enters the battlefield): Oracle text now uses "enters" (e.g., "When this creature enters"). Use o:"~ enters" for self-ETBs (e.g., "when this enters", "ETB"). Use o:enters for effects that trigger when OTHER things enter (e.g., "when a land enters", "when another creature enters"). Do NOT use o:"enters the battlefield".
 STRATEGY TAGS: If the query asks for a common MTG strategy, use the placeholder tag strategy:NAME and DO NOT expand to oracletag/function tags. Valid strategy names: ${STRATEGY_TAG_NAMES.join(
     ", "
   )}. Use quotes for multiword names (e.g., strategy:"Cost Reduction"). If the user asks to EXCLUDE a strategy, use -strategy:NAME (or -strategy:"Multi Word").
