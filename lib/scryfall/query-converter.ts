@@ -1426,11 +1426,20 @@ function appendStrategyTags(query: string, naturalQuery: string): string {
 
   const queryLower = query.toLowerCase();
   const negated = new Set(detectNegatedStrategies(naturalQuery).map((entry) => entry.toLowerCase()));
-  const missing = detected.filter(
-    (strategy) =>
-      !queryLower.includes(`strategy:${strategy.toLowerCase()}`) &&
-      !queryLower.includes(`-strategy:${strategy.toLowerCase()}`)
-  );
+  const missing = detected.filter((strategy) => {
+    if (queryLower.includes(`strategy:${strategy.toLowerCase()}`)) return false;
+    if (queryLower.includes(`-strategy:${strategy.toLowerCase()}`)) return false;
+    // Don't re-append if the strategy's oracletags are already expanded in the query
+    // (e.g. after a second finalizeScryfallQuery pass following invalid-tag removal)
+    const canonicalName = resolveStrategyName(strategy) ?? strategy;
+    const entry = STRATEGY_ORACLETAGS.find(
+      (e) => e.strategy.toLowerCase() === canonicalName.toLowerCase()
+    );
+    if (entry && entry.oracletags.some((tag) => queryLower.includes(tag.toLowerCase()))) {
+      return false;
+    }
+    return true;
+  });
 
   if (missing.length === 0) {
     return query;

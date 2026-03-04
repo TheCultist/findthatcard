@@ -193,6 +193,15 @@ function removeInvalidTagsFromQuery(
     const pattern = new RegExp(`\\s*-?${operators}:(?:"${escapedTag}"|${escapedTag})\\b`, "gi");
     updated = updated.replace(pattern, " ");
   }
+  // Clean up orphaned OR operators left inside groups after tag removal:
+  //   "(X or or Y)" → "(X or Y)"  (middle removal)
+  //   "(X or )"     → "(X)"       (trailing or)
+  //   "(or X)"      → "(X)"       (leading or)
+  //   "(or)"        → ""          (empty group)
+  updated = updated.replace(/\bor\s+or\b/gi, "or");
+  updated = updated.replace(/\(\s*([^)]+?)\s+or\s*\)/gi, "($1)");
+  updated = updated.replace(/\(\s*or\s+([^)]+)\)/gi, "($1)");
+  updated = updated.replace(/\(\s*or\s*\)/gi, "");
   return updated.replace(/\s{2,}/g, " ").trim();
 }
 

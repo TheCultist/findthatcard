@@ -22,7 +22,9 @@ export const STRATEGY_ORACLETAGS: StrategyOracletagGroup[] = [
   },
   {
     strategy: "Sacrifice",
-    oracletags: ["oracletag:sacrifice-outlet", "oracletag:sacrifice-payoff"],
+    // oracletag:sacrifice-payoff does not exist in Scryfall Tagger;
+    // function:synergy-sacrifice is the valid tag covering sacrifice payoffs/synergy.
+    oracletags: ["oracletag:sacrifice-outlet", "function:synergy-sacrifice"],
     aliases: ["sacrifice matters"],
   },
   {
