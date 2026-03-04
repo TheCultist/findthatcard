@@ -5,19 +5,37 @@ type SearchSlugPageProps = {
   params: Promise<{ slug: string }> | { slug: string };
 };
 
-const buildMetadata = (query: string): Metadata => {
+const defaultDescription =
+  "Search Magic: The Gathering cards using natural language. Supports art and function tags from Scryfall Tagger.";
+
+const buildMetadata = (query: string, slug: string): Metadata => {
   const cleaned = query.trim();
   if (!cleaned) {
     return {
-      title: "Find That Card - Search | Find That Card",
-      description:
-        "Search Magic: The Gathering cards using natural language. Supports art and function tags from Scryfall Tagger.",
+      title: "Search",
+      description: defaultDescription,
+      openGraph: {
+        title: "Find That Card - Search",
+        description: defaultDescription,
+      },
     };
   }
 
+  const description = `Search results for "${cleaned}" on Find That Card.`;
+
   return {
-    title: `Find That Card - ${cleaned} | Find That Card`,
-    description: `Search results for "${cleaned}" on Find That Card.`,
+    title: `${cleaned} - Search`,
+    description,
+    alternates: { canonical: `/search/${encodeURIComponent(slug)}` },
+    openGraph: {
+      title: `${cleaned} - Find That Card`,
+      description,
+    },
+    twitter: {
+      card: "summary",
+      title: `${cleaned} - Find That Card`,
+      description,
+    },
   };
 };
 
@@ -27,7 +45,7 @@ export async function generateMetadata({
   const resolvedParams = await params;
   const slug = resolvedParams?.slug ?? "";
   const query = slug.replace(/-/g, " ");
-  return buildMetadata(query);
+  return buildMetadata(query, slug);
 }
 
 export default function SearchSlugPage() {

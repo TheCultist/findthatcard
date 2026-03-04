@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import ThemeToggle from "@/app/components/ThemeToggle";
+
+export const metadata: Metadata = {
+  title: "About",
+  description:
+    "Meet the creator behind Find That Card — a natural language search tool for Magic: The Gathering cards by Cardboard Cultist.",
+};
 
 export default function AboutPage() {
   return (

@@ -1,5 +1,12 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import ThemeToggle from "@/app/components/ThemeToggle";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description:
+    "Privacy policy for Find That Card. Learn how we handle your data, cookies, and third-party services.",
+};
 
 export default function PrivacyPage() {
   return (
