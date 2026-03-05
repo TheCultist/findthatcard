@@ -734,6 +734,7 @@ export default function SearchPage() {
       {/* Card Detail Panel */}
       {selectedCard && (
         <CardDetailPanel
+          key={selectedCard.id}
           card={selectedCard}
           onClose={() => setSelectedCard(null)}
         />

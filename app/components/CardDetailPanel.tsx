@@ -116,6 +116,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
   const [dragY, setDragY] = useState(0);
   const [isSwipingAway, setIsSwipingAway] = useState(false);
   const dragStartY = useRef(0);
+  const dragYRef = useRef(0);
   const isDragging = useRef(false);
 
   useEffect(() => {
@@ -137,18 +138,27 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
   const handleDragMove = useCallback((e: React.TouchEvent) => {
     if (!isDragging.current) return;
     const delta = Math.max(0, e.touches[0].clientY - dragStartY.current);
+    dragYRef.current = delta;
     setDragY(delta);
   }, []);
 
   const handleDragEnd = useCallback(() => {
     isDragging.current = false;
-    if (dragY > 80) {
+    if (dragYRef.current > 80) {
+      dragYRef.current = 0;
       setIsSwipingAway(true);
       setTimeout(onClose, 220);
     } else {
+      dragYRef.current = 0;
       setDragY(0);
     }
-  }, [dragY, onClose]);
+  }, [onClose]);
+
+  const handleDragCancel = useCallback(() => {
+    isDragging.current = false;
+    dragYRef.current = 0;
+    setDragY(0);
+  }, []);
 
   useEffect(() => {
     const fetchCardData = async () => {
@@ -242,7 +252,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
   return (
     <div
       className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-200 ${
-        visible ? "bg-black/70 backdrop-blur-sm" : "bg-black/0"
+        visible && !isSwipingAway ? "bg-black/70 backdrop-blur-sm" : "bg-black/0 pointer-events-none"
       }`}
       onClick={handleClose}
     >
@@ -268,6 +278,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
           onTouchStart={handleDragStart}
           onTouchMove={handleDragMove}
           onTouchEnd={handleDragEnd}
+          onTouchCancel={handleDragCancel}
         >
           <div className="h-1.5 w-12 rounded-full bg-gray-300 dark:bg-gray-700" />
         </div>
@@ -279,6 +290,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
           onTouchStart={handleDragStart}
           onTouchMove={handleDragMove}
           onTouchEnd={handleDragEnd}
+          onTouchCancel={handleDragCancel}
         >
           <div className="flex items-center gap-2 min-w-0">
             <h2 className="text-base font-bold text-gray-900 dark:text-gray-100 truncate">{card.name}</h2>
