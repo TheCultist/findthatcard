@@ -217,6 +217,8 @@ const SUBTYPE_FUZZY_BLOCKLIST = new Set([
   "power", "token", "tokens", "counter", "counters", "trigger", "triggers",
   // "matter" / "matters" → "master" / "masters" (Master creature type, levenshtein 1)
   "matter", "matters",
+  // "combat" → "wombat" (Wombat creature type, levenshtein 1 — first char c→w)
+  "combat",
 ]);
 
 export function fuzzyMatchSubtype(
