@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Source_Sans_3 } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
@@ -13,6 +13,12 @@ const sourceSans = Source_Sans_3({
 
 const description =
   "Search Magic: The Gathering cards using natural language. Supports art and function tags from Scryfall Tagger.";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.findthatcard.net"),

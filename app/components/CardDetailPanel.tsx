@@ -1,7 +1,7 @@
 "use client";
 
 import { CardResult, CardDetailData } from "@/types/scryfall";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import ManaCost from "@/app/components/ManaCost";
 import OracleText from "@/app/components/OracleText";
@@ -113,6 +113,10 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
   const [activeFace, setActiveFace] = useState(0);
   const [isCheckingLink, setIsCheckingLink] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [dragY, setDragY] = useState(0);
+  const [isSwipingAway, setIsSwipingAway] = useState(false);
+  const dragStartY = useRef(0);
+  const isDragging = useRef(false);
 
   useEffect(() => {
     // Trigger enter animation
@@ -124,6 +128,27 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
     setVisible(false);
     setTimeout(onClose, 200);
   }, [onClose]);
+
+  const handleDragStart = useCallback((e: React.TouchEvent) => {
+    dragStartY.current = e.touches[0].clientY;
+    isDragging.current = true;
+  }, []);
+
+  const handleDragMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging.current) return;
+    const delta = Math.max(0, e.touches[0].clientY - dragStartY.current);
+    setDragY(delta);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    isDragging.current = false;
+    if (dragY > 80) {
+      setIsSwipingAway(true);
+      setTimeout(onClose, 220);
+    } else {
+      setDragY(0);
+    }
+  }, [dragY, onClose]);
 
   useEffect(() => {
     const fetchCardData = async () => {
@@ -227,10 +252,34 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
             ? "opacity-100 translate-y-0 sm:scale-100"
             : "opacity-0 translate-y-8 sm:scale-95"
         }`}
+        style={
+          isSwipingAway
+            ? { transform: "translateY(100%)", transition: "transform 220ms ease" }
+            : dragY > 0
+              ? { transform: `translateY(${dragY}px)`, transition: "none", opacity: Math.max(0.4, 1 - dragY / 400) }
+              : undefined
+        }
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Drag handle — mobile only */}
+        <div
+          className="sm:hidden flex justify-center pt-3 pb-1 flex-shrink-0 select-none"
+          style={{ touchAction: "none" }}
+          onTouchStart={handleDragStart}
+          onTouchMove={handleDragMove}
+          onTouchEnd={handleDragEnd}
+        >
+          <div className="h-1.5 w-12 rounded-full bg-gray-300 dark:bg-gray-700" />
+        </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-300 dark:border-gray-800 flex-shrink-0">
+        <div
+          className="flex items-center justify-between px-4 py-3 border-b border-gray-300 dark:border-gray-800 flex-shrink-0 sm:pt-3"
+          style={{ touchAction: "none" }}
+          onTouchStart={handleDragStart}
+          onTouchMove={handleDragMove}
+          onTouchEnd={handleDragEnd}
+        >
           <div className="flex items-center gap-2 min-w-0">
             <h2 className="text-base font-bold text-gray-900 dark:text-gray-100 truncate">{card.name}</h2>
             {detailData?.rarity && (
@@ -241,7 +290,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
           </div>
           <button
             onClick={handleClose}
-            className="flex-shrink-0 ml-3 p-1.5 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="flex-shrink-0 ml-3 -mr-1 p-2.5 rounded-xl text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800 transition-colors"
             aria-label="Close"
           >
             <XMarkIcon className="w-5 h-5" />
@@ -249,11 +298,11 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
         </div>
 
         {/* Main content (scrollable) */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto overscroll-contain">
           <div className="flex flex-col sm:flex-row gap-0 sm:gap-6 p-4 sm:p-6">
             {/* Left: Card Image */}
             <div className="flex-shrink-0 flex flex-col items-center gap-3 sm:w-64 lg:w-72">
-              <div className="w-48 sm:w-full aspect-[5/7] relative rounded-lg overflow-hidden border border-gray-300 bg-gray-100 dark:border-gray-800 dark:bg-gray-900 shadow-lg">
+              <div className="w-56 sm:w-full aspect-[5/7] relative rounded-lg overflow-hidden border border-gray-300 bg-gray-100 dark:border-gray-800 dark:bg-gray-900 shadow-lg">
                 {imageSrc ? (
                   <Image
                     src={imageSrc}
@@ -480,7 +529,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
         </div>
 
         {/* Footer: Buy buttons (side by side) */}
-        <div className="flex-shrink-0 border-t border-gray-300 dark:border-gray-800 px-4 py-3 bg-white dark:bg-gray-950">
+        <div className="flex-shrink-0 border-t border-gray-300 dark:border-gray-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white dark:bg-gray-950 sm:pb-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-500 text-center mb-2">
             Buy here and support the project
           </p>

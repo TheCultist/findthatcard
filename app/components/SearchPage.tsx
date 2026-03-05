@@ -330,13 +330,13 @@ export default function SearchPage() {
 
             {/* Example Chips */}
             {exampleQueries.length > 0 && (
-              <div className="mt-4 flex flex-wrap justify-center gap-2 sm:mt-6">
+              <div className="mt-4 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide sm:mx-0 sm:mt-6 sm:flex-wrap sm:justify-center sm:px-0">
                 {exampleQueries.map((example, index) => (
                   <button
                     key={`${example}-${index}`}
                     onClick={() => handleChipClick(example)}
                     disabled={loading}
-                    className="rounded-full border border-gray-300 bg-gray-50/60 px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-blue-500/40 hover:bg-blue-50/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700/70 dark:bg-gray-900/60 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-gray-800/80 sm:py-1.5 sm:text-base"
+                    className="flex-shrink-0 rounded-full border border-gray-300 bg-gray-50/60 px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-blue-500/40 hover:bg-blue-50/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700/70 dark:bg-gray-900/60 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-gray-800/80 sm:py-1.5 sm:text-base"
                   >
                     {example}
                   </button>
@@ -694,7 +694,7 @@ export default function SearchPage() {
         )}
 
         {/* Footer */}
-        <footer className="mt-10 border-t border-gray-200 pt-6 pb-24 text-center text-xs text-gray-500 dark:border-gray-800 sm:mt-16 sm:pt-8 sm:text-sm">
+        <footer className="mt-10 border-t border-gray-200 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] text-center text-xs text-gray-500 dark:border-gray-800 sm:mt-16 sm:pt-8 sm:pb-24 sm:text-sm">
           <p>
             Unofficial fan content. Card data and images from{" "}
             <a
