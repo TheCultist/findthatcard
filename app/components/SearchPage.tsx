@@ -2,6 +2,7 @@
 
 import { useState, FormEvent, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ShieldCheckIcon, PaintBrushIcon, QueueListIcon } from "@heroicons/react/24/outline";
 import { SearchResponse, ErrorResponse, CardResult } from "@/types/scryfall";
@@ -549,20 +550,50 @@ export default function SearchPage() {
                         />
                       );
 
-                      // Insert ad banner after 20th card if we have 30+ results
+                      // Insert CavernHold ad banner after 20th card if we have 30+ results
                       if (cardCount >= 30 && index === 19) {
                         items.push(
-                          <div key="ad-20" className="col-span-full my-4 rounded-2xl border border-gray-200 bg-gray-50/40 p-4 dark:border-gray-800/70 dark:bg-gray-900/40">
-                            <AdBanner slot="1553106733" className="w-full" />
+                          <div key="ad-20" className="col-span-full my-4">
+                            <p className="mb-1 text-[10px] text-gray-400">Advertisement</p>
+                            <a
+                              href="https://cavernhold.pxf.io/yZ2rMG"
+                              target="_blank"
+                              rel="noopener noreferrer sponsored"
+                              className="block w-full"
+                            >
+                              <Image
+                                src="/brand/ch_ad_banner_horizontal.png"
+                                alt="CavernHold – Now that you found your cards, carry them in style."
+                                width={1200}
+                                height={200}
+                                className="w-full rounded-xl"
+                                priority={false}
+                              />
+                            </a>
                           </div>
                         );
                       }
 
-                      // Insert ad banner after 40th card if we have 50+ results
+                      // Insert CavernHold ad banner after 40th card if we have 50+ results
                       if (cardCount >= 50 && index === 39) {
                         items.push(
-                          <div key="ad-40" className="col-span-full my-4 rounded-2xl border border-gray-200 bg-gray-50/40 p-4 dark:border-gray-800/70 dark:bg-gray-900/40">
-                            <AdBanner slot="1553106733" className="w-full" />
+                          <div key="ad-40" className="col-span-full my-4">
+                            <p className="mb-1 text-[10px] text-gray-400">Advertisement</p>
+                            <a
+                              href="https://cavernhold.pxf.io/yZ2rMG"
+                              target="_blank"
+                              rel="noopener noreferrer sponsored"
+                              className="block w-full"
+                            >
+                              <Image
+                                src="/brand/ch_ad_banner_horizontal.png"
+                                alt="CavernHold – Now that you found your cards, carry them in style."
+                                width={1200}
+                                height={200}
+                                className="w-full rounded-xl"
+                                priority={false}
+                              />
+                            </a>
                           </div>
                         );
                       }
