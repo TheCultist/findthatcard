@@ -630,6 +630,15 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   //    e.g. "with forest art" → "forest", "sword and shield art" → ["sword", "shield"]
   capture(/\b([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})\s+(?:art|artwork|illustration|depict(?:ion|ing|s|ed)?)\b/gi);
   capture(/\b(?:depict(?:ing|s)?|illustrat(?:ed|ing|es)|pictured\s+with|featuring|shows|showing)\s+([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})\b/gi);
+  // The greedy {0,2} capture above can pull in a main card type that sits earlier in the
+  // phrase — e.g. "artifacts" from "esper artifacts with clockwork art". Remove any such
+  // spurious captures now, before the later patterns run. Those later patterns (protection
+  // from X, synergy subjects, etc.) will re-add card type names when they genuinely fill
+  // a semantic role, so the correct blocking still happens in those cases.
+  for (const type of TYPE_TOKENS) {
+    tokens.delete(type);
+    tokens.delete(`${type}s`);
+  }
 
   // 2. Oracle-text targets — "that destroy/exile/bounce/create/make/... a/an/each X"
   capture(/\bthat\s+(?:destroy|exile|bounce|target|counter|sacrifice|kill|remove|discard|copy|tap|untap|create|make|generate|produce|add)\s+(?:a\s+|an\s+|all\s+|each\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s+(?:card|permanent|spell|ability|token)\b|\s+or\b|\s+and\b|\s+from\b|\s+in\b|\s+you\b|$)/gi);

@@ -161,6 +161,23 @@ export function extractArtKeywords(naturalQuery: string): string[] {
     "shows",
     "showing",
     "pictured",
+    // MTG card types — these describe the kind of card, not what's depicted in the art.
+    // Without this exclusion, "esper artifacts with clockwork art" would extract "artifact"
+    // as an art keyword and cause the LLM to emit art:artifact instead of t:artifact.
+    "artifact",
+    "artifacts",
+    "enchantment",
+    "enchantments",
+    "instant",
+    "instants",
+    "sorcery",
+    "sorceries",
+    "planeswalker",
+    "planeswalkers",
+    "land",
+    "lands",
+    "battle",
+    "battles",
   ]);
 
   const text = naturalQuery.toLowerCase();
