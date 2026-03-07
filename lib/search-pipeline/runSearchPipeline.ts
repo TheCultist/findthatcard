@@ -5,7 +5,6 @@ import { resolveUnresolvedFragments } from "@/lib/search-pipeline/phase2/resolve
 import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
 import { resolveArtLikeCardsQuery, resolveSimilarCardsQuery } from "@/lib/search-pipeline/similar-cards";
 import { resolveSynergyQuery } from "@/lib/search-pipeline/synergy-cards";
-import { PREFER_BEST_PREFIX } from "@/lib/scryfall/query-converter";
 
 function isPipelineDebugEnabled(): boolean {
   const v = process.env.LOG_SEARCH_PIPELINE_DEBUG?.toLowerCase();
@@ -37,6 +36,23 @@ function logPipelineSummary(args: {
   console.log(lines.join("\n"));
 }
 
+function dropContradictoryNameClauses(phase1: Awaited<ReturnType<typeof parseNaturalQuery>>, query: string): void {
+  const excluded = new Set<string>();
+  let match: RegExpExecArray | null;
+  const excludedNamePattern = /-name:"([^"]+)"/gi;
+  while ((match = excludedNamePattern.exec(query)) !== null) {
+    const name = (match[1] || "").trim().toLowerCase();
+    if (name) excluded.add(name);
+  }
+  if (excluded.size === 0) return;
+
+  phase1.mustClauses = phase1.mustClauses.filter((clause) => {
+    const m = /^\s*name:"([^"]+)"\s*$/i.exec(clause.value);
+    if (!m) return true;
+    return !excluded.has((m[1] || "").trim().toLowerCase());
+  });
+}
+
 export type SearchPipelineResult = {
   queryForScryfall: string;
   queryForLogs: string;
@@ -50,12 +66,6 @@ export type SearchPipelineResult = {
   };
 };
 
-function applyDefaultGameFilter(query: string): string {
-  if (/\b(game|in):(paper|arena|mtgo)\b/i.test(query)) return query;
-  if (/\b-?is:(digital|alchemy|rebalanced)\b/i.test(query)) return query;
-  return `${query} game:paper`;
-}
-
 export async function runSearchPipeline(naturalQuery: string): Promise<SearchPipelineResult> {
   const phase0 = await normalizeQuery(naturalQuery);
   const phase1 = await parseNaturalQuery(phase0.normalized);
@@ -63,148 +73,38 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
   // Propagate Phase 0 status into the IR so downstream logging can see it.
   phase1.debug.phase0Normalized = phase0.didNormalize;
 
-  // "cards similar to X" / "cards like X" — bypass the normal pipeline and
-  // build a query directly from Scryfall card data + AI oracle-tag inference.
+  // Resolve bypass intents: inject their output as a must-clause wrapped in
+  // parens so any extra user constraints (e.g. -t:instant) apply globally.
+  // The flow then continues to Phase 2/3 for fragment resolution + finalization.
   if (phase1.intent === "similar-cards" && phase1.similarToCardName) {
     const similarQuery = await resolveSimilarCardsQuery(phase1.similarToCardName);
-
     if (similarQuery) {
-      const queryForScryfall = `${PREFER_BEST_PREFIX}${applyDefaultGameFilter(similarQuery)}`;
-      logPipelineSummary({
-        original: naturalQuery,
-        afterPhase0: phase0.normalized,
-        afterPhase3: queryForScryfall,
-      });
-      return {
-        queryForScryfall,
-        queryForLogs: similarQuery,
-        normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
-        debug: {
-          unresolvedFragments: 0,
-          aiBatchCalls: 0,
-          aiSequentialCalls: 0,
-          invalidTagsRemoved: 0,
-          phase0Normalized: phase0.didNormalize,
-        },
-      };
+      dropContradictoryNameClauses(phase1, similarQuery);
+      phase1.mustClauses.unshift({ value: `(${similarQuery})`, source: "phase1:direct" });
+    } else {
+      phase1.mustClauses.unshift({ value: `name:"${phase1.similarToCardName}"`, source: "phase1:cardname" });
     }
-
-    // Resolution failed (card not in Scryfall or no usable signals) — fall
-    // back to a direct name search so the user at least sees the card itself.
-    const fallbackQuery = `name:"${phase1.similarToCardName}"`;
-    const fallbackForScryfall = `${PREFER_BEST_PREFIX}${fallbackQuery}`;
-    logPipelineSummary({
-      original: naturalQuery,
-      afterPhase0: phase0.normalized,
-      afterPhase3: fallbackForScryfall,
-    });
-    return {
-      queryForScryfall: fallbackForScryfall,
-      queryForLogs: fallbackQuery,
-      normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
-      debug: {
-        unresolvedFragments: 0,
-        aiBatchCalls: 0,
-        aiSequentialCalls: 0,
-        invalidTagsRemoved: 0,
-        phase0Normalized: phase0.didNormalize,
-      },
-    };
   }
 
-  // "art like X" — bypass the normal pipeline and build a query from the
-  // named card's illustration tags (art:) from the Scryfall Tagger.
   if (phase1.intent === "art-like-cards" && phase1.artLikeCardName) {
     const artQuery = await resolveArtLikeCardsQuery(phase1.artLikeCardName);
-
     if (artQuery) {
-      const queryForScryfall = `${PREFER_BEST_PREFIX}${applyDefaultGameFilter(artQuery)}`;
-      logPipelineSummary({
-        original: naturalQuery,
-        afterPhase0: phase0.normalized,
-        afterPhase3: queryForScryfall,
-      });
-      return {
-        queryForScryfall,
-        queryForLogs: artQuery,
-        normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
-        debug: {
-          unresolvedFragments: 0,
-          aiBatchCalls: 0,
-          aiSequentialCalls: 0,
-          invalidTagsRemoved: 0,
-          phase0Normalized: phase0.didNormalize,
-        },
-      };
+      dropContradictoryNameClauses(phase1, artQuery);
+      phase1.mustClauses.unshift({ value: `(${artQuery})`, source: "phase1:direct" });
+    } else {
+      phase1.mustClauses.unshift({ value: `name:"${phase1.artLikeCardName}"`, source: "phase1:cardname" });
     }
-
-    // Fallback: no art tags found — return a plain name search.
-    const fallbackQuery = `name:"${phase1.artLikeCardName}"`;
-    const fallbackForScryfall = `${PREFER_BEST_PREFIX}${fallbackQuery}`;
-    logPipelineSummary({
-      original: naturalQuery,
-      afterPhase0: phase0.normalized,
-      afterPhase3: fallbackForScryfall,
-    });
-    return {
-      queryForScryfall: fallbackForScryfall,
-      queryForLogs: fallbackQuery,
-      normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
-      debug: {
-        unresolvedFragments: 0,
-        aiBatchCalls: 0,
-        aiSequentialCalls: 0,
-        invalidTagsRemoved: 0,
-        phase0Normalized: phase0.didNormalize,
-      },
-    };
   }
 
-  // "cards that synergize with X" — bypass the normal pipeline; fetch the
-  // named card's oracle text and ask an LLM what Scryfall filters find synergists.
   if (phase1.intent === "synergy-with-card" && phase1.synergyWithCardName) {
     const synergyResult = await resolveSynergyQuery(phase1.synergyWithCardName);
-
     if (synergyResult) {
-      const queryForScryfall = `${PREFER_BEST_PREFIX}${applyDefaultGameFilter(synergyResult.query)}`;
-      logPipelineSummary({
-        original: naturalQuery,
-        afterPhase0: phase0.normalized,
-        afterPhase3: queryForScryfall,
-      });
-      return {
-        queryForScryfall,
-        queryForLogs: synergyResult.query,
-        normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
-        debug: {
-          unresolvedFragments: 0,
-          aiBatchCalls: 1,
-          aiSequentialCalls: 0,
-          invalidTagsRemoved: 0,
-          phase0Normalized: phase0.didNormalize,
-        },
-      };
+      dropContradictoryNameClauses(phase1, synergyResult.query);
+      phase1.mustClauses.unshift({ value: `(${synergyResult.query})`, source: "phase1:direct" });
+      phase1.debug.aiBatchCalls += 1;
+    } else {
+      phase1.mustClauses.unshift({ value: `name:"${phase1.synergyWithCardName}"`, source: "phase1:cardname" });
     }
-
-    const fallbackQuery = `name:"${phase1.synergyWithCardName}"`;
-    const fallbackForScryfall = `${PREFER_BEST_PREFIX}${fallbackQuery}`;
-    logPipelineSummary({
-      original: naturalQuery,
-      afterPhase0: phase0.normalized,
-      afterPhase3: fallbackForScryfall,
-    });
-    return {
-      queryForScryfall: fallbackForScryfall,
-      queryForLogs: fallbackQuery,
-      normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
-      debug: {
-        unresolvedFragments: 0,
-        aiBatchCalls: 0,
-        aiSequentialCalls: 0,
-        invalidTagsRemoved: 0,
-        phase0Normalized: phase0.didNormalize,
-      },
-    };
   }
 
   const phase2 = await resolveUnresolvedFragments(phase1);
@@ -224,7 +124,7 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
     normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
     debug: {
       unresolvedFragments: phase2.ir.unresolvedFragments.length,
-      aiBatchCalls: phase2.batchCalls,
+      aiBatchCalls: phase1.debug.aiBatchCalls + phase2.batchCalls,
       aiSequentialCalls: phase2.sequentialCalls,
       invalidTagsRemoved: phase3.removedInvalidTags.length,
       phase0Normalized: phase0.didNormalize,

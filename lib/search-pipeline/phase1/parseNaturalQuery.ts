@@ -14,7 +14,7 @@ import { isScryfallQuery } from "@/lib/scryfall/query-converter";
 import { resolveSetFilters } from "@/lib/scryfall/sets";
 import { resolveStrategyName, STRATEGY_ORACLETAGS } from "@/lib/strategies/oracletagStrategies";
 import { ensureTaggerTagCache, getTaggerTagCache } from "@/lib/tagger/cache";
-import { ClauseSource, Phase1Result, QueryClause, ResolverCategory, UnresolvedFragment } from "@/lib/search-pipeline/types";
+import { ClauseSource, Phase1Result, QueryClause, QueryIntent, ResolverCategory, UnresolvedFragment } from "@/lib/search-pipeline/types";
 
 const FORMAT_TOKENS = [
   "standard",
@@ -1008,6 +1008,62 @@ function applyOracleIntentHeuristics(
     /\b(etb|enters?\s+(?:the\s+)?(?:battlefield|field)|when\s+[^.]{0,40}\s+enters?)\b/i.test(
       naturalQuery
     );
+
+  // --- Life-drain / "steal life" ---
+  // e.g. "steal life points", "drain life from opponents", "opponents lose life and you gain life"
+  // Prefer function tags here so Phase 2 doesn't fall back to brittle oracle snippets.
+  const hasLifeStealIntent =
+    /\b(?:steal(?:ing)?|drain(?:ing)?|siphon(?:ing)?|leech(?:ing)?)\s+life(?:\s+points?)?\b|\blife[-\s]?drain\b|\bopponents?\s+lose(?:s)?\s+life\b|\blose(?:s)?\s+life\s+and\s+(?:you|i)\s+gain\s+life\b/i.test(
+      naturalQuery
+    );
+  if (hasLifeStealIntent) {
+    mustClauses.push({
+      value: "(function:life-drain or function:drain-life or function:opponent-loses-life)",
+      source: "phase1:function",
+    });
+    strippedTerms.push(
+      "steal life",
+      "steal life points",
+      "drain life",
+      "life drain",
+      "siphon life",
+      "leech life",
+      "lose life",
+      "loses life",
+      "gain life"
+    );
+    return;
+  }
+
+  // --- Empty hand + damage ---
+  // e.g. "no cards in hand damage", "damage when opponent has no cards in hand"
+  // No dedicated function tags currently cover this condition robustly, so use
+  // oracle text anchors to preserve the intent deterministically.
+  const hasNoCardsInHandIntent =
+    /\b(?:no|without|zero)\s+cards?\s+in\s+hand\b|\bhellbent\b|\bempty[-\s]?hand(?:ed)?\b/i.test(
+      naturalQuery
+    );
+  const hasDamageWordIntent =
+    /\bdamage\b|\bburn\b|\bdeal[st]?\s+.*?\bdamage\b|\bdeals?\b/i.test(naturalQuery);
+
+  if (hasNoCardsInHandIntent && hasDamageWordIntent) {
+    if (!mustClauses.some((c) => c.value === 'o:"no cards in hand"')) {
+      mustClauses.push({ value: 'o:"no cards in hand"', source: "phase1:oracle" });
+    }
+    if (!mustClauses.some((c) => c.value === 'o:"deals"')) {
+      mustClauses.push({ value: 'o:"deals"', source: "phase1:oracle" });
+    }
+    strippedTerms.push(
+      "no cards in hand",
+      "without cards in hand",
+      "empty hand",
+      "hellbent",
+      "damage",
+      "deal",
+      "deals"
+    );
+    return;
+  }
 
   // --- "When a/an/another X enters" — trigger off OTHER permanents entering ---
   // Detect explicit non-self trigger subjects ("when an artifact enters",
@@ -2055,6 +2111,20 @@ function detectCardNameList(
  *
  * Returns the canonical card name when a match is found, or null otherwise.
  */
+type BypassDetectResult = { cardName: string; strippedWords: string[] } | null;
+
+function buildBypassStrippedWords(
+  fullMatch: string,
+  captureGroup: string,
+  consumedInputWords: string[],
+  canonical: string
+): string[] {
+  const triggerText = fullMatch.slice(0, fullMatch.length - captureGroup.length);
+  const triggerWords = triggerText.toLowerCase().replace(/[^a-z]/g, " ").split(/\s+/).filter((w) => w.length > 1);
+  const canonicalWords = canonical.toLowerCase().replace(/[^a-z0-9'\s-]/g, " ").split(/\s+/).filter(Boolean);
+  return [...new Set([...triggerWords, ...consumedInputWords, ...canonicalWords])];
+}
+
 /**
  * Detects "art like X" / "cards with art like X" queries where the user wants
  * cards whose illustration shares the same visual art tags as a named card.
@@ -2062,20 +2132,14 @@ function detectCardNameList(
  * Must run BEFORE detectSimilarToCardQuery so that "art like Bad River" is
  * captured here rather than being treated as functional similarity.
  */
-function detectArtLikeCardQuery(naturalQuery: string): { cardName: string } | null {
+function detectArtLikeCardQuery(naturalQuery: string): BypassDetectResult {
   if (!hasCardNameIndex()) return null;
 
-  // Patterns that introduce a card-name reference in an "art like" context.
   const ART_LIKE_PATTERNS: RegExp[] = [
-    // "art like X", "art similar to X"
     /\bart\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
-    // "cards with art like X", "cards with artwork like X"
     /\bcards?\s+with\s+(?:art(?:work)?)\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
-    // "cards depicting X like Y" won't apply here — but "artwork like X" will
     /\bartwork\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
-    // "looks like X" (visual appearance)
     /\blooks?\s+like\s+([\s\S]+)/i,
-    // "illustration like X"
     /\billustration\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
   ];
 
@@ -2097,16 +2161,14 @@ function detectArtLikeCardQuery(naturalQuery: string): { cardName: string } | nu
       .split(/\s+/)
       .filter(Boolean);
 
-    // Pass 1 — greedy longest exact/simplified catalog match
     for (let len = Math.min(words.length, 8); len >= 1; len--) {
       const candidate = words.slice(0, len).join(" ");
       const canonical = lookupCardName(candidate);
       if (canonical) {
-        return { cardName: canonical };
+        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], words.slice(0, len), canonical) };
       }
     }
 
-    // Pass 2 — prefix lookup up to the first context stop-word
     const nameWords: string[] = [];
     for (const w of words) {
       if (CONTEXT_STOPS.has(w)) break;
@@ -2117,7 +2179,7 @@ function detectArtLikeCardQuery(naturalQuery: string): { cardName: string } | nu
       const prefixCandidate = nameWords.join(" ");
       const canonical = lookupCardNameByPrefix(prefixCandidate);
       if (canonical) {
-        return { cardName: canonical };
+        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], nameWords, canonical) };
       }
     }
   }
@@ -2125,25 +2187,16 @@ function detectArtLikeCardQuery(naturalQuery: string): { cardName: string } | nu
   return null;
 }
 
-function detectSimilarToCardQuery(naturalQuery: string): { cardName: string } | null {
+function detectSimilarToCardQuery(naturalQuery: string): BypassDetectResult {
   if (!hasCardNameIndex()) return null;
 
-  // Patterns that introduce a card-name reference in a "similar to" context.
-  // Each captures everything after the marker; we then find the longest
-  // catalog-matching prefix within that text.
   const SIMILAR_PATTERNS: RegExp[] = [
-    // "cards similar to X", "spells similar to X", etc.
     /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?)\s+similar\s+to\s+([\s\S]+)/i,
-    // "similar to X", "similar cards to X"
     /\bsimilar\s+(?:cards?\s+)?to\s+([\s\S]+)/i,
-    // "cards like X", "something like X", "anything like X", "spells like X"
     /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?|something|anything)\s+like\s+([\s\S]+)/i,
-    // "alternatives to X", "alternatives for X"
     /\balternatives?\s+(?:to|for)\s+([\s\S]+)/i,
   ];
 
-  // Context words that end a card-name reference when encountered in the
-  // captured text (e.g. "in modern", "for commander").
   const CONTEXT_STOPS = new Set([
     "in", "for", "from", "on", "at", "is", "are", "was", "were", "but",
     "which", "that", "where", "when", "if", "to",
@@ -2162,18 +2215,14 @@ function detectSimilarToCardQuery(naturalQuery: string): { cardName: string } | 
       .split(/\s+/)
       .filter(Boolean);
 
-    // Pass 1 — greedy longest exact/simplified catalog match (handles full names)
     for (let len = Math.min(words.length, 8); len >= 1; len--) {
       const candidate = words.slice(0, len).join(" ");
       const canonical = lookupCardName(candidate);
       if (canonical) {
-        return { cardName: canonical };
+        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], words.slice(0, len), canonical) };
       }
     }
 
-    // Pass 2 — prefix lookup: "Animar" alone won't exact-match "Animar, Soul
-    // of Elements", but the prefix search finds it.  Build the longest prefix
-    // up to the first context stop-word, then try prefix lookup.
     const nameWords: string[] = [];
     for (const w of words) {
       if (CONTEXT_STOPS.has(w)) break;
@@ -2184,7 +2233,7 @@ function detectSimilarToCardQuery(naturalQuery: string): { cardName: string } | 
       const prefixCandidate = nameWords.join(" ");
       const canonical = lookupCardNameByPrefix(prefixCandidate);
       if (canonical) {
-        return { cardName: canonical };
+        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], nameWords, canonical) };
       }
     }
   }
@@ -2200,29 +2249,19 @@ function detectSimilarToCardQuery(naturalQuery: string): { cardName: string } | 
  * Must run AFTER the art-like and similar-to detectors so that phrases like
  * "cards like X" are handled by the more specific detector first.
  */
-function detectSynergyWithCardQuery(naturalQuery: string): { cardName: string } | null {
+function detectSynergyWithCardQuery(naturalQuery: string): BypassDetectResult {
   if (!hasCardNameIndex()) return null;
 
   const SYNERGY_PATTERNS: RegExp[] = [
-    // "cards that synergize with X", "synergize with X", "synergizes with X"
     /\bsynerg(?:ize|izes|izing|y|ies)\s+with\s+([\s\S]+)/i,
-    // "cards that go well with X", "goes well with X"
     /\bgo(?:es)?\s+well\s+with\s+([\s\S]+)/i,
-    // "cards that pair well with X", "pairs well with X"
     /\bpairs?\s+(?:well\s+)?with\s+([\s\S]+)/i,
-    // "cards that work well with X", "works well with X"
     /\bworks?\s+(?:well\s+)?with\s+([\s\S]+)/i,
-    // "combo pieces for X", "combos with X"
     /\bcombo\s+(?:pieces?\s+(?:for|with)|with)\s+([\s\S]+)/i,
-    // "what combos with X"
     /\bcombos?\s+with\s+([\s\S]+)/i,
-    // "cards that support X" (where X is a card name, not a concept)
     /\b(?:cards?\s+(?:that\s+)?)?support\s+(?:for\s+)?([\s\S]+)/i,
-    // "build around X"
     /\bbuild\s+around\s+([\s\S]+)/i,
-    // "cards for X deck" / "cards for a X deck"
     /\bcards?\s+for\s+(?:an?\s+)?([\s\S]+?)\s+deck\b/i,
-    // "good with X", "good in X" (card name)
     /\bgood\s+(?:with|in)\s+([\s\S]+)/i,
   ];
 
@@ -2244,16 +2283,14 @@ function detectSynergyWithCardQuery(naturalQuery: string): { cardName: string } 
       .split(/\s+/)
       .filter(Boolean);
 
-    // Pass 1 — greedy longest exact catalog match
     for (let len = Math.min(words.length, 8); len >= 1; len--) {
       const candidate = words.slice(0, len).join(" ");
       const canonical = lookupCardName(candidate);
       if (canonical) {
-        return { cardName: canonical };
+        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], words.slice(0, len), canonical) };
       }
     }
 
-    // Pass 2 — prefix lookup up to first context stop-word
     const nameWords: string[] = [];
     for (const w of words) {
       if (CONTEXT_STOPS.has(w)) break;
@@ -2264,7 +2301,7 @@ function detectSynergyWithCardQuery(naturalQuery: string): { cardName: string } 
       const prefixCandidate = nameWords.join(" ");
       const canonical = lookupCardNameByPrefix(prefixCandidate);
       if (canonical) {
-        return { cardName: canonical };
+        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], nameWords, canonical) };
       }
     }
   }
@@ -2306,80 +2343,41 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   // parsing step that depends on them.
   await ensureCatalogIndex();
 
-  // Early exit: "art like X" / "cards with art like X" — find cards with the
-  // same visual art tags as the named card.  Must run before the similar-cards
-  // check so that "art like Bad River" isn't misrouted as functional similarity.
+  // Detect bypass intents (art-like, similar, synergy) but do NOT early-exit.
+  // Mark the intent and strip the trigger phrase + card name so the rest of the
+  // query (e.g. "that are not instants", "in commander") continues to be parsed.
+  let bypassIntent: QueryIntent | null = null;
+  let artLikeCardName: string | undefined;
+  let similarToCardName: string | undefined;
+  let synergyWithCardName: string | undefined;
+  const bypassStrippedWords: string[] = [];
+
   const artLikeResult = detectArtLikeCardQuery(naturalQuery);
   if (artLikeResult) {
-    return {
-      naturalQuery,
-      intent: "art-like-cards",
-      artLikeCardName: artLikeResult.cardName,
-      tokenizedQuery,
-      noiseTokens: [],
-      mustClauses: [],
-      shouldClauses: [],
-      mustNotClauses: [],
-      unresolvedFragments: [],
-      resolvedFragments: [],
-      debug: {
-        strippedTerms: [],
-        aiBatchCalls: 0,
-        aiSequentialCalls: 0,
-        invalidTagsRemoved: 0,
-        phase0Normalized: false,
-      },
-    };
+    bypassIntent = "art-like-cards";
+    artLikeCardName = artLikeResult.cardName;
+    bypassStrippedWords.push(...artLikeResult.strippedWords);
   }
 
-  // Early exit: "cards similar to X" / "cards like X" / "alternatives to X"
-  const similarToResult = detectSimilarToCardQuery(naturalQuery);
-  if (similarToResult) {
-    return {
-      naturalQuery,
-      intent: "similar-cards",
-      similarToCardName: similarToResult.cardName,
-      tokenizedQuery,
-      noiseTokens: [],
-      mustClauses: [],
-      shouldClauses: [],
-      mustNotClauses: [],
-      unresolvedFragments: [],
-      resolvedFragments: [],
-      debug: {
-        strippedTerms: [],
-        aiBatchCalls: 0,
-        aiSequentialCalls: 0,
-        invalidTagsRemoved: 0,
-        phase0Normalized: false,
-      },
-    };
+  if (!bypassIntent) {
+    const similarToResult = detectSimilarToCardQuery(naturalQuery);
+    if (similarToResult) {
+      bypassIntent = "similar-cards";
+      similarToCardName = similarToResult.cardName;
+      bypassStrippedWords.push(...similarToResult.strippedWords);
+    }
   }
 
-  // Early exit: "cards that synergize with X" / "pairs well with X" / etc.
-  // Must run after similar-to so "cards like X" is handled there, not here.
-  const synergyWithResult = detectSynergyWithCardQuery(naturalQuery);
-  if (synergyWithResult) {
-    return {
-      naturalQuery,
-      intent: "synergy-with-card",
-      synergyWithCardName: synergyWithResult.cardName,
-      tokenizedQuery,
-      noiseTokens: [],
-      mustClauses: [],
-      shouldClauses: [],
-      mustNotClauses: [],
-      unresolvedFragments: [],
-      resolvedFragments: [],
-      debug: {
-        strippedTerms: [],
-        aiBatchCalls: 0,
-        aiSequentialCalls: 0,
-        invalidTagsRemoved: 0,
-        phase0Normalized: false,
-      },
-    };
+  if (!bypassIntent) {
+    const synergyWithResult = detectSynergyWithCardQuery(naturalQuery);
+    if (synergyWithResult) {
+      bypassIntent = "synergy-with-card";
+      synergyWithCardName = synergyWithResult.cardName;
+      bypassStrippedWords.push(...synergyWithResult.strippedWords);
+    }
   }
+
+  for (const w of bypassStrippedWords) strippedTerms.push(w);
 
   // Early exit: comma-separated card name list ("Bolt, Counterspell, Growth")
   const cardNameList = detectCardNameList(naturalQuery);
@@ -2419,8 +2417,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   // Extract all semantic-role tokens BEFORE any type/subtype matching so they are
   // consistently excluded from both TYPE_TOKENS and catalog catalog loops.
   const semanticRoleTokens = extractSemanticRoleTokens(naturalQuery);
-  // Trigger subjects ("when a zombie enters") must block type matching but must NOT
-  // be stripped from unresolved fragment text — the AI needs those words for context.
+  for (const w of bypassStrippedWords) semanticRoleTokens.add(w);
   const triggerSubjectTokens = extractTriggerSubjectTokens(naturalQuery);
 
   // Pre-pass: detect multi-word card names before structural parsing so that
@@ -2660,7 +2657,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     mustClauses.push({ value: "f:commander", source: "phase1:commander" });
     strippedTerms.push("commander");
     if (commanderColor) {
-      mustClauses.push({ value: `id:<=${commanderColor}`, source: "phase1:color" });
+      mustClauses.push({ value: `id<=${commanderColor}`, source: "phase1:color" });
     }
   } else {
     const wantsCommanderCreature =
@@ -3152,7 +3149,10 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
 
   return {
     naturalQuery,
-    intent: commanderDeck ? "commander-deck" : "search",
+    intent: bypassIntent ?? (commanderDeck ? "commander-deck" : "search"),
+    similarToCardName,
+    artLikeCardName,
+    synergyWithCardName,
     tokenizedQuery,
     noiseTokens,
     mustClauses: dedupeClauses(mustClauses),

@@ -173,7 +173,7 @@ export function hasCommanderDeckContext(naturalQuery: string): boolean {
 }
 
 /**
- * Injects id:<=X and f:commander when "my commander is [colors]" is detected.
+ * Injects id<=X and f:commander when "my commander is [colors]" is detected.
  */
 export function applyCommanderContextFromNaturalQuery(
   naturalQuery: string,
@@ -195,10 +195,11 @@ export function applyCommanderContextFromNaturalQuery(
 
   const colorId = resolveCommanderColorIdentity(naturalQuery);
   if (colorId) {
-    // Replace id= or id: with id:<= for deck building (cards legal in this deck)
-    const idPattern = /\bid(?:entity)?[:=]<?=?\s*[wubrgc]+\b/gi;
+    // Replace any existing identity clause with id<= for deck building
+    // (supports id:, id=, id<=, id:<=, and comparator variants).
+    const idPattern = /\bid(?:entity)?(?::<=|:>=|[:=]|<=|>=|<|>)\s*[wubrgc]+\b/gi;
     result = result.replace(idPattern, "");
-    result = `${result.trim()} id:<=${colorId}`.trim();
+    result = `${result.trim()} id<=${colorId}`.trim();
   }
 
   // Remove Commander precon/set filters—user wants deck cards, not from a specific product

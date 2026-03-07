@@ -67,6 +67,14 @@ async function testPipelineDirectEndToEnd() {
   console.log("[PASS] pipeline: direct query skips AI calls end-to-end");
 }
 
+async function testPipelineSimilarCardsDoesNotContradictNameExclusion() {
+  const result = await runSearchPipeline("cards similar to bad deal");
+  const query = result.queryForLogs.toLowerCase();
+  assert.ok(query.includes('-name:"bad deal"'), `expected exclusion for seed card; got: ${result.queryForLogs}`);
+  assert.ok(!query.includes(' name:"bad deal"'), `should not include positive name filter for excluded seed card; got: ${result.queryForLogs}`);
+  console.log("[PASS] pipeline: similar-cards avoids name/-name contradiction");
+}
+
 async function testPhase1CommanderFormatColorExtraction() {
   const parsed = await parseNaturalQuery(
     "rakdos cards that make treasure tokens for commander"
@@ -101,6 +109,42 @@ async function testPhase1EtbDrawUsesOracleFilters() {
   );
   assert.equal(parsed.unresolvedFragments.length, 0);
   console.log("[PASS] phase1: resolves ETB draw intent to oracle filters");
+}
+
+async function testPhase1NoCardsInHandDamageUsesOracleAnchors() {
+  const parsed = await parseNaturalQuery("no cards in hand damage");
+  const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
+  assert.ok(
+    mustValues.includes('o:"no cards in hand"'),
+    `expected o:"no cards in hand"; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.includes('o:"deals"'),
+    `expected o:"deals"; got: ${mustValues.join(", ")}`
+  );
+  assert.equal(parsed.unresolvedFragments.length, 0);
+  console.log("[PASS] phase1: no-cards-in-hand damage maps to oracle anchors");
+}
+
+async function testPhase1LifeStealUsesFunctionTags() {
+  const parsed = await parseNaturalQuery(
+    "black and white cards that steal life points legal in commander with cost less than five mana"
+  );
+  const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
+  assert.ok(
+    mustValues.some(
+      (v) =>
+        /\bfunction:life-drain\b/.test(v) &&
+        /\bfunction:drain-life\b/.test(v) &&
+        /\bfunction:opponent-loses-life\b/.test(v)
+    ),
+    `expected life-drain function OR chain; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    parsed.unresolvedFragments.every((f) => !/\bsteal\s+life|life\s+points?\b/i.test(f.text)),
+    `life-steal phrasing should be resolved before phase2; unresolved: ${parsed.unresolvedFragments.map((f) => f.text).join(" | ")}`
+  );
+  console.log("[PASS] phase1: life-steal phrasing maps to life-drain function tags");
 }
 
 async function testPhase1PluralTypeIsStrippedFromArtFragments() {
@@ -140,15 +184,15 @@ async function testPhase1FuzzyColorIdentityTypo() {
 }
 
 async function testPhase1MonocolorUsesExactIdentity() {
-  // Commander context → id:<= (deck identity)
+  // Commander context → id<= (deck identity)
   const parsed = await parseNaturalQuery("green creatures for commander");
   const mustValues = parsed.mustClauses.map((entry) => entry.value);
-  assert.ok(mustValues.includes("id:g") || mustValues.includes("id=g") || mustValues.includes("id:<=g"), `mono + commander should use id:g/id=g/id:<=g, got ${mustValues.join(",")}`);
+  assert.ok(mustValues.includes("id:g") || mustValues.includes("id=g") || mustValues.includes("id<=g"), `mono + commander should use id:g/id=g/id<=g, got ${mustValues.join(",")}`);
 
-  // Multi-color + commander → id:<= (deck identity)
+  // Multi-color + commander → id<= (deck identity)
   const parsedB = await parseNaturalQuery("azorius creatures for commander");
   const mustValuesB = parsedB.mustClauses.map((entry) => entry.value);
-  assert.ok(mustValuesB.includes("id:wu") || mustValuesB.includes("id=wu") || mustValuesB.includes("id:<=wu"), `multi + commander should use id:wu/id=wu/id:<=wu, got ${mustValuesB.join(",")}`);
+  assert.ok(mustValuesB.includes("id:wu") || mustValuesB.includes("id=wu") || mustValuesB.includes("id<=wu"), `multi + commander should use id:wu/id=wu/id<=wu, got ${mustValuesB.join(",")}`);
 
   // No commander context → c: (card color)
   const parsedC = await parseNaturalQuery("azorius creatures");
@@ -171,7 +215,7 @@ async function testPhase1MonocolorUsesExactIdentity() {
   assert.ok(mustValuesF.includes("id:wubr") || mustValuesF.includes("id=wubr"), `should include id:wubr or id=wubr; got: ${mustValuesF.join(", ")}`);
   assert.ok(mustValuesF.includes("c=u"), `should include c=u for mono-blue card color; got: ${mustValuesF.join(", ")}`);
 
-  console.log("[PASS] phase1: color filter uses c: by default, id:<= for commander/identity contexts");
+  console.log("[PASS] phase1: color filter uses c: by default, id<= for commander/identity contexts");
 }
 
 async function testPhase1FuzzyKeywordTypo() {
@@ -197,7 +241,7 @@ async function testPhase1SynergyIntentUsesFunctionTagsForMentionedSubject() {
   const parsed = await parseNaturalQuery("esper artifact synergies for commander");
   const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
   assert.ok(mustValues.includes("f:commander"));
-  assert.ok(mustValues.includes("id:wub") || mustValues.includes("id:<=wub"));
+  assert.ok(mustValues.includes("id:wub") || mustValues.includes("id<=wub"));
   assert.ok(!mustValues.includes("t:artifact"));
   assert.ok(
     mustValues.some(
@@ -909,8 +953,11 @@ async function run() {
   testAssemblerAndsArtConceptsPerFragment();
   await testPhase3DirectQueryAddsPreferBest();
   await testPipelineDirectEndToEnd();
+  await testPipelineSimilarCardsDoesNotContradictNameExclusion();
   await testPhase1CommanderFormatColorExtraction();
   await testPhase1EtbDrawUsesOracleFilters();
+  await testPhase1NoCardsInHandDamageUsesOracleAnchors();
+  await testPhase1LifeStealUsesFunctionTags();
   await testPhase1PluralTypeIsStrippedFromArtFragments();
   await testPhase1SorceryPluralKeepsTypeAndStripsFromArtFragment();
   await testPhase1FuzzyColorIdentityTypo();
@@ -964,6 +1011,8 @@ async function run() {
   await testPhase1SynergyWithCardDetectsIntent();
   await testPhase1SynergyWithCardVariants();
   await testPhase1SynergyWithCardDoesNotFalsePositive();
+  await testPhase1SynergyWithCardPreservesExtraConstraints();
+  await testPhase1SimilarToCardPreservesExtraConstraints();
   console.log("search-pipeline tests passed");
 }
 
@@ -1018,6 +1067,30 @@ async function testPhase1SynergyWithCardDoesNotFalsePositive() {
     `"artifact synergies" should NOT match synergy-with-card intent (got: ${parsed.intent})`
   );
   console.log("[PASS] phase1: 'artifact synergies' does not false-positive as synergy-with-card");
+}
+
+async function testPhase1SynergyWithCardPreservesExtraConstraints() {
+  const parsed = await parseNaturalQuery("cards that synergize with lightning bolt that are not instants");
+  assert.equal(parsed.intent, "synergy-with-card", `expected synergy-with-card, got: ${parsed.intent}`);
+  assert.ok(parsed.synergyWithCardName, "expected synergyWithCardName to be set");
+  const mustNotValues = parsed.mustNotClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustNotValues.some((v) => v.includes("t:instant")),
+    `expected -t:instant in mustNotClauses; got: ${mustNotValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: synergy-with-card preserves extra type negation (-t:instant)");
+}
+
+async function testPhase1SimilarToCardPreservesExtraConstraints() {
+  const parsed = await parseNaturalQuery("cards similar to lightning bolt in modern");
+  assert.equal(parsed.intent, "similar-cards", `expected similar-cards, got: ${parsed.intent}`);
+  assert.ok(parsed.similarToCardName, "expected similarToCardName to be set");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.some((v) => v.includes("f:modern")),
+    `expected f:modern in mustClauses; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: similar-cards preserves extra format constraint (f:modern)");
 }
 
 run().catch((error) => {

@@ -99,7 +99,7 @@ function buildSynergyPrompt(
     "- Avoid umbrella tags (function:mana-producer, function:removal, function:draw-card, function:token-maker, function:pump) — prefer narrower variants.",
     "- Prefer function: tags over o: oracle text.",
     "- Only use o:\"...\" for specific multi-word phrases. Never use single-word o: fragments (o:attacks, o:dies, o:draws) — they match thousands of cards.",
-    "- Do NOT include the card itself in the results.",
+    "- Do NOT add -o: or -name: exclusions to remove the original card — the system handles that automatically.",
     `- Scope to the card's color identity where appropriate: ${idFilter || "(colorless — no identity filter needed)"}`,
     "- Keep the query under 400 characters.",
     "- Do NOT add format filters (f:commander, f:modern, etc.) — the user may add those separately.",
@@ -139,6 +139,8 @@ function sanitizeScryfallQuery(raw: string, cardName: string): string | null {
     /\b(function|otag|oracletag|art|atag|arttag):"([^"]+)"/gi,
     (_match, prefix: string, value: string) => `${prefix}:${value.replace(/\s+/g, "-")}`
   );
+
+  query = query.replace(/-o:"[^"]*"/g, "").replace(/-o:\S+/g, "").replace(/-!"[^"]*"/g, "").replace(/-n:"[^"]*"/g, "").replace(/\s{2,}/g, " ").trim();
 
   if (!query.includes(`-name:"${cardName}"`)) {
     query = `${query} -name:"${cardName}"`;
