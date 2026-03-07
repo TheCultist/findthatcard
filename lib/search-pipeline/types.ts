@@ -67,6 +67,7 @@ export type SearchPipelineIR = {
     aiBatchCalls: number;
     aiSequentialCalls: number;
     invalidTagsRemoved: number;
+    phase0Normalized: boolean;
   };
 };
 

@@ -47,8 +47,11 @@ export async function POST(request: NextRequest) {
     try {
       const pipelineResult = await runSearchPipeline(body.naturalQuery);
       scryfallQuery = pipelineResult.queryForScryfall;
+      const phase0Note = pipelineResult.normalizedQuery
+        ? ` ~> "${pipelineResult.normalizedQuery}"`
+        : "";
       console.log(
-        `[Search] Natural query "${body.naturalQuery}" -> "${pipelineResult.queryForLogs}" (batch=${pipelineResult.debug.aiBatchCalls}, sequential=${pipelineResult.debug.aiSequentialCalls}, unresolved=${pipelineResult.debug.unresolvedFragments}, invalidRemoved=${pipelineResult.debug.invalidTagsRemoved})`
+        `[Search] Natural query "${body.naturalQuery}"${phase0Note} -> "${pipelineResult.queryForLogs}" (batch=${pipelineResult.debug.aiBatchCalls}, sequential=${pipelineResult.debug.aiSequentialCalls}, unresolved=${pipelineResult.debug.unresolvedFragments}, invalidRemoved=${pipelineResult.debug.invalidTagsRemoved}, normalized=${pipelineResult.debug.phase0Normalized})`
       );
     } catch (conversionError) {
       console.error("Query conversion error:", conversionError);

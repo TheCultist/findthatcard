@@ -38,7 +38,10 @@ const FEW_SHOT_EXAMPLES = `Examples:
 {"results":[{"fragment":"trigger when a zombie enters","archetype":null,"qualifier":null,"tags":["o:enters","o:zombie"],"confidence":0.85}]}
 {"results":[{"fragment":"deal damage to creatures","archetype":"damage","qualifier":"creature","tags":[],"confidence":0.9}]}
 {"results":[{"fragment":"cards depicting a forest at night","archetype":null,"qualifier":null,"tags":["art:forest","art:night"],"confidence":0.8}]}
-{"results":[{"fragment":"ways to get lands back from graveyard","archetype":"reanimator","qualifier":"self","tags":[],"confidence":0.7}]}`;
+{"results":[{"fragment":"ways to get lands back from graveyard","archetype":"reanimator","qualifier":"self","tags":[],"confidence":0.7}]}
+{"results":[{"fragment":"give creatures indestructible","archetype":null,"qualifier":null,"tags":["o:indestructible"],"confidence":0.9}]}
+{"results":[{"fragment":"grants flying to others","archetype":null,"qualifier":null,"tags":["o:flying"],"confidence":0.9}]}
+{"results":[{"fragment":"make tokens hexproof","archetype":null,"qualifier":null,"tags":["o:hexproof"],"confidence":0.85}]}`;
 
 export function buildResolverPrompt({
   category,
@@ -74,6 +77,7 @@ export function buildResolverPrompt({
     "- Do NOT return color identity, format, or type tags already handled by the rest of the query.",
     "- IMPORTANT: When the fragment describes a SPECIFIC trigger condition (enters, dies, attacks, taps, etc.), use o: oracle text tags to capture that specificity. Do NOT fall back to a broad function: archetype tag that ignores the trigger. Example: 'give mana when enters' → o:\"~ enters\" + o:\"add\", 'trigger when a land enters' → o:enters + o:land.",
     "- IMPORTANT: When you emit a function: tag, do NOT also add o: oracle text for the same intent. The function: tag already covers that search space and adding oracle text will over-restrict the results to zero.",
+    "- GRANT/GIVE KEYWORDS: When the fragment describes granting or giving a keyword ability (flying, hexproof, indestructible, lifelink, haste, trample, etc.) to other permanents, use o:<keyword> (e.g. o:indestructible, o:flying). Do NOT use function:grows-others or similar generic tags — use the specific keyword in an oracle text filter.",
     "",
     FEW_SHOT_EXAMPLES,
     "",

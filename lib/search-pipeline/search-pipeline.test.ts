@@ -32,7 +32,7 @@ function testAssemblerBooleanComposition() {
     resolvedFragments: [
       { fragment: "etb effects", tags: ['o:"~ enters"'], confidence: 0.9, category: "effect" },
     ],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const query = assembleQueryFromIR(ir);
@@ -51,7 +51,7 @@ async function testPhase3DirectQueryAddsPreferBest() {
     mustNotClauses: [],
     unresolvedFragments: [],
     resolvedFragments: [],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
   const finalized = await finalizeQuery(ir);
   assert.equal(finalized.queryForScryfall, "prefer:best t:dragon");
@@ -300,7 +300,7 @@ async function testPhase3DoesNotForceCommanderCreatureForFormatIntent() {
     mustNotClauses: [],
     unresolvedFragments: [],
     resolvedFragments: [],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const finalized = await finalizeQuery(ir);
@@ -324,7 +324,7 @@ async function testPhase3LegalInMultipleFormatsKeepsFCommanderNoIsCommander() {
     mustNotClauses: [],
     unresolvedFragments: [],
     resolvedFragments: [],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const finalized = await finalizeQuery(ir);
@@ -350,7 +350,7 @@ async function testPhase3RemovesTreasureTypeForTokenGenerationIntent() {
     mustNotClauses: [],
     unresolvedFragments: [],
     resolvedFragments: [],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const finalized = await finalizeQuery(ir);
@@ -374,7 +374,7 @@ async function testPhase3RemovesAnyTokenTypeForGenerationIntent() {
     mustNotClauses: [],
     unresolvedFragments: [],
     resolvedFragments: [],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const finalized = await finalizeQuery(ir);
@@ -399,7 +399,7 @@ async function testPhase3StripsDamageTargetCreatureTypeFilter() {
     mustNotClauses: [],
     unresolvedFragments: [],
     resolvedFragments: [],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const finalized = await finalizeQuery(ir);
@@ -423,7 +423,7 @@ async function testPhase3StripsCreatureTypeForRemovalCreatureIntent() {
     mustNotClauses: [],
     unresolvedFragments: [],
     resolvedFragments: [],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const finalized = await finalizeQuery(ir);
@@ -447,7 +447,7 @@ async function testPhase3AddsBlinkTagsAndKeepsCreatureType() {
     mustNotClauses: [],
     unresolvedFragments: [],
     resolvedFragments: [],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const finalized = await finalizeQuery(ir);
@@ -472,7 +472,7 @@ function testAssemblerSkipsArchetypeFragmentTags() {
     resolvedFragments: [
       { fragment: "prevent attacking", tags: ["function:prevent-attack"], confidence: 0.9, category: "effect", archetype: "pillow-fort" },
     ],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const query = assembleQueryFromIR(ir);
@@ -497,7 +497,7 @@ function testAssemblerEmitsRawTagsForNonArchetypeFragments() {
     resolvedFragments: [
       { fragment: "cool effects", tags: ["function:some-effect"], confidence: 0.8, category: "semantic" },
     ],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const query = assembleQueryFromIR(ir);
@@ -522,7 +522,7 @@ function testAssemblerAndsArtConceptsPerFragment() {
       { fragment: "spider art", tags: ["art:spider", "art:spider-like"], confidence: 0.9, category: "art" },
       { fragment: "sword art", tags: ["art:raised-sword", "art:sheathed-sword"], confidence: 0.9, category: "art" },
     ],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const query = assembleQueryFromIR(ir);
@@ -554,7 +554,7 @@ async function testPhase3InjectsArchetypeTagsFromResolvedFragments() {
     resolvedFragments: [
       { fragment: "prevent attacking", tags: [], confidence: 0.9, category: "effect", archetype: "pillow-fort" },
     ],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const finalized = await finalizeQuery(ir);
@@ -579,7 +579,7 @@ async function testPhase3InjectsDamageArchetypeFromResolvedFragments() {
     resolvedFragments: [
       { fragment: "hurt opponents", tags: [], confidence: 0.85, category: "effect", archetype: "damage", qualifier: "opponent" },
     ],
-    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0 },
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
   };
 
   const finalized = await finalizeQuery(ir);
