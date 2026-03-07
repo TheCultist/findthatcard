@@ -86,6 +86,10 @@ export interface CardResult {
     normal: string | null;
     small: string | null; // Fallback
   };
+  card_faces?: Array<{
+    name: string;
+    image_uris?: ScryfallImageUris;
+  }>;
   scryfall_uri: string;
   set_name: string | null;
   set_type: string | null;

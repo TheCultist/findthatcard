@@ -147,6 +147,20 @@ async function buildIndexes(): Promise<void> {
     if (simplified !== lower && !cnSimplified.has(simplified)) {
       cnSimplified.set(simplified, name);
     }
+    
+    // For double-faced cards (with //), also index the front face name
+    if (name.includes(" // ")) {
+      const frontFace = name.split(" // ")[0].trim();
+      const frontLower = frontFace.toLowerCase();
+      // Only add if not already present (prefer exact full names)
+      if (!cnExact.has(frontLower)) {
+        cnExact.set(frontLower, name);
+      }
+      const frontSimplified = simplifyForNameLookup(frontFace);
+      if (frontSimplified !== frontLower && !cnSimplified.has(frontSimplified)) {
+        cnSimplified.set(frontSimplified, name);
+      }
+    }
   }
   cardNameIndexPair = { exact: cnExact, simplified: cnSimplified };
 

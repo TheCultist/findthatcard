@@ -4,7 +4,7 @@ import { CardResult } from "@/types/scryfall";
 import { getCardTraderLink, getCardTraderHomepageLink } from "@/lib/cardtrader/links";
 import ManaCost from "@/app/components/ManaCost";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface CardCardProps {
   card: CardResult;
@@ -13,15 +13,51 @@ interface CardCardProps {
 
 export default function CardCard({ card, onCardClick }: CardCardProps) {
   const [isCheckingLink, setIsCheckingLink] = useState(false);
-  const initialImageSrc = card.image_uris.normal || card.image_uris.small || "";
-  const [imageSrc, setImageSrc] = useState(initialImageSrc);
+  const [activeFaceIndex, setActiveFaceIndex] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
+  const [isFlipping, setIsFlipping] = useState(false);
+  
+  const hasFaces = card.card_faces && card.card_faces.length > 1;
+  
+  // Determine which image to show based on active face
+  const getImageSrc = () => {
+    if (hasFaces && card.card_faces![activeFaceIndex].image_uris) {
+      const faceImage = card.card_faces![activeFaceIndex].image_uris;
+      return faceImage!.normal || faceImage!.small || "";
+    }
+    return card.image_uris.normal || card.image_uris.small || "";
+  };
+  
+  const [imageSrc, setImageSrc] = useState(() => getImageSrc());
+
+  // Update image when face changes
+  useEffect(() => {
+    const newSrc = getImageSrc();
+    setImageSrc(newSrc);
+    setImageFailed(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFaceIndex]);
 
   const handleClick = () => {
     if (onCardClick) {
       onCardClick(card);
     } else {
       window.open(card.scryfall_uri, "_blank", "noopener,noreferrer");
+    }
+  };
+  
+  const handleFlipClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (hasFaces && !isFlipping) {
+      setIsFlipping(true);
+      // Change face halfway through the flip animation
+      setTimeout(() => {
+        setActiveFaceIndex((prev) => (prev + 1) % card.card_faces!.length);
+      }, 150);
+      // Reset flip state after animation completes
+      setTimeout(() => {
+        setIsFlipping(false);
+      }, 300);
     }
   };
 
@@ -77,21 +113,48 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
       {/* Card Image */}
       {imageSrc && !imageFailed ? (
         <div className="mb-2 aspect-[5/7] overflow-hidden rounded border border-gray-300 bg-gray-100 relative dark:border-gray-800 dark:bg-gray-950 sm:mb-3">
-          <Image
-            src={imageSrc}
-            alt={card.name}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-            unoptimized
-            className="object-cover transition-transform group-hover:scale-105"
-            onError={() => {
-              if (card.image_uris.small && imageSrc !== card.image_uris.small) {
-                setImageSrc(card.image_uris.small);
-              } else {
-                setImageFailed(true);
-              }
-            }}
-          />
+          <div className={`w-full h-full transition-all duration-300 ${isFlipping ? 'scale-x-0 opacity-0' : 'scale-x-100 opacity-100'}`}>
+            <Image
+              src={imageSrc}
+              alt={card.name}
+              fill
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              unoptimized
+              className="object-cover transition-transform group-hover:scale-105"
+              onError={() => {
+                if (card.image_uris.small && imageSrc !== card.image_uris.small) {
+                  setImageSrc(card.image_uris.small);
+                } else {
+                  setImageFailed(true);
+                }
+              }}
+            />
+          </div>
+          {/* Flip button for double-faced cards */}
+          {hasFaces && (
+            <button
+              onClick={handleFlipClick}
+              className="absolute top-2 right-2 rounded-full bg-black/60 p-2 text-white shadow-lg transition-all hover:bg-black/80 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500/50 backdrop-blur-sm z-10"
+              aria-label="Flip card"
+              title="Flip card"
+              disabled={isFlipping}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth={2}
+                stroke="currentColor"
+                className={`h-4 w-4 transition-transform duration-300 ${isFlipping ? 'rotate-180' : ''}`}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+                />
+              </svg>
+            </button>
+          )}
         </div>
       ) : (
         <div className="mb-2 flex aspect-[5/7] items-center justify-center rounded border border-gray-300 bg-gray-100 text-xs text-gray-400 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-600 sm:mb-3">

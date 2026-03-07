@@ -287,6 +287,12 @@ export async function transformScryfallResponse(
           normal: imageUris?.normal || imageUris?.large || null,
           small: imageUris?.small || null, // Fallback
         },
+        card_faces: card.card_faces && card.card_faces.length > 1
+          ? card.card_faces.map(face => ({
+              name: face.name,
+              image_uris: face.image_uris,
+            }))
+          : undefined,
         scryfall_uri: card.scryfall_uri,
         set_name: setName, // Use non-digital set name if card was digital-only
         set_type: setType, // Use non-digital set type if card was digital-only

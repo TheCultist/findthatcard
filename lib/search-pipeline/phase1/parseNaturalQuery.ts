@@ -2628,6 +2628,18 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   const positiveKeywords: string[] = [];
   for (const keyword of keywordFilters) {
     const kw = keyword.toLowerCase();
+    
+    // Skip keywords that are substrings of already-reserved words from card names
+    // e.g. "delve" shouldn't match if "delver" is already reserved
+    let isPartOfReservedWord = false;
+    for (const reserved of strippedTerms) {
+      if (reserved.includes(kw) && reserved !== kw) {
+        isPartOfReservedWord = true;
+        break;
+      }
+    }
+    if (isPartOfReservedWord) continue;
+    
     strippedTerms.push(kw);
     // Also strip any synonym phrase that expanded to this keyword
     for (const { pattern, keyword: synKeyword } of KEYWORD_SYNONYM_STRIPS) {
