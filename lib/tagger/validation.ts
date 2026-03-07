@@ -91,17 +91,19 @@ export async function validateTaggerTag(
       return true; // Assume exists to avoid false positives
     }
 
-    // Check if tag exists in cache (case-insensitive comparison)
-    const normalizedTag = tag.toLowerCase().trim();
+    // Normalize to slug form (lowercase, spaces → hyphens) for comparison.
+    // Tagger display names use spaces ("pure draw") but the catalog and Scryfall
+    // queries both use hyphens ("pure-draw").
+    const normalizedTag = tag.toLowerCase().trim().replace(/\s+/g, "-");
     for (const cachedTag of tagSet) {
-      if (cachedTag.toLowerCase() === normalizedTag) {
+      if (cachedTag.toLowerCase().replace(/\s+/g, "-") === normalizedTag) {
         return true;
       }
     }
 
     // Debug: log when a tag is not found (helps diagnose cache issues)
     console.log(
-      `[Tagger Validation] Tag "${tag}" (normalized: "${normalizedTag}") not found in ${type} tags catalog. Catalog size: ${tagSet.size}`
+      `[Tagger Validation] Tag "${tag}" (slug: "${normalizedTag}") not found in ${type} tags catalog. Catalog size: ${tagSet.size}`
     );
 
     return false;

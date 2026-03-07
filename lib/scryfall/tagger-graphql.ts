@@ -138,11 +138,11 @@ export async function fetchTaggerCardData(
 
     const functionTags = card.taggings
       .filter((t) => t.tag.type === "ORACLE_CARD_TAG")
-      .map((t) => t.tag.name);
+      .map((t) => (t.tag.name as string).toLowerCase().replace(/\s+/g, "-"));
 
     const artTags = card.taggings
       .filter((t) => t.tag.type === "ILLUSTRATION_TAG")
-      .map((t) => t.tag.name);
+      .map((t) => (t.tag.name as string).toLowerCase().replace(/\s+/g, "-"));
 
     // Relationships are directed edges: subjectName → relatedName.
     // Extract the "other" card's name — the side that isn't the queried card.
