@@ -1853,6 +1853,55 @@ function detectCardNamePostPass(
   const extraStripped: string[] = [];
   if (!hasCardNameIndex()) return { clauses, extraStripped };
 
+  // --- Pass 0: explicit "X in the name" / "name contains X" ---
+  // Use unquoted name:word tokens so Scryfall does substring matching.
+  const NAME_CONTAINS_PATTERNS: RegExp[] = [
+    /\b(.{1,80}?)\s+in\s+(?:the\s+)?name\b/i,
+    /\bname\s+contains?\s+(.{1,80})$/i,
+    /\bnames?\s+containing\s+(.{1,80})$/i,
+  ];
+  const NAME_INTENT_STOPWORDS = new Set([
+    "name",
+    "names",
+    "contains",
+    "contain",
+    "containing",
+    "word",
+    "words",
+    "called",
+    "named",
+  ]);
+
+  for (const pattern of NAME_CONTAINS_PATTERNS) {
+    const match = naturalQuery.match(pattern);
+    if (!match) continue;
+    const raw = (match[1] || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9'\s-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const words = raw
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((w) => !STOPWORDS.has(w) && !NAME_INTENT_STOPWORDS.has(w));
+
+    if (words.length === 0) continue;
+
+    const clauseValue = words.map((w) => `name:${w}`).join(" ");
+    clauses.push({ value: clauseValue, source: "phase1:cardname" });
+    extraStripped.push(
+      ...words,
+      "in",
+      "the",
+      "name",
+      "names",
+      "contains",
+      "contain",
+      "containing"
+    );
+    return { clauses, extraStripped };
+  }
+
   // --- Pass 1: explicit "named / called <Name>" ---
   const NAMED_RE =
     /\b(?:named?|called)\s+([A-Za-z][A-Za-z'',.‐\- ]{0,60}?)(?=\s+(?:in|from|with|that|or|and|but|which|where)|\s*[,;]|\s*$)/gi;

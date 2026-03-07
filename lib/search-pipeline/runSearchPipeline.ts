@@ -100,7 +100,12 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
     const synergyResult = await resolveSynergyQuery(phase1.synergyWithCardName);
     if (synergyResult) {
       dropContradictoryNameClauses(phase1, synergyResult.query);
-      phase1.mustClauses.unshift({ value: `(${synergyResult.query})`, source: "phase1:direct" });
+      // Inject the synergy query without extra wrapping parens — it is already sanitized.
+      phase1.mustClauses.unshift({ value: synergyResult.query, source: "phase1:direct" });
+      // Inject color identity as a top-level constraint so it applies to the whole query.
+      if (synergyResult.colorIdentity) {
+        phase1.mustClauses.push({ value: `id<=${synergyResult.colorIdentity}`, source: "phase1:direct" });
+      }
       phase1.debug.aiBatchCalls += 1;
     } else {
       phase1.mustClauses.unshift({ value: `name:"${phase1.synergyWithCardName}"`, source: "phase1:cardname" });

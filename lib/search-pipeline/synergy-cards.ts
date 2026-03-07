@@ -61,9 +61,6 @@ function buildSynergyPrompt(
   functionTags: string[],
 ): string {
   const identity = describeColorIdentity(card.color_identity);
-  const idFilter = card.color_identity.length > 0
-    ? `id<=${card.color_identity.join("").toLowerCase()}`
-    : "";
   const keywords = card.keywords.length > 0 ? card.keywords.join(", ") : "none";
   const slugifiedTags = functionTags.map((t) => t.replace(/\s+/g, "-"));
   const tagList = slugifiedTags.length > 0 ? slugifiedTags.join(", ") : "none";
@@ -100,7 +97,7 @@ function buildSynergyPrompt(
     "- Prefer function: tags over o: oracle text.",
     "- Only use o:\"...\" for specific multi-word phrases. Never use single-word o: fragments (o:attacks, o:dies, o:draws) — they match thousands of cards.",
     "- Do NOT add -o: or -name: exclusions to remove the original card — the system handles that automatically.",
-    `- Scope to the card's color identity where appropriate: ${idFilter || "(colorless — no identity filter needed)"}`,
+    "- Do NOT add id: or id<= color identity filters — the system injects those automatically.",
     "- Keep the query under 400 characters.",
     "- Do NOT add format filters (f:commander, f:modern, etc.) — the user may add those separately.",
     "- Do NOT use name: filters for specific card names — find synergy by mechanics, not by listing known good cards.",
@@ -140,6 +137,9 @@ function sanitizeScryfallQuery(raw: string, cardName: string): string | null {
     (_match, prefix: string, value: string) => `${prefix}:${value.replace(/\s+/g, "-")}`
   );
 
+  // Strip any identity filters the AI may have added — they are injected by the pipeline.
+  query = query.replace(/\bid(?:entity)?(?:<=|>=|=|:)\s*[wubrgc]{1,5}\b/gi, "").replace(/\s{2,}/g, " ").trim();
+
   query = query.replace(/-o:"[^"]*"/g, "").replace(/-o:\S+/g, "").replace(/-!"[^"]*"/g, "").replace(/-n:"[^"]*"/g, "").replace(/\s{2,}/g, " ").trim();
 
   if (!query.includes(`-name:"${cardName}"`)) {
@@ -149,8 +149,14 @@ function sanitizeScryfallQuery(raw: string, cardName: string): string | null {
   return query || null;
 }
 
+export const __testOnly = {
+  sanitizeScryfallQuery,
+};
+
 export type SynergyQueryResult = {
   query: string;
+  /** Color identity of the commander, e.g. "bg" or "". Used to inject id<= externally. */
+  colorIdentity: string;
   reasoning?: string;
   aiTokens: { input: number; output: number; total: number };
 };
@@ -237,6 +243,7 @@ export async function resolveSynergyQuery(cardName: string): Promise<SynergyQuer
 
   return {
     query,
+    colorIdentity: card.color_identity.length > 0 ? card.color_identity.join("").toLowerCase() : "",
     reasoning: parsed.reasoning,
     aiTokens: { input: inputTokens, output: outputTokens, total: totalTokens },
   };

@@ -1,4 +1,5 @@
-import { ensureTaggerTagCache, getTaggerTagCache } from "./cache";
+import { promises as fs } from "fs";
+import path from "path";
 
 /**
  * Extracts Tagger tags from a Scryfall query
@@ -52,24 +53,41 @@ export function extractTaggerTags(
  * Validates if a Tagger tag exists by checking the cached tag list
  * Returns true if the tag exists, false if the tag doesn't exist
  */
+let localTaggerCatalogPromise: Promise<Map<"art" | "function", Set<string>>> | null = null;
+
+async function getLocalTaggerCatalog(): Promise<Map<"art" | "function", Set<string>>> {
+  if (!localTaggerCatalogPromise) {
+    localTaggerCatalogPromise = (async () => {
+      const filePath = path.join(process.cwd(), "data", "tagger-tags.json");
+      const raw = await fs.readFile(filePath, "utf-8");
+      const parsed = JSON.parse(raw) as {
+        art?: unknown;
+        function?: unknown;
+      };
+      const art = Array.isArray(parsed.art)
+        ? parsed.art.filter((v): v is string => typeof v === "string")
+        : [];
+      const func = Array.isArray(parsed.function)
+        ? parsed.function.filter((v): v is string => typeof v === "string")
+        : [];
+      return new Map<"art" | "function", Set<string>>([
+        ["art", new Set(art)],
+        ["function", new Set(func)],
+      ]);
+    })();
+  }
+  return localTaggerCatalogPromise;
+}
+
 export async function validateTaggerTag(
   type: "art" | "function",
   tag: string
 ): Promise<boolean> {
   try {
-    // Ensure cache is initialized
-    await ensureTaggerTagCache();
-
-    const taggerTagCache = getTaggerTagCache();
-    if (taggerTagCache === null) {
-      // Cache initialization failed - assume tag exists to avoid false positives
-      console.warn("[Tagger Cache] Cache not available, assuming tag exists");
-      return true;
-    }
-
-    const tagSet = taggerTagCache.get(type);
+    const localCatalog = await getLocalTaggerCatalog();
+    const tagSet = localCatalog.get(type);
     if (!tagSet) {
-      console.warn(`[Tagger Cache] No tags found for type: ${type}`);
+      console.warn(`[Tagger Validation] No tags found for type: ${type}`);
       return true; // Assume exists to avoid false positives
     }
 
@@ -83,12 +101,12 @@ export async function validateTaggerTag(
 
     // Debug: log when a tag is not found (helps diagnose cache issues)
     console.log(
-      `[Tagger Cache] Tag "${tag}" (normalized: "${normalizedTag}") not found in ${type} tags cache. Cache size: ${tagSet.size}`
+      `[Tagger Validation] Tag "${tag}" (normalized: "${normalizedTag}") not found in ${type} tags catalog. Catalog size: ${tagSet.size}`
     );
 
     return false;
   } catch (error) {
-    // On cache errors, assume tag exists to avoid false positives
+    // On file read errors, assume tag exists to avoid false positives
     // We only want to regenerate if we're confident the tag doesn't exist
     console.error(`Error validating tag ${type}:${tag}:`, error);
     return true;

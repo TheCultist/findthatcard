@@ -245,6 +245,22 @@ function stripPreferBestPrefix(value: string): string {
   return value.replace(/^prefer:best\s+/i, "").trim();
 }
 
+function normalizeIdentityScopeInOrChains(query: string): string {
+  const idPattern = /\bid(?:entity)?(?:<=|>=|=|:)\s*[wubrgc]{1,5}\b/gi;
+  const idMatches = query.match(idPattern) || [];
+  const hasOrChain = /\bOR\b/i.test(query) || /\bor\b/i.test(query);
+  if (!hasOrChain || idMatches.length === 0) return query;
+
+  const normalizedIds = Array.from(
+    new Set(idMatches.map((m) => m.toLowerCase().replace(/\s+/g, "")))
+  );
+  let updated = query.replace(idPattern, " ").replace(/\s{2,}/g, " ").trim();
+  if (normalizedIds.length === 1) {
+    updated = `(${updated}) ${normalizedIds[0]}`.replace(/\s{2,}/g, " ").trim();
+  }
+  return updated;
+}
+
 function prependPreferBest(value: string): string {
   if (/^prefer:best\s+/i.test(value)) return value;
   return `${PREFER_BEST_PREFIX}${value}`.trim();
@@ -345,8 +361,6 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     });
   }
 
-  let invalidTags: Array<{ type: "art" | "function"; tag: string }> = [];
-
   if (ir.intent !== "direct-scryfall") {
     query = await applySetFiltersFromNaturalQuery(ir.naturalQuery, query);
     query = await applyKeywordFiltersFromNaturalQuery(ir.naturalQuery, query);
@@ -359,6 +373,11 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     query = applyDefaultGameFilter(query);
     query = query.replace(/^\s*[iI]\s+/i, "").trim();
 
+  }
+
+  let invalidTags: Array<{ type: "art" | "function"; tag: string }> = [];
+  if (ir.intent !== "direct-scryfall") {
+    query = normalizeIdentityScopeInOrChains(query);
     invalidTags = await validateTaggerTags(query);
     if (invalidTags.length > 0) {
       query = removeInvalidTagsFromQuery(query, invalidTags);
@@ -369,10 +388,10 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
         maxLength: EFFECTIVE_MAX_QUERY_LENGTH,
       });
     }
-  }
 
-  if (query.length > EFFECTIVE_MAX_QUERY_LENGTH) {
-    query = truncateScryfallQuery(query, EFFECTIVE_MAX_QUERY_LENGTH);
+    if (query.length > EFFECTIVE_MAX_QUERY_LENGTH) {
+      query = truncateScryfallQuery(query, EFFECTIVE_MAX_QUERY_LENGTH);
+    }
   }
 
   const queryForScryfall = prependPreferBest(query);

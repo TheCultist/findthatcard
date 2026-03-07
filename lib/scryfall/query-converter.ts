@@ -550,7 +550,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
       {
         name: "creature",
         detect: /\bcreature\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile|kill)\s+(?:target\s+|a\s+|the\s+)?creatures?\b/i,
-        tags: ["removal-creature", "removal-creature-burn", "removal-creature-fight", "spot-removal"],
+        tags: ["removal-creature", "removal-creature-burn", "removal-creature-fight", "removal-exile", "removal-destroy", "spot-removal"],
         suppressTypes: ["creature"],
       },
       {

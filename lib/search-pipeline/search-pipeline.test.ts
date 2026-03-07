@@ -59,6 +59,30 @@ async function testPhase3DirectQueryAddsPreferBest() {
   console.log("[PASS] phase3: direct query gets prefer:best prefix once");
 }
 
+async function testPhase3DirectQueryPassThrough() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: '((function:typal-spider t:creature id<=bg) OR (function:hunger-reanimation t:artifact) -name:"Shelob, Child of Ungoliant") f:commander game:paper',
+    intent: "direct-scryfall",
+    tokenizedQuery: ["direct", "query"],
+    noiseTokens: [],
+    mustClauses: [{
+      value: '((function:typal-spider t:creature id<=bg) OR (function:hunger-reanimation t:artifact) -name:"Shelob, Child of Ungoliant") f:commander game:paper',
+      source: "phase1:direct",
+    }],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
+  };
+  const finalized = await finalizeQuery(ir);
+  assert.equal(
+    finalized.queryForLogs,
+    '((function:typal-spider t:creature id<=bg) OR (function:hunger-reanimation t:artifact) -name:"Shelob, Child of Ungoliant") f:commander game:paper'
+  );
+  console.log("[PASS] phase3: direct query is passed through unchanged");
+}
+
 async function testPhase3RemovesUnknownTypeFilters() {
   const ir: SearchPipelineIR = {
     naturalQuery: "cards with penguins",
@@ -1007,6 +1031,17 @@ async function testCardNameDoesNotMatchStructuralQuery() {
   console.log('[PASS] card name: structural query "red creatures with flying" produces no name: clause');
 }
 
+async function testCardNameContainsWordIntent() {
+  const parsed = await parseNaturalQuery("cards shelob in the name");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.includes("name:shelob"),
+    `expected name:shelob for in-name word intent; got: ${mustValues.join(", ")}`
+  );
+  assert.equal(parsed.unresolvedFragments.length, 0);
+  console.log('[PASS] card name: "shelob in the name" maps to name:shelob');
+}
+
 async function run() {
   await testPhase1DirectQueryShortCircuit();
   testAssemblerBooleanComposition();
@@ -1014,6 +1049,7 @@ async function run() {
   testAssemblerEmitsRawTagsForNonArchetypeFragments();
   testAssemblerAndsArtConceptsPerFragment();
   await testPhase3DirectQueryAddsPreferBest();
+  await testPhase3DirectQueryPassThrough();
   await testPhase3RemovesUnknownTypeFilters();
   await testPhase3PreservesAndedStandaloneArtTags();
   await testPipelineDirectEndToEnd();
@@ -1072,6 +1108,7 @@ async function run() {
   await testCardNameListCommaInName();
   await testCardNameListPartialMatch();
   await testCardNameDoesNotMatchStructuralQuery();
+  await testCardNameContainsWordIntent();
   await testCardsWithSubtype();
   await testPhase1SynergyWithCardDetectsIntent();
   await testPhase1SynergyWithCardVariants();
