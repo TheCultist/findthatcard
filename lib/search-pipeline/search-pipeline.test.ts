@@ -59,6 +59,30 @@ async function testPhase3DirectQueryAddsPreferBest() {
   console.log("[PASS] phase3: direct query gets prefer:best prefix once");
 }
 
+async function testPhase3RemovesUnknownTypeFilters() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "cards with penguins",
+    intent: "search",
+    tokenizedQuery: ["cards", "with", "penguins"],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "t:penguin", source: "phase2:resolver" },
+      { value: "art:penguin", source: "phase2:resolver" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
+  };
+  const finalized = await finalizeQuery(ir);
+  assert.ok(
+    !/\b(?:t|type):penguin\b/i.test(finalized.queryForLogs),
+    `unknown type filter should be removed; got: ${finalized.queryForLogs}`
+  );
+  console.log("[PASS] phase3: removes unknown type filters like t:penguin");
+}
+
 async function testPipelineDirectEndToEnd() {
   const result = await runSearchPipeline("is:dfc t:land");
   assert.ok(result.queryForScryfall.startsWith("prefer:best "));
@@ -952,6 +976,7 @@ async function run() {
   testAssemblerEmitsRawTagsForNonArchetypeFragments();
   testAssemblerAndsArtConceptsPerFragment();
   await testPhase3DirectQueryAddsPreferBest();
+  await testPhase3RemovesUnknownTypeFilters();
   await testPipelineDirectEndToEnd();
   await testPipelineSimilarCardsDoesNotContradictNameExclusion();
   await testPhase1CommanderFormatColorExtraction();

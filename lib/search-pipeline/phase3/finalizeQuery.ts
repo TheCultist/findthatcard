@@ -2,6 +2,7 @@ import { applyCommanderContextFromNaturalQuery, hasCommanderDeckContext } from "
 import { applyKeywordFiltersFromNaturalQuery } from "@/lib/mtg-keywords";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
 import { Phase3Result, SearchPipelineIR } from "@/lib/search-pipeline/types";
+import { getCatalog } from "@/lib/scryfall/catalogs";
 import {
   EFFECTIVE_MAX_QUERY_LENGTH,
   PREFER_BEST_PREFIX,
@@ -14,6 +15,62 @@ import { getTaggerTagContext } from "@/lib/tagger/context";
 import { validateTaggerTags } from "@/lib/tagger/validation";
 
 const DEFAULT_GAME_FILTER = "game:paper";
+const KNOWN_TYPE_CATALOGS = [
+  "card-types",
+  "supertypes",
+  "artifact-types",
+  "battle-types",
+  "creature-types",
+  "enchantment-types",
+  "land-types",
+  "planeswalker-types",
+  "spell-types",
+] as const;
+const BASE_TYPE_FALLBACK = [
+  "artifact",
+  "battle",
+  "creature",
+  "enchantment",
+  "instant",
+  "kindred",
+  "land",
+  "planeswalker",
+  "sorcery",
+  "tribal",
+  "conspiracy",
+  "phenomenon",
+  "plane",
+  "scheme",
+  "vanguard",
+  "dungeon",
+  "attraction",
+  "sticker",
+  "ongoing",
+  "snow",
+  "basic",
+  "legendary",
+  "world",
+  "token",
+];
+
+let knownTypeTermsPromise: Promise<Set<string>> | null = null;
+
+async function getKnownTypeTerms(): Promise<Set<string>> {
+  if (!knownTypeTermsPromise) {
+    knownTypeTermsPromise = (async () => {
+      const terms = new Set<string>(BASE_TYPE_FALLBACK.map((v) => v.toLowerCase()));
+      for (const catalog of KNOWN_TYPE_CATALOGS) {
+        const values = await getCatalog(catalog);
+        for (const value of values) {
+          const normalized = value.toLowerCase().trim();
+          if (normalized) terms.add(normalized);
+        }
+      }
+      return terms;
+    })();
+  }
+  return knownTypeTermsPromise;
+}
 
 function applyDefaultGameFilter(query: string): string {
   const lower = query.toLowerCase();
@@ -173,6 +230,17 @@ function removeTokenTypeFiltersForTokenGenerationIntent(
   return updated.replace(/\s{2,}/g, " ").trim();
 }
 
+async function removeUnknownTypeFilters(scryfallQuery: string): Promise<string> {
+  const knownTypes = await getKnownTypeTerms();
+  return scryfallQuery.replace(/(^|\s)-?(?:t|type):([a-z][a-z-]*)\b/gi, (full, leading, rawType) => {
+    const normalized = String(rawType || "").toLowerCase().trim();
+    if (!normalized || knownTypes.has(normalized)) {
+      return full;
+    }
+    return leading || " ";
+  }).replace(/\s{2,}/g, " ").trim();
+}
+
 function stripPreferBestPrefix(value: string): string {
   return value.replace(/^prefer:best\s+/i, "").trim();
 }
@@ -287,6 +355,7 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     query = removeTokenTypeFiltersForTokenGenerationIntent(ir.naturalQuery, query);
     query = removeDamageTargetTypeFilters(ir.naturalQuery, query);
     query = removeArchetypeTargetTypeFilters(ir.naturalQuery, query);
+    query = await removeUnknownTypeFilters(query);
     query = applyDefaultGameFilter(query);
     query = query.replace(/^\s*[iI]\s+/i, "").trim();
 
