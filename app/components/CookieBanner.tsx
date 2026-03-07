@@ -8,7 +8,6 @@ export default function CookieBanner() {
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
-    // Check if user has already given consent
     const consent = localStorage.getItem(COOKIE_CONSENT_KEY);
     if (!consent) {
       // Small delay to avoid flash of banner on page load

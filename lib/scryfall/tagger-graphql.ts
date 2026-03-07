@@ -55,6 +55,8 @@ export type TaggerCardData = {
   oracleId: string;
   /** Oracle/function tags (ORACLE_CARD_TAG only, not artwork tags). */
   functionTags: string[];
+  /** Artwork/illustration tags (ILLUSTRATION_TAG) for the card's art. */
+  artTags: string[];
   /** Card names from SIMILAR_TO relationships. */
   similarTo: string[];
   /** Card names from BETTER_THAN relationships (cards this card is better than). */
@@ -138,6 +140,10 @@ export async function fetchTaggerCardData(
       .filter((t) => t.tag.type === "ORACLE_CARD_TAG")
       .map((t) => t.tag.name);
 
+    const artTags = card.taggings
+      .filter((t) => t.tag.type === "ILLUSTRATION_TAG")
+      .map((t) => t.tag.name);
+
     // Relationships are directed edges: subjectName → relatedName.
     // Extract the "other" card's name — the side that isn't the queried card.
     // Skip entries where neither side matches (transitive noise).
@@ -158,6 +164,7 @@ export async function fetchTaggerCardData(
       name: card.name,
       oracleId: card.oracleId,
       functionTags,
+      artTags,
       similarTo: relsByClassifier("SIMILAR_TO"),
       betterThan: relsByClassifier("BETTER_THAN"),
       worseThan: relsByClassifier("WORSE_THAN"),

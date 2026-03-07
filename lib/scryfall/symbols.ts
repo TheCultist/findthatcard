@@ -8,7 +8,7 @@ const symbolLoadCallbacks: Set<() => void> = new Set();
  */
 export async function fetchSymbolData(): Promise<void> {
   if (symbolDataLoaded) {
-    return; // Already loaded
+    return;
   }
 
   try {
@@ -26,7 +26,6 @@ export async function fetchSymbolData(): Promise<void> {
         }
       });
       symbolDataLoaded = true;
-      // Notify all waiting components
       symbolLoadCallbacks.forEach((callback) => callback());
       symbolLoadCallbacks.clear();
     }

@@ -636,8 +636,9 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   // from X, synergy subjects, etc.) will re-add card type names when they genuinely fill
   // a semantic role, so the correct blocking still happens in those cases.
   for (const type of TYPE_TOKENS) {
-    tokens.delete(type);
-    tokens.delete(`${type}s`);
+    for (const form of getTermForms(type)) {
+      tokens.delete(form);
+    }
   }
 
   // 2. Oracle-text targets — "that destroy/exile/bounce/create/make/... a/an/each X"
@@ -1045,6 +1046,10 @@ function applyOracleIntentHeuristics(
 
   // --- ETB + mana production ---
   // e.g. "creatures that give you mana when they enter", "adds mana when it enters"
+  // No dedicated function tag exists for ETB mana producers, so we use oracle
+  // text. o:"~ enters" anchors the ETB trigger; o:"add {" matches actual mana
+  // additions (add {G}, add {1}, add {C}, etc.) without false-positives from
+  // "add a counter", "add it to your hand", cost-reduction text, etc.
   const hasManaProductionIntent =
     /\b(give[sd]?\s+(?:you\s+)?mana|add[sd]?\s+mana|produce[sd]?\s+mana|generates?\s+mana|mana\s+when|gives?\s+mana)\b/i.test(
       naturalQuery
@@ -1052,7 +1057,7 @@ function applyOracleIntentHeuristics(
 
   if (hasEtbIntent && hasManaProductionIntent) {
     mustClauses.push({ value: 'o:"~ enters"', source: "phase1:oracle" });
-    mustClauses.push({ value: 'o:"add"', source: "phase1:oracle" });
+    mustClauses.push({ value: 'o:"add {"', source: "phase1:oracle" });
     strippedTerms.push(...ETB_TERMS, "mana", "give", "gives", "add", "adds", "produce", "produces", "generates", "generate");
     return;
   }
@@ -2050,6 +2055,76 @@ function detectCardNameList(
  *
  * Returns the canonical card name when a match is found, or null otherwise.
  */
+/**
+ * Detects "art like X" / "cards with art like X" queries where the user wants
+ * cards whose illustration shares the same visual art tags as a named card.
+ *
+ * Must run BEFORE detectSimilarToCardQuery so that "art like Bad River" is
+ * captured here rather than being treated as functional similarity.
+ */
+function detectArtLikeCardQuery(naturalQuery: string): { cardName: string } | null {
+  if (!hasCardNameIndex()) return null;
+
+  // Patterns that introduce a card-name reference in an "art like" context.
+  const ART_LIKE_PATTERNS: RegExp[] = [
+    // "art like X", "art similar to X"
+    /\bart\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
+    // "cards with art like X", "cards with artwork like X"
+    /\bcards?\s+with\s+(?:art(?:work)?)\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
+    // "cards depicting X like Y" won't apply here — but "artwork like X" will
+    /\bartwork\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
+    // "looks like X" (visual appearance)
+    /\blooks?\s+like\s+([\s\S]+)/i,
+    // "illustration like X"
+    /\billustration\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
+  ];
+
+  const CONTEXT_STOPS = new Set([
+    "in", "for", "from", "on", "at", "is", "are", "was", "were", "but",
+    "which", "that", "where", "when", "if", "to",
+  ]);
+
+  for (const pattern of ART_LIKE_PATTERNS) {
+    const match = naturalQuery.match(pattern);
+    if (!match) continue;
+
+    const rawText = match[1].trim();
+    const words = rawText
+      .toLowerCase()
+      .replace(/[^a-z0-9'\s-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    // Pass 1 — greedy longest exact/simplified catalog match
+    for (let len = Math.min(words.length, 8); len >= 1; len--) {
+      const candidate = words.slice(0, len).join(" ");
+      const canonical = lookupCardName(candidate);
+      if (canonical) {
+        return { cardName: canonical };
+      }
+    }
+
+    // Pass 2 — prefix lookup up to the first context stop-word
+    const nameWords: string[] = [];
+    for (const w of words) {
+      if (CONTEXT_STOPS.has(w)) break;
+      nameWords.push(w);
+      if (nameWords.length >= 6) break;
+    }
+    if (nameWords.length > 0) {
+      const prefixCandidate = nameWords.join(" ");
+      const canonical = lookupCardNameByPrefix(prefixCandidate);
+      if (canonical) {
+        return { cardName: canonical };
+      }
+    }
+  }
+
+  return null;
+}
+
 function detectSimilarToCardQuery(naturalQuery: string): { cardName: string } | null {
   if (!hasCardNameIndex()) return null;
 
@@ -2150,6 +2225,32 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   // Ensure catalog indexes (subtypes, card names, etc.) are ready before any
   // parsing step that depends on them.
   await ensureCatalogIndex();
+
+  // Early exit: "art like X" / "cards with art like X" — find cards with the
+  // same visual art tags as the named card.  Must run before the similar-cards
+  // check so that "art like Bad River" isn't misrouted as functional similarity.
+  const artLikeResult = detectArtLikeCardQuery(naturalQuery);
+  if (artLikeResult) {
+    return {
+      naturalQuery,
+      intent: "art-like-cards",
+      artLikeCardName: artLikeResult.cardName,
+      tokenizedQuery,
+      noiseTokens: [],
+      mustClauses: [],
+      shouldClauses: [],
+      mustNotClauses: [],
+      unresolvedFragments: [],
+      resolvedFragments: [],
+      debug: {
+        strippedTerms: [],
+        aiBatchCalls: 0,
+        aiSequentialCalls: 0,
+        invalidTagsRemoved: 0,
+        phase0Normalized: false,
+      },
+    };
+  }
 
   // Early exit: "cards similar to X" / "cards like X" / "alternatives to X"
   const similarToResult = detectSimilarToCardQuery(naturalQuery);

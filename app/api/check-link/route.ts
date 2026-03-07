@@ -16,7 +16,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Validate URL format
     const urlObj = new URL(url);
     if (!urlObj.protocol.startsWith("http")) {
       return NextResponse.json(
@@ -25,7 +24,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch the URL with HEAD request to check status without downloading content
+    // Use HEAD to check status without downloading content
     const response = await fetch(url, {
       method: "HEAD",
       headers: {
@@ -42,7 +41,6 @@ export async function GET(request: NextRequest) {
       status: response.status,
     });
   } catch (error) {
-    // If fetch fails, assume it might be a 404 or network error
     console.error("[API] Error checking link:", error);
     return NextResponse.json(
       {
@@ -50,7 +48,7 @@ export async function GET(request: NextRequest) {
         is404: true,
         error: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 200 } // Return 200 so client can handle it
+      { status: 200 } // Return 200 so client can handle the error gracefully
     );
   }
 }

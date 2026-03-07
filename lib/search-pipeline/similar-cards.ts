@@ -2,6 +2,113 @@ import { fetchCardByName } from "@/lib/scryfall/lookup";
 import { fetchTaggerCardData, TaggerCardData } from "@/lib/scryfall/tagger-graphql";
 
 /**
+ * Builds a Scryfall query that finds cards whose illustration shares the same
+ * visual art tags as the given card name.
+ *
+ * Fetches the card's ILLUSTRATION_TAG entries from the Scryfall Tagger and
+ * assembles an AND-chain of `art:` filters.  The source card is excluded from
+ * results via `-name:`.
+ *
+ * Returns null when the card cannot be found or has no usable art tags.
+ */
+export async function resolveArtLikeCardsQuery(cardName: string): Promise<string | null> {
+  const card = await fetchCardByName(cardName);
+  if (!card) {
+    console.warn(`[ArtLike] Card not found: "${cardName}"`);
+    return null;
+  }
+
+  console.log(`[ArtLike] Resolving art-like query for: "${card.name}" (${card.set}/${card.collector_number})`);
+
+  const tagger = await fetchTaggerCardData(card.set, card.collector_number);
+  if (!tagger) {
+    console.warn(`[ArtLike] Tagger data unavailable for "${card.name}"`);
+    return null;
+  }
+
+  return buildArtQueryFromTaggerData(tagger);
+}
+
+/**
+ * Builds a Scryfall `art:` query from a card's illustration tags.
+ *
+ * Strategy: score tags by specificity, then build:
+ *   - If 1+ compound tags exist: use the single best one as the anchor.
+ *     Compound tags like "phyrexian-tears" or "river-island-landscape" are
+ *     rare enough that one alone returns a useful result set.
+ *   - If 2+ tier-2 (uncommon single-word) tags exist: AND the top 2.
+ *     Two moderately specific tags together constrain well without being zero.
+ *   - If only broad/ambient tags exist: OR the top 3 (returning their union
+ *     is more useful than ANDing to nothing, or returning a single broad tag).
+ *
+ * A single compound tag beats three AND-chained tags every time — three
+ * rare tags co-occurring on the same card is nearly impossible.
+ */
+function buildArtQueryFromTaggerData(tagger: TaggerCardData): string | null {
+  const BROAD_TAGS = new Set([
+    "forest", "island", "mountain", "plains", "swamp",
+    "river", "lake", "ocean", "sea", "water",
+    "sky", "cloud", "sun", "moon", "stars", "night", "day",
+    "tree", "grass", "rock", "stone", "dirt", "ground",
+    "fire", "flame", "smoke", "fog", "mist",
+    "male", "female", "humanoid", "human", "person", "people",
+    "elf", "goblin", "zombie", "vampire", "dragon",
+    "armor", "sword", "shield", "staff",
+    "background", "foreground",
+  ]);
+
+  const isCompound = (tag: string) => tag.includes("-") || tag.includes(" ");
+  const isBroad = (tag: string) => BROAD_TAGS.has(tag.toLowerCase());
+
+  const tier1: string[] = []; // compound tags — most specific
+  const tier2: string[] = []; // uncommon single-word tags
+  const tier3: string[] = []; // broad/ambient single-word tags
+
+  for (const tag of tagger.artTags) {
+    if (isCompound(tag)) {
+      tier1.push(tag);
+    } else if (isBroad(tag)) {
+      tier3.push(tag);
+    } else {
+      tier2.push(tag);
+    }
+  }
+
+  let query: string | null = null;
+
+  if (tier1.length >= 2) {
+    // Two compound tags AND-chained is a tight, visually coherent set.
+    query = `(art:"${tier1[0]}" art:"${tier1[1]}")`;
+  } else if (tier1.length === 1 && tier2.length >= 1) {
+    // One compound tag + one specific single-word tag: AND them to narrow.
+    query = `(art:"${tier1[0]}" art:"${tier2[0]}")`;
+  } else if (tier1.length === 1) {
+    // Only one compound tag available, use it alone.
+    query = `art:"${tier1[0]}"`;
+  } else if (tier2.length >= 2) {
+    // Two moderately specific tags AND-chained gives a well-scoped result.
+    query = `(art:"${tier2[0]}" art:"${tier2[1]}")`;
+  } else if (tier2.length === 1) {
+    // One specific tag — use it alone.
+    query = `art:"${tier2[0]}"`;
+  } else if (tier3.length > 0) {
+    // Only broad tags available. OR them so the user at least sees results
+    // (AND would return almost nothing; a single broad tag is too wide alone).
+    const orTerms = tier3.slice(0, 3).map((t) => `art:"${t}"`).join(" or ");
+    query = tier3.length > 1 ? `(${orTerms})` : orTerms;
+  }
+
+  console.log(
+    `[ArtLike] Art tags for "${tagger.name}": ` +
+    `${tagger.artTags.length} total (t1=${tier1.length}, t2=${tier2.length}, t3=${tier3.length})` +
+    ` -> query: ${query ?? "none"}`
+  );
+
+  if (!query) return null;
+  return `${query} -name:"${tagger.name}"`;
+}
+
+/**
  * Builds a Scryfall query that finds cards similar to the given card name.
  *
  * Two signals are combined with OR:

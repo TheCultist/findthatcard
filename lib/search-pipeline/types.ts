@@ -22,7 +22,8 @@ export type QueryIntent =
   | "commander-deck"
   | "commander-creature"
   | "direct-scryfall"
-  | "similar-cards";
+  | "similar-cards"
+  | "art-like-cards";
 
 export type QueryClause = {
   value: string;
@@ -55,6 +56,8 @@ export type SearchPipelineIR = {
   intent: QueryIntent;
   /** Present when intent is "similar-cards" — the resolved canonical card name. */
   similarToCardName?: string;
+  /** Present when intent is "art-like-cards" — the resolved canonical card name. */
+  artLikeCardName?: string;
   tokenizedQuery: string[];
   noiseTokens: string[];
   mustClauses: QueryClause[];

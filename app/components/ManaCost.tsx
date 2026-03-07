@@ -17,7 +17,6 @@ export default function ManaCost({ manaCost }: { manaCost: string }) {
 
   useEffect(() => {
     if (!isSymbolDataLoaded()) {
-      // Register callback to re-render when symbols are loaded
       const callback = () => forceUpdate((prev) => prev + 1);
       registerSymbolLoadCallback(callback);
       return () => {
@@ -26,11 +25,9 @@ export default function ManaCost({ manaCost }: { manaCost: string }) {
     }
   }, []);
 
-  // Check if this is a split card mana cost (contains " / ")
   const isSplitCost = manaCost.includes(" / ");
 
   if (isSplitCost) {
-    // Split the mana cost by " / " and render each side separately
     const costs = manaCost.split(" / ");
 
     return (
@@ -93,7 +90,6 @@ export default function ManaCost({ manaCost }: { manaCost: string }) {
   // Regular single mana cost
   const symbols = manaCost.match(/\{[^}]+\}/g) || [];
 
-  // If no symbols found, show the raw mana cost as fallback
   if (symbols.length === 0) {
     return <span className="text-xs text-gray-400 whitespace-nowrap">{manaCost}</span>;
   }
@@ -104,7 +100,6 @@ export default function ManaCost({ manaCost }: { manaCost: string }) {
         const svgUri = getSymbolSvg(symbol);
 
         if (!svgUri) {
-          // Fallback: show text if symbol not found in cache yet
           return (
             <span
               key={`${symbol}-${index}`}
@@ -125,7 +120,6 @@ export default function ManaCost({ manaCost }: { manaCost: string }) {
             unoptimized
             className="inline-block flex-shrink-0"
             onError={(e) => {
-              // Fallback: show text if image fails to load
               const target = e.currentTarget as HTMLImageElement;
               target.style.display = "none";
               const textSpan = document.createElement("span");

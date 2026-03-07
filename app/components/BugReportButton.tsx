@@ -22,14 +22,12 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLTextAreaElement>(null);
 
-  // Focus description when modal opens
   useEffect(() => {
     if (open) {
       setTimeout(() => descRef.current?.focus(), 50);
     }
   }, [open]);
 
-  // Auto-close after success
   useEffect(() => {
     if (status === "success") {
       const t = setTimeout(() => {
@@ -43,7 +41,6 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
     }
   }, [status]);
 
-  // Close modal on Escape
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -127,7 +124,6 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
 
   return (
     <>
-      {/* Floating trigger button */}
       <button
         onClick={() => setOpen(true)}
         aria-label="Report a bug or faulty search"
@@ -137,14 +133,12 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
         <BugAntIcon className="h-6 w-6" />
       </button>
 
-      {/* Modal */}
       {open && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
           onClick={(e) => e.target === e.currentTarget && handleClose()}
         >
           <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
-            {/* Header */}
             <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
               <div className="flex items-center gap-2">
                 <BugAntIcon className="h-5 w-5 text-red-500" />
@@ -171,7 +165,6 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
-                {/* Read-only query info */}
                 <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs dark:border-gray-700 dark:bg-gray-800/60">
                   <div>
                     <span className="font-semibold text-gray-500 dark:text-gray-400">Your query: </span>
@@ -185,7 +178,6 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
                   )}
                 </div>
 
-                {/* Description */}
                 <div>
                   <label
                     htmlFor="bug-description"
@@ -205,7 +197,6 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
                   />
                 </div>
 
-                {/* Screenshot */}
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
                     Screenshot{" "}
@@ -238,14 +229,12 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
                   )}
                 </div>
 
-                {/* Submit error */}
                 {status === "error" && (
                   <p className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-900/20 dark:text-red-400">
                     {errorMsg}
                   </p>
                 )}
 
-                {/* Actions */}
                 <div className="flex justify-end gap-2 pt-1">
                   <button
                     type="button"

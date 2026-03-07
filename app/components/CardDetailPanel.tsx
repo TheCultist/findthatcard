@@ -120,7 +120,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
   const isDragging = useRef(false);
 
   useEffect(() => {
-    // Trigger enter animation
     const t = setTimeout(() => setVisible(true), 10);
     return () => clearTimeout(t);
   }, []);
@@ -216,7 +215,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
     }
   };
 
-  // Determine which image to display
   const getFaceImage = (): string | null => {
     if (detailData) {
       const hasFaces = detailData.card_faces && detailData.card_faces.length > 1;
@@ -271,7 +269,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
         }
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Drag handle — mobile only */}
         <div
           className="sm:hidden flex justify-center pt-3 pb-1 flex-shrink-0 select-none"
           style={{ touchAction: "none" }}
@@ -283,7 +280,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
           <div className="h-1.5 w-12 rounded-full bg-gray-300 dark:bg-gray-700" />
         </div>
 
-        {/* Header */}
         <div
           className="flex items-center justify-between px-4 py-3 border-b border-gray-300 dark:border-gray-800 flex-shrink-0 sm:pt-3"
           style={{ touchAction: "none" }}
@@ -309,10 +305,8 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
           </button>
         </div>
 
-        {/* Main content (scrollable) */}
         <div className="flex-1 overflow-y-auto overscroll-contain">
           <div className="flex flex-col sm:flex-row gap-0 sm:gap-6 p-4 sm:p-6">
-            {/* Left: Card Image */}
             <div className="flex-shrink-0 flex flex-col items-center gap-3 sm:w-64 lg:w-72">
               <div className="w-56 sm:w-full aspect-[5/7] relative rounded-lg overflow-hidden border border-gray-300 bg-gray-100 dark:border-gray-800 dark:bg-gray-900 shadow-lg">
                 {imageSrc ? (
@@ -332,7 +326,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                 )}
               </div>
 
-              {/* Face toggle for DFC */}
               {hasFaces && (
                 <div className="flex gap-2">
                   {detailData!.card_faces!.map((face, i) => (
@@ -351,7 +344,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                 </div>
               )}
 
-              {/* Set info on mobile (below image) */}
               {detailData && (
                 <div className="sm:hidden text-center text-xs text-gray-500 space-y-0.5">
                   <p className="text-gray-600 dark:text-gray-400 font-medium">{detailData.set_name}</p>
@@ -363,7 +355,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
               )}
             </div>
 
-            {/* Right: Card Details */}
             <div className="flex-1 min-w-0 space-y-4 mt-4 sm:mt-0">
               {loading ? (
                 <div className="space-y-3 animate-pulse">
@@ -375,10 +366,8 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                 </div>
               ) : detailData ? (
                 <>
-                  {/* Single-face or no faces: show card-level data */}
                   {!hasFaces ? (
                     <div className="space-y-3">
-                      {/* Name + mana cost */}
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 leading-tight">
@@ -392,17 +381,14 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                         )}
                       </div>
 
-                      {/* Type line */}
                       <p className="text-xs font-medium text-gray-700 dark:text-gray-400 uppercase tracking-wide border-b border-gray-300 dark:border-gray-800 pb-2">
                         {detailData.type_line}
                       </p>
 
-                      {/* Oracle text */}
                       {detailData.oracle_text && (
                         <OracleText text={detailData.oracle_text} />
                       )}
 
-                      {/* Flavor text */}
                       {detailData.flavor_text && (
                         <OracleText
                           text={detailData.flavor_text}
@@ -411,7 +397,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                         />
                       )}
 
-                      {/* P/T or Loyalty */}
                       {(detailData.power !== undefined || detailData.toughness !== undefined) && (
                         <p className="text-sm font-bold text-gray-800 dark:text-gray-200 text-right border-t border-gray-300 dark:border-gray-800 pt-2">
                           {detailData.power}/{detailData.toughness}
@@ -433,7 +418,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                     <CardFaceView face={detailData.card_faces![activeFace]} />
                   )}
 
-                  {/* Keywords */}
                   {detailData.keywords && detailData.keywords.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 border-t border-gray-300 dark:border-gray-800 pt-3">
                       {detailData.keywords.map((kw) => (
@@ -446,7 +430,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                     </div>
                   )}
 
-                  {/* Set / Collector / Artist */}
                   <div className="border-t border-gray-300 dark:border-gray-800 pt-3 space-y-1 text-xs hidden sm:block">
                     <div className="flex items-center gap-1.5">
                       <span className="text-gray-500 dark:text-gray-600">Set</span>
@@ -469,7 +452,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                     )}
                   </div>
 
-                  {/* Legalities */}
                   {detailData.legalities && (
                     <div className="border-t border-gray-300 dark:border-gray-800 pt-3">
                       <p className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wide mb-2">Legalities</p>
@@ -492,7 +474,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                     </div>
                   )}
 
-                  {/* Open on Scryfall (below legalities) */}
                   <div className="border-t border-gray-300 dark:border-gray-800 pt-3">
                     <a
                       href={card.scryfall_uri}
@@ -540,13 +521,11 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
           </div>
         </div>
 
-        {/* Footer: Buy buttons (side by side) */}
         <div className="flex-shrink-0 border-t border-gray-300 dark:border-gray-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white dark:bg-gray-950 sm:pb-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-500 text-center mb-2">
             Buy here and support the project
           </p>
           <div className="flex flex-row gap-2">
-            {/* CardTrader */}
             <a
               href={cardtraderUrl}
               target="_blank"
@@ -567,7 +546,6 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
               <span className="sr-only">Buy on CardTrader</span>
             </a>
 
-            {/* TCGPlayer */}
             <a
               href={tcgPlayerUrl || "#"}
               target="_blank"

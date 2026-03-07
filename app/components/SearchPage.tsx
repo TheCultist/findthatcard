@@ -109,7 +109,7 @@ export default function SearchPage() {
       setError(null);
       if (page === 1) {
         setResults(null);
-        setEditableQuery(""); // Clear query on new search, will be set from response
+        setEditableQuery("");
         setSourceQuery(searchQuery);
       }
 
@@ -127,8 +127,7 @@ export default function SearchPage() {
         if (!response.ok) {
           const errorData = data as ErrorResponse;
           setError(errorData.error || "An error occurred");
-          // Update editable query with the generated Scryfall query if available (even on error)
-          if (errorData.scryfallQuery && page === 1) {
+            if (errorData.scryfallQuery && page === 1) {
             setEditableQuery(errorData.scryfallQuery);
           }
           return;
@@ -137,7 +136,6 @@ export default function SearchPage() {
         setResults(data as SearchResponse);
         setCurrentPage(data.page);
         setPageInput(String(data.page));
-        // Update editable query with the generated Scryfall query (only on first page)
         if (page === 1) {
           setEditableQuery(data.scryfallQuery);
         }
@@ -151,17 +149,14 @@ export default function SearchPage() {
     [pathname, router, searchParams]
   );
 
-  // Load random examples on mount
   useEffect(() => {
     setExampleQueries(getRandomExamples(4));
   }, []);
 
-  // Fetch symbol data once on mount
   useEffect(() => {
     fetchSymbolData();
   }, []);
 
-  // Sync initial search with URL (q= or /search/:slug)
   useEffect(() => {
     const urlQuery = getQueryFromUrl().trim();
     if (!urlQuery || urlQuery === lastUrlQueryRef.current) {
@@ -241,17 +236,14 @@ export default function SearchPage() {
   };
 
 
-  // Scroll to query section when results change (after loading completes)
   useEffect(() => {
     if (results && !loading) {
-      // Small delay to ensure DOM is updated
+      // Small delay to ensure DOM is updated before scrolling
       setTimeout(() => {
-        // Scroll to the query display section if it exists
         const queryElement = document.getElementById("query-display");
         if (queryElement) {
           queryElement.scrollIntoView({ behavior: "smooth", block: "start" });
         } else {
-          // Fallback: scroll to results section or top
           const resultsElement = document.getElementById("results-section");
           if (resultsElement) {
             resultsElement.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -282,14 +274,12 @@ export default function SearchPage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-blue-50/50 via-white to-white px-3 py-6 dark:from-gray-950 dark:via-gray-950 dark:to-gray-950 sm:px-6 sm:py-10 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        {/* Theme Toggle - Top Right */}
         <div className="mb-4 flex justify-end">
           <ThemeToggle />
         </div>
 
         <section className="relative overflow-hidden rounded-2xl border border-gray-200/80 bg-gradient-to-b from-white to-blue-50/30 px-4 py-6 shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_20px_60px_-20px_rgba(59,130,246,0.08),0_8px_24px_-8px_rgba(0,0,0,0.06)] dark:border-gray-800/60 dark:from-gray-950/80 dark:to-gray-900/60 dark:shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_20px_60px_-30px_rgba(15,23,42,0.9)] sm:rounded-3xl sm:px-10 sm:py-14">
           <div className="relative">
-            {/* Header */}
             <div className="text-center">
               <Link
                 href="/"
@@ -304,7 +294,6 @@ export default function SearchPage() {
               </p>
             </div>
 
-            {/* Search Form */}
             <form onSubmit={handleSubmit} className="mt-5 sm:mt-8">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                 <input
@@ -329,7 +318,6 @@ export default function SearchPage() {
               </div>
             </form>
 
-            {/* Example Chips */}
             {exampleQueries.length > 0 && (
               <div className="mt-4 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide sm:mx-0 sm:mt-6 sm:flex-wrap sm:justify-center sm:px-0">
                 {exampleQueries.map((example, index) => (
@@ -348,8 +336,7 @@ export default function SearchPage() {
         </section>
 
         {/* Static intro content - hidden during search */}
-        {!loading && !results && !editableQuery && (
-        <section className="mb-8 mt-6 text-base text-gray-700 dark:text-gray-400 sm:mb-10 sm:mt-10">
+        {!loading && !results && !editableQuery && (        <section className="mb-8 mt-6 text-base text-gray-700 dark:text-gray-400 sm:mb-10 sm:mt-10">
           <div className="mx-auto max-w-4xl text-center">
             <p className="text-base font-medium text-gray-800 dark:text-gray-200 sm:text-lg">
               Find That Card is a Magic: The Gathering search tool that lets you describe cards in
@@ -404,8 +391,7 @@ export default function SearchPage() {
         </section>
         )}
 
-        {/* Ad Space / Adblock Message */}
-        {trimmedQuery && (
+        {/* Ad Space / Adblock Message */}        {trimmedQuery && (
           <div className="mb-8 flex justify-center">
             {adBlockDetected ? (
               <div className="w-full max-w-2xl rounded-lg border border-gray-300 bg-gray-50/50 p-4 text-center dark:border-gray-700 dark:bg-gray-900/50">
@@ -424,7 +410,6 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* Query Display - Editable */}
         {(editableQuery || sourceQuery || results) && !loading && (
           <div id="query-display" className="relative z-50 mb-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -493,7 +478,6 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* Error State */}
         {error && (
           <div className="mb-6 rounded-lg border border-red-300 bg-red-50/30 p-4 text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
             <p className="font-medium">Error</p>
@@ -501,7 +485,6 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* Loading State */}
         {loading && (
           <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600 dark:border-gray-700 dark:border-t-blue-500"></div>
@@ -516,7 +499,6 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* Results */}
         {results && (
           <div id="results-section" className="mb-10">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-gray-200 bg-gray-50/40 px-3 py-2.5 text-sm text-gray-700 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] dark:border-gray-800/70 dark:bg-gray-900/40 dark:text-gray-300 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] sm:mb-5 sm:gap-3 sm:px-4 sm:py-3 sm:text-base">
@@ -542,7 +524,6 @@ export default function SearchPage() {
                     const cardCount = results.cards.length;
 
                     results.cards.forEach((card, index) => {
-                      // Add the card
                       items.push(
                         <CardCard
                           key={card.id}
@@ -604,7 +585,6 @@ export default function SearchPage() {
                   })()}
                 </div>
 
-                {/* Pagination Controls */}
                 {(results.has_more || results.page > 1) && (
                   <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:mt-8 sm:gap-4">
                     <div className="flex w-full items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-gray-50/40 px-3 py-3 text-base text-gray-700 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] dark:border-gray-800/70 dark:bg-gray-900/40 dark:text-gray-300 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] sm:w-auto sm:gap-4 sm:px-4">
@@ -694,7 +674,6 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* Footer */}
         <footer className="mt-10 border-t border-gray-200 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] text-center text-xs text-gray-500 dark:border-gray-800 sm:mt-16 sm:pt-8 sm:pb-24 sm:text-sm">
           <p>
             Unofficial fan content. Card data and images from{" "}
@@ -729,10 +708,8 @@ export default function SearchPage() {
         </footer>
       </div>
 
-      {/* Cookie Consent Banner */}
       <CookieBanner />
 
-      {/* Card Detail Panel */}
       {selectedCard && (
         <CardDetailPanel
           key={selectedCard.id}
@@ -741,7 +718,6 @@ export default function SearchPage() {
         />
       )}
 
-      {/* Bug Report Button */}
       <BugReportButton userQuery={sourceQuery} scryfallQuery={editableQuery} />
     </main>
   );

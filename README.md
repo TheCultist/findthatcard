@@ -1,32 +1,62 @@
 # Find That Card
 
-A single-page web application that converts natural language queries into Scryfall search queries using OpenAI, and displays Magic: The Gathering card results in a clean, responsive interface.
+A Magic: The Gathering card search tool that converts natural language queries into Scryfall search queries using a multi-phase NLP pipeline, and displays results in a clean, responsive interface.
 
 **Live at:** [findthat.card](https://findthat.card)
 
 ## Features
 
 - **Natural Language Search**: Describe what you're looking for in plain English
-- **Direct Scryfall Query Support**: Enter Scryfall queries directly (e.g., `t:creature c:r`) - the app detects and uses them without conversion
-- **Editable Query Field**: View and edit the generated Scryfall query to refine your search or learn the syntax
-- **Pagination**: Navigate through search results with Previous/Next buttons (60 cards per page)
-- **Example Query Chips**: Click random example queries displayed as chips to quickly try different searches
+- **Multi-Phase Search Pipeline**: Deterministic NLP parser handles colors, formats, types, keywords, and strategies before falling back to AI for unresolved fragments
+- **Direct Scryfall Query Support**: Enter Scryfall queries directly (e.g., `t:creature c:r`) — the app detects and passes them through without conversion
+- **Editable Query Field**: View and edit the generated Scryfall query as tokenized chips or raw text
 - **Scryfall Tagger Support**: Native support for art and function tags from [Scryfall Tagger](https://tagger.scryfall.com)
   - Art tags: `art:`, `atag:`, `arttag:` (e.g., `art:dragon`, `art:"black cat"`)
   - Function tags: `function:`, `otag:`, `oracletag:` (e.g., `function:removal`, `function:card-advantage`)
-- **Query Transparency**: See the generated Scryfall query for learning purposes
-- **View on Scryfall**: Open search results directly on Scryfall.com with one click
-- **Buy Links**: Optional CardTrader and TCGPlayer affiliate buttons per card
-- **Responsive Design**: Works beautifully on desktop, tablet, and mobile
-- **Fast & Clean**: Minimal dependencies, optimized for performance
+- **Similar Card Search**: Find cards similar to a named card, including art-alike search via Tagger data
+- **Pagination**: 60 cards per page with Previous/Next and jump-to-page controls
+- **Card Detail Panel**: Tap any card to open a full detail sheet with legalities, keywords, and buy links
+- **Buy Links**: CardTrader and TCGPlayer affiliate buttons per card, with 404-fallback handling
+- **Example Query Chips**: 350+ example queries shown as random chips on each load
+- **Pro Tips**: Rotating tips displayed during search loading
+- **Responsive Design**: Works on desktop, tablet, and mobile with swipe-to-dismiss on mobile panels
+- **Dark Mode**: System-aware with manual toggle, persisted to localStorage
 
 ## Tech Stack
 
-- **Next.js 14+** (App Router)
+- **Next.js 15** (App Router, Turbopack in dev)
 - **TypeScript**
 - **Tailwind CSS**
-- **OpenAI API** (for natural language → Scryfall query conversion)
-- **Scryfall API** (for card data)
+- **OpenAI API** — used only for unresolved query fragments and Phase 0 normalization
+- **Scryfall API** — card data, catalogs, sets, and symbology
+- **Scryfall Tagger** — art and function tag data (scraped/cached)
+- **Resend** — bug report emails
+
+## How It Works
+
+### Search Pipeline
+
+Queries go through a multi-phase pipeline before hitting Scryfall:
+
+1. **Phase 0 — Normalization** *(optional)*: An LLM call detects structurally ambiguous queries (e.g., missing connectors like "and/or") and rewrites them into unambiguous form. Most queries skip this phase.
+
+2. **Phase 1 — Deterministic NLP Parser**: A large rule-based parser handles the majority of queries without any LLM calls. It extracts:
+   - Colors and color identities (including 2- and 3-color guild/shard/wedge names)
+   - Formats (Standard, Modern, Commander, Pauper, etc.)
+   - Card types and subtypes (matched against live Scryfall catalog indexes)
+   - MTG keyword abilities (Flying, Trample, etc.) with synonym expansion
+   - Tagger function/art tags via strategy expansions
+   - Artist names, set names, and CMC filters
+
+3. **Phase 2 — Fragment Resolver** *(LLM, optional)*: Any parts of the query that Phase 1 couldn't parse become "unresolved fragments" and are sent to an LLM with a focused resolver prompt. Results are merged back into the IR.
+
+4. **Phase 3 — Finalization**: Post-processing injects archetype tags, suppresses redundant type filters, adds game filters, and validates the assembled query.
+
+5. **Bypasses**: Queries detected as "find cards similar to X" or "cards with art like X" skip the pipeline and go through dedicated resolvers that use Tagger GraphQL data.
+
+### Query Assembly
+
+The pipeline produces an intermediate representation (IR) that is assembled into a Scryfall query string. The editable query field and token preview both show this final Scryfall query.
 
 ## Local Development
 
@@ -37,25 +67,21 @@ A single-page web application that converts natural language queries into Scryfa
 
 ### Setup
 
-1. **Clone the repository** (or navigate to the project directory)
+1. **Clone the repository**
 
 2. **Install dependencies**:
    ```bash
    npm install
-   # or
-   yarn install
-   # or
-   pnpm install
    ```
 
 3. **Set up environment variables**:
-   
+
    Copy `.env.example` to `.env.local`:
    ```bash
    cp .env.example .env.local
    ```
-   
-   Edit `.env.local` and add your OpenAI API key:
+
+   Edit `.env.local`:
    ```env
    OPENAI_API_KEY=your_openai_api_key_here
    SCRYFALL_USER_AGENT=find-that-card/1.0 (+https://findthat.card)
@@ -64,35 +90,29 @@ A single-page web application that converts natural language queries into Scryfa
 
 4. **(Optional) Configure affiliate links**:
    ```env
-   # CardTrader share code (used for CardTrader buttons)
-   NEXT_PUBLIC_CARDTRADER_SHARE_CODE=thecultist
-   # TCGPlayer partner link (used for TCGPlayer buttons)
+   NEXT_PUBLIC_CARDTRADER_SHARE_CODE=your_share_code
    TCG_PLAYER_PARTNER_LINK=https://partner.tcgplayer.com/XXXXXXXX
    ```
 
 5. **Run the development server**:
    ```bash
    npm run dev
-   # or
-   yarn dev
-   # or
-   pnpm dev
    ```
 
-6. **Open your browser**:
-   
-   Navigate to [http://localhost:3000](http://localhost:3000)
+6. Open [http://localhost:3000](http://localhost:3000)
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `OPENAI_API_KEY` | Yes | - | Your OpenAI API key |
-| `SCRYFALL_USER_AGENT` | No | `find-that-card/1.0` | User-Agent string for Scryfall API requests |
-| `OPENAI_MODEL` | No | `gpt-4.1-mini` | OpenAI model to use for query conversion |
-| `NEXT_PUBLIC_CARDTRADER_SHARE_CODE` | No | `thecultist` | CardTrader share code used for buy links |
-| `TCG_PLAYER_PARTNER_LINK` | No | - | TCGPlayer partner link base URL |
-| `NEXT_PUBLIC_TCG_PLAYER_PARTNER_LINK` | No | - | Client-exposed TCGPlayer partner link (optional) |
+| `OPENAI_API_KEY` | Yes | — | OpenAI API key |
+| `SCRYFALL_USER_AGENT` | No | `find-that-card/1.0` | User-Agent for Scryfall API requests |
+| `OPENAI_MODEL` | No | `gpt-4.1-mini` | OpenAI model for query conversion |
+| `NEXT_PUBLIC_CARDTRADER_SHARE_CODE` | No | `thecultist` | CardTrader share code for buy links |
+| `TCG_PLAYER_PARTNER_LINK` | No | — | TCGPlayer partner link base URL |
+| `CRON_SECRET` | No | — | Secret for Vercel cron job authentication |
+| `RESEND_API_KEY` | No | — | Resend API key for bug report emails |
+| `BUG_REPORT_TO_EMAIL` | No | — | Recipient address for bug reports |
 
 ## Testing
 
@@ -101,130 +121,128 @@ npm run test:queries
 npm run lint
 ```
 
+The test suite (`lib/search-pipeline/search-pipeline.test.ts`) contains 50+ assertion-based tests covering the full pipeline.
+
+## Project Structure
+
+```
+findthatcard/
+├── app/
+│   ├── page.tsx                    # Home page (wraps SearchPage in Suspense)
+│   ├── layout.tsx                  # Root layout: fonts, metadata, analytics
+│   ├── globals.css                 # Tailwind base + custom utilities
+│   ├── about/page.tsx
+│   ├── privacy/page.tsx
+│   ├── search/
+│   │   ├── page.tsx                # /search?q=... with dynamic metadata
+│   │   └── [slug]/page.tsx        # /search/query-slug SEO-friendly URL
+│   ├── components/
+│   │   ├── SearchPage.tsx          # Main client component: all search UI state
+│   │   ├── CardCard.tsx            # Card thumbnail grid cell with flip, buy buttons
+│   │   ├── CardDetailPanel.tsx     # Mobile-friendly modal sheet for card details
+│   │   ├── ManaCost.tsx            # Renders {W}{U}{B}{R}{G} as SVG symbols
+│   │   ├── OracleText.tsx          # Renders oracle text with inline mana symbols
+│   │   ├── KeywordWithTooltip.tsx  # Keyword badge with hover tooltip
+│   │   ├── QueryTokenPreview.tsx   # Tokenized Scryfall query display
+│   │   ├── ThemeToggle.tsx         # Light/dark mode toggle
+│   │   ├── ScrollToTop.tsx         # Floating back-to-top button
+│   │   ├── CookieBanner.tsx        # GDPR cookie consent banner
+│   │   ├── BugReportButton.tsx     # Floating bug report → email via Resend
+│   │   └── AdBanner.tsx            # Google AdSense banner
+│   ├── hooks/
+│   │   └── useAdBlockDetection.ts
+│   └── api/
+│       ├── search/route.ts         # POST /api/search — main search endpoint
+│       ├── card/[id]/route.ts      # GET /api/card/:id — full card from Scryfall
+│       ├── sets/route.ts
+│       ├── catalogs/route.ts
+│       ├── keywords/route.ts
+│       ├── keyword-definitions/route.ts
+│       ├── check-link/route.ts     # HEAD-checks CardTrader links before navigation
+│       ├── report-bug/route.ts     # Sends bug reports via Resend
+│       └── cron/midnight/route.ts  # Vercel cron job (daily cache refresh)
+├── lib/
+│   ├── search-pipeline/
+│   │   ├── types.ts                # IR types: SearchPipelineIR, QueryIntent, etc.
+│   │   ├── runSearchPipeline.ts    # Orchestrates Phase 0–3 + bypasses
+│   │   ├── assembleQuery.ts        # IR → Scryfall query string
+│   │   ├── similar-cards.ts        # Similar-card and art-like resolvers
+│   │   ├── phase0/normalizeQuery.ts
+│   │   ├── phase1/parseNaturalQuery.ts   # ~3000-line deterministic NLP parser
+│   │   ├── phase2/
+│   │   │   ├── buildResolverPrompt.ts
+│   │   │   └── resolveUnresolvedFragments.ts
+│   │   ├── phase3/finalizeQuery.ts
+│   │   └── search-pipeline.test.ts
+│   ├── scryfall/
+│   │   ├── client.ts               # Pagination math, multi-page fetching
+│   │   ├── query-converter.ts      # Legacy converter + archetype registry
+│   │   ├── response-transformer.ts # Alchemy substitution, TCGPlayer links
+│   │   ├── symbols.ts              # Mana symbol SVG cache
+│   │   ├── lookup.ts               # Fuzzy card lookup via /cards/named
+│   │   ├── catalogs.ts             # Daily-refreshed catalog cache
+│   │   ├── sets.ts                 # Set cache + set filter resolution
+│   │   ├── catalog-index.ts        # In-memory indexes for fuzzy subtype matching
+│   │   └── tagger-graphql.ts       # Tagger GraphQL API (CSRF + session)
+│   ├── prompts/
+│   │   ├── system.ts               # Dynamic system prompt
+│   │   ├── user.ts                 # User prompt + tag context formatting
+│   │   ├── promptModules.ts        # Modular prompt packs with selectPacks()
+│   │   └── regeneration.ts         # Regeneration prompt for invalid-tag fallback
+│   ├── tagger/
+│   │   ├── cache.ts                # Fetches/caches art: and function: tags
+│   │   ├── context.ts              # Narrows relevant tags for the current query
+│   │   └── validation.ts           # Tag extraction and validation
+│   ├── strategies/
+│   │   └── oracletagStrategies.ts  # Strategy → oracletag expansion map
+│   ├── cardtrader/links.ts
+│   ├── tcgplayer/links.ts
+│   ├── mtg-keywords.ts             # Keyword cache + filter injection
+│   ├── query-tokens.ts             # Scryfall query tokenizer for QueryTokenPreview
+│   ├── example-queries.ts          # 350+ example query strings
+│   ├── pro-tips.ts                 # Tips shown during loading
+│   ├── cache-paths.ts              # /tmp on serverless, ./data locally
+│   └── commander-context.ts        # "my commander" color identity resolution
+├── types/
+│   └── scryfall.ts                 # ScryfallCard, CardResult, SearchResponse, etc.
+├── data/
+│   ├── mtg-keywords.json
+│   ├── mtg-keyword-reminders.json
+│   └── scryfall-catalogs.json
+└── vercel.json                     # Cron job: /api/cron/midnight at 0 0 * * *
+```
+
 ## Deployment to Vercel
 
-This project is optimized for Vercel deployment:
+1. Push your code to GitHub
+2. Import the repository at [vercel.com](https://vercel.com)
+3. Add environment variables in Vercel project settings
+4. Deploy — Next.js App Router is detected automatically
 
-1. **Push your code to GitHub** (or your preferred Git provider)
-
-2. **Import your project in Vercel**:
-   - Go to [vercel.com](https://vercel.com)
-   - Click "Add New Project"
-   - Import your repository
-
-3. **Add environment variables**:
-   - In the Vercel project settings, go to "Environment Variables"
-   - Add `OPENAI_API_KEY` with your API key
-   - Optionally add `SCRYFALL_USER_AGENT` and `OPENAI_MODEL`
-
-4. **Deploy**:
-   - Vercel will automatically detect Next.js and deploy
-   - Your app will be live at `https://your-project.vercel.app`
-
-### Vercel Configuration Notes
-
-- No special configuration needed - Next.js App Router works out of the box
-- Serverless functions are automatically configured
-- Environment variables are securely stored and injected at runtime
+The `CRON_SECRET` env var is required for the midnight cron job. Set it in Vercel and it will be validated against the `Authorization` header sent by Vercel Cron.
 
 ## Usage Examples
 
 ### Natural Language Queries
 
 - `"white creatures"`
-- `"blue instant spells"`
-- `"cards with dragons in the art"`
+- `"Dimir removal spells for Commander"`
 - `"cards with a black cat in the art"`
-- `"removal spells"`
-- `"Dimir removal spells"`
-- `"modern legal cards with sword art"`
-- `"commander legal cards"`
-- `"pauper removal"`
+- `"modern legal artifacts that draw cards"`
+- `"aristocrats payoffs in black"`
 
-### Tagger Tag Examples
+### Tagger Tag Queries
 
-The app displays 5 random example query chips on each page load from a pool of 200+ examples. These include:
-- Natural language queries (e.g., "Dimir removal spells for Commander")
-- Art tag queries (e.g., `art:black cat`, `art:sword`)
-- Function tag queries (e.g., `function:removal`, `function:card-advantage`)
-- Format-specific queries (e.g., "Modern legal cards", "Pauper removal")
-- Color identity queries (e.g., "Boros board wipes", "Simic ramp")
+- `art:dragon` — cards with dragon artwork
+- `function:removal` — cards tagged as removal
+- `id:ub function:removal t:instant` — Dimir instant removal
 
-You can also combine Tagger tags with regular Scryfall syntax:
-- `id:ub function:removal t:instant` - Dimir instant removal spells
-- `c:w t:creature art:angel` - White creatures with angel art
-- `f:modern art:sword` - Modern-legal cards with sword art
-
-**Note**: You can enter Scryfall queries directly - the app will detect them and skip OpenAI conversion.
-
-## Project Structure
-
-```
-find-that-card/
-├── app/
-│   ├── page.tsx                 # Main UI page with search form, results, pagination
-│   ├── layout.tsx               # Root layout with metadata
-│   ├── globals.css              # Tailwind imports + base styles
-│   └── api/
-│       └── search/
-│           └── route.ts         # POST endpoint for search (handles pagination)
-├── lib/
-│   ├── utils.ts                 # Validation & utility functions
-│   ├── prompts.ts               # OpenAI system prompts for query conversion
-│   └── example-queries.ts       # Pool of 200+ example queries for random chips
-├── types/
-│   └── scryfall.ts              # TypeScript types for Scryfall API
-├── package.json
-├── tsconfig.json
-├── tailwind.config.ts
-├── postcss.config.js
-├── next.config.js
-└── README.md
-```
-
-## How It Works
-
-1. **User Input**: User enters a natural language query (e.g., "cards with dragons in the art") or a direct Scryfall query (e.g., `t:creature c:r`)
-
-2. **Query Detection**: The app checks if the input is already a Scryfall query (contains operators like `:`, `t:`, `c:`, `art:`, etc.)
-   - If it's a Scryfall query, it's used directly without conversion
-   - If it's natural language, it proceeds to conversion
-
-3. **Query Conversion**: For natural language queries, the app sends the query to OpenAI with a carefully crafted system prompt that:
-   - Converts natural language to Scryfall query syntax
-   - Handles Tagger tags (`art:`, `function:`, etc.)
-   - Supports complex combinations of criteria
-   - Provides safe fallbacks for vague queries
-
-4. **Scryfall Search**: The Scryfall query is sent to the Scryfall API with proper headers and pagination support (60 cards per page)
-
-5. **Results Display**: Cards are displayed in a responsive grid with:
-   - Card images (when available)
-   - Name and mana cost
-   - Type line
-   - Oracle text (clamped)
-   - Click to open full card on Scryfall
-   - Pagination controls (Previous/Next) when there are multiple pages
-   - Total card count and current page information
-
-6. **Query Editing**: After a search, users can:
-   - View the generated Scryfall query in an editable field
-   - Modify the query directly to refine results
-   - Click "Search" to execute the edited query
-   - Click "View on Scryfall" to open the query on Scryfall.com
-
-## Tagger Tag Support
-
-This app natively supports [Scryfall Tagger](https://tagger.scryfall.com) tags, which allow searching by:
-- **Art tags**: Search by what's depicted in card art (`art:dragon`, `art:"black cat"`)
-- **Function tags**: Search by card function/effect (`function:removal`, `function:ramp`)
-
-The AI conversion automatically recognizes when users want to search by art or function and generates the appropriate Tagger query operators.
+You can also combine Tagger tags with regular Scryfall syntax directly — the app passes them through without conversion.
 
 ## Legal & Attribution
 
-Unofficial fan content. Card data and images come from [Scryfall](https://scryfall.com) and community tags from [Scryfall Tagger](https://tagger.scryfall.com). This project is not endorsed by Wizards of the Coast or Scryfall.
+Unofficial fan content. Card data and images from [Scryfall](https://scryfall.com) and community tags from [Scryfall Tagger](https://tagger.scryfall.com). Not endorsed by Wizards of the Coast or Scryfall.
 
 ## License
 
-MIT License - feel free to use this project as a starting point for your own MTG tools!
+MIT

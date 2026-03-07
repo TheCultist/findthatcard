@@ -3,7 +3,7 @@ import { normalizeQuery } from "@/lib/search-pipeline/phase0/normalizeQuery";
 import { parseNaturalQuery } from "@/lib/search-pipeline/phase1/parseNaturalQuery";
 import { resolveUnresolvedFragments } from "@/lib/search-pipeline/phase2/resolveUnresolvedFragments";
 import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
-import { resolveSimilarCardsQuery } from "@/lib/search-pipeline/similar-cards";
+import { resolveArtLikeCardsQuery, resolveSimilarCardsQuery } from "@/lib/search-pipeline/similar-cards";
 import { PREFER_BEST_PREFIX } from "@/lib/scryfall/query-converter";
 
 function isPipelineDebugEnabled(): boolean {
@@ -85,6 +85,54 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
     // Resolution failed (card not in Scryfall or no usable signals) — fall
     // back to a direct name search so the user at least sees the card itself.
     const fallbackQuery = `name:"${phase1.similarToCardName}"`;
+    const fallbackForScryfall = `${PREFER_BEST_PREFIX}${fallbackQuery}`;
+    logPipelineSummary({
+      original: naturalQuery,
+      afterPhase0: phase0.normalized,
+      afterPhase3: fallbackForScryfall,
+    });
+    return {
+      queryForScryfall: fallbackForScryfall,
+      queryForLogs: fallbackQuery,
+      normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
+      debug: {
+        unresolvedFragments: 0,
+        aiBatchCalls: 0,
+        aiSequentialCalls: 0,
+        invalidTagsRemoved: 0,
+        phase0Normalized: phase0.didNormalize,
+      },
+    };
+  }
+
+  // "art like X" — bypass the normal pipeline and build a query from the
+  // named card's illustration tags (art:) from the Scryfall Tagger.
+  if (phase1.intent === "art-like-cards" && phase1.artLikeCardName) {
+    const artQuery = await resolveArtLikeCardsQuery(phase1.artLikeCardName);
+
+    if (artQuery) {
+      const queryForScryfall = `${PREFER_BEST_PREFIX}${artQuery}`;
+      logPipelineSummary({
+        original: naturalQuery,
+        afterPhase0: phase0.normalized,
+        afterPhase3: queryForScryfall,
+      });
+      return {
+        queryForScryfall,
+        queryForLogs: artQuery,
+        normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
+        debug: {
+          unresolvedFragments: 0,
+          aiBatchCalls: 0,
+          aiSequentialCalls: 0,
+          invalidTagsRemoved: 0,
+          phase0Normalized: phase0.didNormalize,
+        },
+      };
+    }
+
+    // Fallback: no art tags found — return a plain name search.
+    const fallbackQuery = `name:"${phase1.artLikeCardName}"`;
     const fallbackForScryfall = `${PREFER_BEST_PREFIX}${fallbackQuery}`;
     logPipelineSummary({
       original: naturalQuery,

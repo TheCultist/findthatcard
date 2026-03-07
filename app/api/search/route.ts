@@ -13,7 +13,6 @@ import { runSearchPipeline } from "@/lib/search-pipeline/runSearchPipeline";
  */
 export async function POST(request: NextRequest) {
   try {
-    // Validate API key
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json<ErrorResponse>(
         { error: "OpenAI API key is not configured" },
@@ -21,7 +20,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Parse and validate request body
     let body: SearchRequest;
     try {
       body = await request.json();
@@ -40,7 +38,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get page number (default to 1)
     const page = Math.max(1, body.page || 1);
 
     let scryfallQuery: string | undefined;
@@ -58,11 +55,9 @@ export async function POST(request: NextRequest) {
       throw conversionError;
     }
 
-    // Execute Scryfall search
     try {
       const { response: scryfallResponse, offset } = await searchScryfall(scryfallQuery, page);
 
-      // Transform response
       const response: SearchResponse = await transformScryfallResponse(
         scryfallQuery,
         page,
@@ -72,7 +67,6 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json<SearchResponse>(response);
     } catch (scryfallError) {
-      // If Scryfall search fails, attempt a best-effort response
       console.error("Scryfall search error:", scryfallError);
       const errorMessage = formatErrorMessage(scryfallError);
 
@@ -96,12 +90,8 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error("Search API error:", error);
-    
     const errorMessage = formatErrorMessage(error);
-    
-    // Check if it's a Scryfall error (502) or other error (500)
     const status = errorMessage.includes("Scryfall") ? 502 : 500;
-    
     return NextResponse.json<ErrorResponse>(
       { error: errorMessage },
       { status }

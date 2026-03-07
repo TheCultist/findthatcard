@@ -19,7 +19,6 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
   
   const hasFaces = card.card_faces && card.card_faces.length > 1;
   
-  // Determine which image to show based on active face
   const getImageSrc = () => {
     if (hasFaces && card.card_faces![activeFaceIndex].image_uris) {
       const faceImage = card.card_faces![activeFaceIndex].image_uris;
@@ -30,7 +29,6 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
   
   const [imageSrc, setImageSrc] = useState(() => getImageSrc());
 
-  // Update image when face changes
   useEffect(() => {
     const newSrc = getImageSrc();
     setImageSrc(newSrc);
@@ -50,11 +48,9 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
     e.stopPropagation();
     if (hasFaces && !isFlipping) {
       setIsFlipping(true);
-      // Change face halfway through the flip animation
       setTimeout(() => {
         setActiveFaceIndex((prev) => (prev + 1) % card.card_faces!.length);
       }, 150);
-      // Reset flip state after animation completes
       setTimeout(() => {
         setIsFlipping(false);
       }, 300);
@@ -72,7 +68,6 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
       card.collector_number
     );
 
-    // Check if link is 404
     setIsCheckingLink(true);
     try {
       const response = await fetch(`/api/check-link?url=${encodeURIComponent(cardtraderUrl)}`);
@@ -87,7 +82,6 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
         window.open(cardtraderUrl, "_blank", "noopener,noreferrer");
       }
     } catch (error) {
-      // On error, assume 404 and redirect to homepage
       console.error("[CardCard] Error checking CardTrader link:", error);
       const homepageUrl = getCardTraderHomepageLink();
       window.open(homepageUrl, "_blank", "noopener,noreferrer");
@@ -110,7 +104,6 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
       onClick={handleClick}
       className="group cursor-pointer rounded-lg border border-gray-200 bg-gray-50 p-2 transition-all hover:border-gray-300 hover:shadow-lg hover:shadow-blue-500/10 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 sm:p-4"
     >
-      {/* Card Image */}
       {imageSrc && !imageFailed ? (
         <div className="mb-2 aspect-[5/7] overflow-hidden rounded border border-gray-300 bg-gray-100 relative dark:border-gray-800 dark:bg-gray-950 sm:mb-3">
           <div className={`w-full h-full transition-all duration-300 ${isFlipping ? 'scale-x-0 opacity-0' : 'scale-x-100 opacity-100'}`}>
@@ -130,7 +123,6 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
               }}
             />
           </div>
-          {/* Flip button for double-faced cards */}
           {hasFaces && (
             <button
               onClick={handleFlipClick}
@@ -162,7 +154,6 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
         </div>
       )}
 
-      {/* Card Name & Mana Cost */}
       <div className="mb-2 flex items-start justify-between gap-1 sm:mb-3 sm:gap-2">
         <h3 className="flex-1 min-w-0 text-xs font-semibold text-gray-900 group-hover:text-blue-600 line-clamp-2 dark:text-gray-100 dark:group-hover:text-blue-400 sm:text-base sm:pr-2">
           {card.name}
@@ -180,7 +171,6 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
         Buy this card
       </div>
       <div className="mt-1 flex gap-1.5 sm:mt-2 sm:gap-2">
-        {/* CardTrader Affiliate Link */}
         <a
           href={getCardTraderLink(
             card.name,
@@ -210,7 +200,6 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
           />
         </a>
 
-        {/* TCGPlayer Link */}
         <a
           href={tcgPlayerUrl || "#"}
           target="_blank"
