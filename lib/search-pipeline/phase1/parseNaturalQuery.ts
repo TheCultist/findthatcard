@@ -2192,6 +2192,86 @@ function detectSimilarToCardQuery(naturalQuery: string): { cardName: string } | 
   return null;
 }
 
+/**
+ * Detects queries where the user wants cards that synergize with a specific
+ * named card — e.g. "cards that synergize with Glarb", "what goes well with
+ * Atraxa", "combo pieces for Korvold".
+ *
+ * Must run AFTER the art-like and similar-to detectors so that phrases like
+ * "cards like X" are handled by the more specific detector first.
+ */
+function detectSynergyWithCardQuery(naturalQuery: string): { cardName: string } | null {
+  if (!hasCardNameIndex()) return null;
+
+  const SYNERGY_PATTERNS: RegExp[] = [
+    // "cards that synergize with X", "synergize with X", "synergizes with X"
+    /\bsynerg(?:ize|izes|izing|y|ies)\s+with\s+([\s\S]+)/i,
+    // "cards that go well with X", "goes well with X"
+    /\bgo(?:es)?\s+well\s+with\s+([\s\S]+)/i,
+    // "cards that pair well with X", "pairs well with X"
+    /\bpairs?\s+(?:well\s+)?with\s+([\s\S]+)/i,
+    // "cards that work well with X", "works well with X"
+    /\bworks?\s+(?:well\s+)?with\s+([\s\S]+)/i,
+    // "combo pieces for X", "combos with X"
+    /\bcombo\s+(?:pieces?\s+(?:for|with)|with)\s+([\s\S]+)/i,
+    // "what combos with X"
+    /\bcombos?\s+with\s+([\s\S]+)/i,
+    // "cards that support X" (where X is a card name, not a concept)
+    /\b(?:cards?\s+(?:that\s+)?)?support\s+(?:for\s+)?([\s\S]+)/i,
+    // "build around X"
+    /\bbuild\s+around\s+([\s\S]+)/i,
+    // "cards for X deck" / "cards for a X deck"
+    /\bcards?\s+for\s+(?:an?\s+)?([\s\S]+?)\s+deck\b/i,
+    // "good with X", "good in X" (card name)
+    /\bgood\s+(?:with|in)\s+([\s\S]+)/i,
+  ];
+
+  const CONTEXT_STOPS = new Set([
+    "in", "for", "from", "on", "at", "is", "are", "was", "were", "but",
+    "which", "that", "where", "when", "if", "to",
+  ]);
+
+  for (const pattern of SYNERGY_PATTERNS) {
+    const match = naturalQuery.match(pattern);
+    if (!match) continue;
+
+    const rawText = match[1].trim();
+    const words = rawText
+      .toLowerCase()
+      .replace(/[^a-z0-9'\s-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    // Pass 1 — greedy longest exact catalog match
+    for (let len = Math.min(words.length, 8); len >= 1; len--) {
+      const candidate = words.slice(0, len).join(" ");
+      const canonical = lookupCardName(candidate);
+      if (canonical) {
+        return { cardName: canonical };
+      }
+    }
+
+    // Pass 2 — prefix lookup up to first context stop-word
+    const nameWords: string[] = [];
+    for (const w of words) {
+      if (CONTEXT_STOPS.has(w)) break;
+      nameWords.push(w);
+      if (nameWords.length >= 6) break;
+    }
+    if (nameWords.length > 0) {
+      const prefixCandidate = nameWords.join(" ");
+      const canonical = lookupCardNameByPrefix(prefixCandidate);
+      if (canonical) {
+        return { cardName: canonical };
+      }
+    }
+  }
+
+  return null;
+}
+
 export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Result> {
   const tokenizedQuery = tokenizeNaturalQuery(naturalQuery);
   const strippedTerms: string[] = [];
@@ -2259,6 +2339,31 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       naturalQuery,
       intent: "similar-cards",
       similarToCardName: similarToResult.cardName,
+      tokenizedQuery,
+      noiseTokens: [],
+      mustClauses: [],
+      shouldClauses: [],
+      mustNotClauses: [],
+      unresolvedFragments: [],
+      resolvedFragments: [],
+      debug: {
+        strippedTerms: [],
+        aiBatchCalls: 0,
+        aiSequentialCalls: 0,
+        invalidTagsRemoved: 0,
+        phase0Normalized: false,
+      },
+    };
+  }
+
+  // Early exit: "cards that synergize with X" / "pairs well with X" / etc.
+  // Must run after similar-to so "cards like X" is handled there, not here.
+  const synergyWithResult = detectSynergyWithCardQuery(naturalQuery);
+  if (synergyWithResult) {
+    return {
+      naturalQuery,
+      intent: "synergy-with-card",
+      synergyWithCardName: synergyWithResult.cardName,
       tokenizedQuery,
       noiseTokens: [],
       mustClauses: [],

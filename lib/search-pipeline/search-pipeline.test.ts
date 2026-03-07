@@ -961,6 +961,9 @@ async function run() {
   await testCardNameListPartialMatch();
   await testCardNameDoesNotMatchStructuralQuery();
   await testCardsWithSubtype();
+  await testPhase1SynergyWithCardDetectsIntent();
+  await testPhase1SynergyWithCardVariants();
+  await testPhase1SynergyWithCardDoesNotFalsePositive();
   console.log("search-pipeline tests passed");
 }
 
@@ -969,6 +972,52 @@ async function testCardsWithSubtype() {
   const mustValues = parsed.mustClauses.map((c) => c.value);
   assert.ok(mustValues.includes("(t:cat or art:cat)"), `Expected (t:cat or art:cat); got: ${mustValues.join(", ")}`);
   console.log("[PASS] phase1: 'with <subtype>' emits (t:subtype or art:subtype)");
+}
+
+async function testPhase1SynergyWithCardDetectsIntent() {
+  const parsed = await parseNaturalQuery("cards that synergize with lightning bolt");
+  assert.equal(parsed.intent, "synergy-with-card", `expected synergy-with-card, got: ${parsed.intent}`);
+  assert.ok(parsed.synergyWithCardName, "expected synergyWithCardName to be set");
+  assert.equal(
+    parsed.synergyWithCardName!.toLowerCase(),
+    "lightning bolt",
+    `expected card name "lightning bolt", got: "${parsed.synergyWithCardName}"`
+  );
+  console.log("[PASS] phase1: 'synergize with <card>' detects synergy-with-card intent");
+}
+
+async function testPhase1SynergyWithCardVariants() {
+  const variants = [
+    "what goes well with sol ring",
+    "cards that pair well with sol ring",
+    "combo pieces for sol ring",
+    "what works well with sol ring",
+  ];
+  for (const query of variants) {
+    const parsed = await parseNaturalQuery(query);
+    assert.equal(
+      parsed.intent,
+      "synergy-with-card",
+      `"${query}" should detect synergy-with-card, got: ${parsed.intent}`
+    );
+    assert.ok(
+      parsed.synergyWithCardName,
+      `"${query}" should set synergyWithCardName`
+    );
+  }
+  console.log("[PASS] phase1: synergy-with-card intent detected across phrase variants");
+}
+
+async function testPhase1SynergyWithCardDoesNotFalsePositive() {
+  // "artifact synergies" is a concept-synergy query, not a card-name-synergy query.
+  // It should NOT match synergy-with-card because "artifact" is not a card name.
+  const parsed = await parseNaturalQuery("artifact synergies for commander");
+  assert.notEqual(
+    parsed.intent,
+    "synergy-with-card",
+    `"artifact synergies" should NOT match synergy-with-card intent (got: ${parsed.intent})`
+  );
+  console.log("[PASS] phase1: 'artifact synergies' does not false-positive as synergy-with-card");
 }
 
 run().catch((error) => {

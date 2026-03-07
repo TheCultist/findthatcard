@@ -23,7 +23,8 @@ export type QueryIntent =
   | "commander-creature"
   | "direct-scryfall"
   | "similar-cards"
-  | "art-like-cards";
+  | "art-like-cards"
+  | "synergy-with-card";
 
 export type QueryClause = {
   value: string;
@@ -58,6 +59,8 @@ export type SearchPipelineIR = {
   similarToCardName?: string;
   /** Present when intent is "art-like-cards" — the resolved canonical card name. */
   artLikeCardName?: string;
+  /** Present when intent is "synergy-with-card" — the resolved canonical card name. */
+  synergyWithCardName?: string;
   tokenizedQuery: string[];
   noiseTokens: string[];
   mustClauses: QueryClause[];

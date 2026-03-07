@@ -4,6 +4,7 @@ import { parseNaturalQuery } from "@/lib/search-pipeline/phase1/parseNaturalQuer
 import { resolveUnresolvedFragments } from "@/lib/search-pipeline/phase2/resolveUnresolvedFragments";
 import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
 import { resolveArtLikeCardsQuery, resolveSimilarCardsQuery } from "@/lib/search-pipeline/similar-cards";
+import { resolveSynergyQuery } from "@/lib/search-pipeline/synergy-cards";
 import { PREFER_BEST_PREFIX } from "@/lib/scryfall/query-converter";
 
 function isPipelineDebugEnabled(): boolean {
@@ -49,6 +50,12 @@ export type SearchPipelineResult = {
   };
 };
 
+function applyDefaultGameFilter(query: string): string {
+  if (/\b(game|in):(paper|arena|mtgo)\b/i.test(query)) return query;
+  if (/\b-?is:(digital|alchemy|rebalanced)\b/i.test(query)) return query;
+  return `${query} game:paper`;
+}
+
 export async function runSearchPipeline(naturalQuery: string): Promise<SearchPipelineResult> {
   const phase0 = await normalizeQuery(naturalQuery);
   const phase1 = await parseNaturalQuery(phase0.normalized);
@@ -62,7 +69,7 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
     const similarQuery = await resolveSimilarCardsQuery(phase1.similarToCardName);
 
     if (similarQuery) {
-      const queryForScryfall = `${PREFER_BEST_PREFIX}${similarQuery}`;
+      const queryForScryfall = `${PREFER_BEST_PREFIX}${applyDefaultGameFilter(similarQuery)}`;
       logPipelineSummary({
         original: naturalQuery,
         afterPhase0: phase0.normalized,
@@ -111,7 +118,7 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
     const artQuery = await resolveArtLikeCardsQuery(phase1.artLikeCardName);
 
     if (artQuery) {
-      const queryForScryfall = `${PREFER_BEST_PREFIX}${artQuery}`;
+      const queryForScryfall = `${PREFER_BEST_PREFIX}${applyDefaultGameFilter(artQuery)}`;
       logPipelineSummary({
         original: naturalQuery,
         afterPhase0: phase0.normalized,
@@ -133,6 +140,53 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
 
     // Fallback: no art tags found — return a plain name search.
     const fallbackQuery = `name:"${phase1.artLikeCardName}"`;
+    const fallbackForScryfall = `${PREFER_BEST_PREFIX}${fallbackQuery}`;
+    logPipelineSummary({
+      original: naturalQuery,
+      afterPhase0: phase0.normalized,
+      afterPhase3: fallbackForScryfall,
+    });
+    return {
+      queryForScryfall: fallbackForScryfall,
+      queryForLogs: fallbackQuery,
+      normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
+      debug: {
+        unresolvedFragments: 0,
+        aiBatchCalls: 0,
+        aiSequentialCalls: 0,
+        invalidTagsRemoved: 0,
+        phase0Normalized: phase0.didNormalize,
+      },
+    };
+  }
+
+  // "cards that synergize with X" — bypass the normal pipeline; fetch the
+  // named card's oracle text and ask an LLM what Scryfall filters find synergists.
+  if (phase1.intent === "synergy-with-card" && phase1.synergyWithCardName) {
+    const synergyResult = await resolveSynergyQuery(phase1.synergyWithCardName);
+
+    if (synergyResult) {
+      const queryForScryfall = `${PREFER_BEST_PREFIX}${applyDefaultGameFilter(synergyResult.query)}`;
+      logPipelineSummary({
+        original: naturalQuery,
+        afterPhase0: phase0.normalized,
+        afterPhase3: queryForScryfall,
+      });
+      return {
+        queryForScryfall,
+        queryForLogs: synergyResult.query,
+        normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
+        debug: {
+          unresolvedFragments: 0,
+          aiBatchCalls: 1,
+          aiSequentialCalls: 0,
+          invalidTagsRemoved: 0,
+          phase0Normalized: phase0.didNormalize,
+        },
+      };
+    }
+
+    const fallbackQuery = `name:"${phase1.synergyWithCardName}"`;
     const fallbackForScryfall = `${PREFER_BEST_PREFIX}${fallbackQuery}`;
     logPipelineSummary({
       original: naturalQuery,

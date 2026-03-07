@@ -20,6 +20,11 @@ export interface ScryfallNamedCard {
     name: string;
     type_line: string;
   }>;
+  card_faces?: Array<{
+    name: string;
+    type_line: string;
+    oracle_text?: string;
+  }>;
 }
 
 /**
