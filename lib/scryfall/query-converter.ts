@@ -550,31 +550,31 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
       {
         name: "creature",
         detect: /\bcreature\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile|kill)\s+(?:target\s+|a\s+|the\s+)?creatures?\b/i,
-        tags: ["removal-creature", "removal-creature-burn", "removal-creature-fight", "removal-exile", "removal-destroy", "spot-removal"],
+        tags: ["removal-creature", "removal-creature-burn", "removal-creature-fight", "spot-removal"],
         suppressTypes: ["creature"],
       },
       {
         name: "enchantment",
         detect: /\benchantment\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?enchantments?\b/i,
-        tags: ["removal-enchantment", "removal-exile", "removal-destroy", "removal-bounce"],
+        tags: ["removal-enchantment"],
         suppressTypes: ["enchantment"],
       },
       {
         name: "artifact",
         detect: /\bartifact\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?artifacts?\b/i,
-        tags: ["removal-artifact", "removal-exile", "removal-destroy", "removal-bounce"],
+        tags: ["removal-artifact"],
         suppressTypes: ["artifact"],
       },
       {
         name: "planeswalker",
         detect: /\bplaneswalker\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?planeswalkers?\b/i,
-        tags: ["removal-planeswalker", "removal-planeswalker-burn", "removal-exile", "removal-destroy"],
+        tags: ["removal-planeswalker", "removal-planeswalker-burn"],
         suppressTypes: ["planeswalker"],
       },
       {
         name: "land",
         detect: /\bland\s+(removal|destroy)|(?:removal|remove|destroy)\s+(?:target\s+|a\s+|the\s+)?lands?\b/i,
-        tags: ["removal-land", "removal-destroy"],
+        tags: ["removal-land"],
         suppressTypes: ["land"],
       },
       {
@@ -585,7 +585,12 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
       {
         name: "noncreature",
         detect: /\bnon-?creature\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?non-?creatures?\b/i,
-        tags: ["removal-noncreature", "removal-enchantment", "removal-artifact"],
+        tags: ["removal-noncreature", "removal-enchantment", "removal-artifact", "removal-planeswalker", "removal-land"],
+      },
+      {
+        name: "any",
+        detect: /\b(?:any(?:\s+target)?|anything|flexible|versatile)\s+(?:removal|remove[sd]?|destroy[sd]?|exile[sd]?)|(?:removal|remove[sd]?|destroy[sd]?|exile[sd]?)\s+(?:any(?:thing)?|anything)\b/i,
+        tags: ["removal-exile", "removal-destroy", "removal-bounce", "removal-permanent", "spot-removal"],
       },
     ],
     strayPattern: /\bfunction:(removal(?:-[a-z0-9-]+)?|spot-removal|repeatable-removal|swap-removal|mass-removal|multi-removal|creature-removal|artifact-removal|enchantment-removal|land-removal|planeswalker-removal)\b/gi,

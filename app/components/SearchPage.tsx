@@ -16,6 +16,7 @@ import AdBanner from "@/app/components/AdBanner";
 import QueryTokenPreview from "@/app/components/QueryTokenPreview";
 import CardDetailPanel from "@/app/components/CardDetailPanel";
 import ThemeToggle from "@/app/components/ThemeToggle";
+import BugReportButton from "@/app/components/BugReportButton";
 
 type SearchOptions = {
   updateUrl?: boolean;
@@ -426,9 +427,9 @@ export default function SearchPage() {
         {/* Query Display - Editable */}
         {(editableQuery || sourceQuery || results) && !loading && (
           <div id="query-display" className="relative z-50 mb-6">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-              <div className="flex-1 flex items-start gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-gray-800 dark:bg-gray-900 sm:px-4 sm:py-2.5">
-                <span className="mt-0.5 text-sm text-gray-500 whitespace-nowrap">Query:</span>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-gray-800 dark:bg-gray-900 sm:px-4 sm:py-2.5">
+                <span className="text-sm text-gray-500 whitespace-nowrap">Query:</span>
                 <div className="relative flex-1 min-w-0">
                   <textarea
                     ref={editableInputRef}
@@ -739,6 +740,9 @@ export default function SearchPage() {
           onClose={() => setSelectedCard(null)}
         />
       )}
+
+      {/* Bug Report Button */}
+      <BugReportButton userQuery={sourceQuery} scryfallQuery={editableQuery} />
     </main>
   );
 }
