@@ -2746,6 +2746,59 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     }
   }
 
+  // --- Art descriptor bundles (style + subject + body-type cues) ---
+  // For queries like "cards with ... goth girls", emit deterministic art tags as
+  // separate must-clauses so they are ANDed together rather than collapsed into
+  // one broad OR chain by phase2.
+  {
+    const lowerQuery = naturalQuery.toLowerCase();
+    const hasArtDescriptorContext =
+      /\bcards?\s+with\b|\bart\b|\bdepict(?:s|ed|ing)?\b|\bfeatur(?:e|es|ed|ing)\b|\bshow(?:s|ing|n)?\b|\bpictured\b/i.test(
+        lowerQuery
+      );
+    const hasGothCue = /\bgoth(?:ic)?\b/i.test(lowerQuery);
+    const hasWomanCue = /\bgirls?\b|\bwomen\b|\bwoman\b|\bfemale\b/i.test(lowerQuery);
+    const hasBustCue =
+      /\b(?:big\s+)?(?:tit(?:s|ties)?|boob(?:s)?|breast(?:s)?|busty|bust|cleavage|chest)\b/i.test(
+        lowerQuery
+      );
+
+    if (hasArtDescriptorContext && (hasGothCue || hasWomanCue || hasBustCue)) {
+      if (hasGothCue && !mustClauses.some((c) => c.value.toLowerCase() === "art:goth")) {
+        mustClauses.push({ value: "art:goth", source: "phase1:art" });
+      }
+      if (hasWomanCue && !mustClauses.some((c) => c.value.toLowerCase() === "art:woman")) {
+        mustClauses.push({ value: "art:woman", source: "phase1:art" });
+      }
+      if (hasBustCue && !mustClauses.some((c) => c.value.toLowerCase() === "art:cleavage")) {
+        mustClauses.push({ value: "art:cleavage", source: "phase1:art" });
+      }
+
+      strippedTerms.push(
+        "goth",
+        "gothic",
+        "girl",
+        "girls",
+        "woman",
+        "women",
+        "female",
+        "tit",
+        "tits",
+        "titties",
+        "boob",
+        "boobs",
+        "breast",
+        "breasts",
+        "bust",
+        "busty",
+        "cleavage",
+        "chest",
+        "big",
+        "large"
+      );
+    }
+  }
+
   const keywordList = await getMtgKeywordList();
   const { correctedQuery, matchedTypos } = applyFuzzyKeywordCorrections(
     naturalQuery,

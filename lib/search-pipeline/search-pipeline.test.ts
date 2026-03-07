@@ -83,6 +83,30 @@ async function testPhase3RemovesUnknownTypeFilters() {
   console.log("[PASS] phase3: removes unknown type filters like t:penguin");
 }
 
+async function testPhase3PreservesAndedStandaloneArtTags() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "cards with big titties goth girls",
+    intent: "search",
+    tokenizedQuery: ["cards", "with", "big", "titties", "goth", "girls"],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "art:goth", source: "phase1:art" },
+      { value: "art:woman", source: "phase1:art" },
+      { value: "art:cleavage", source: "phase1:art" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
+  };
+  const finalized = await finalizeQuery(ir);
+  const q = finalized.queryForLogs.toLowerCase();
+  assert.ok(q.includes("art:goth art:woman art:cleavage"), `expected ANDed standalone art tags; got: ${finalized.queryForLogs}`);
+  assert.ok(!/\(art:goth\s+or\s+art:woman\s+or\s+art:cleavage\)/i.test(q), `should not collapse to OR chain; got: ${finalized.queryForLogs}`);
+  console.log("[PASS] phase3: preserves AND for standalone art tag chains");
+}
+
 async function testPipelineDirectEndToEnd() {
   const result = await runSearchPipeline("is:dfc t:land");
   assert.ok(result.queryForScryfall.startsWith("prefer:best "));
@@ -169,6 +193,20 @@ async function testPhase1LifeStealUsesFunctionTags() {
     `life-steal phrasing should be resolved before phase2; unresolved: ${parsed.unresolvedFragments.map((f) => f.text).join(" | ")}`
   );
   console.log("[PASS] phase1: life-steal phrasing maps to life-drain function tags");
+}
+
+async function testPhase1ArtDescriptorBundlesUseAndedArtTags() {
+  const parsed = await parseNaturalQuery("cards with big titties goth girls");
+  const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
+  assert.ok(mustValues.includes("art:goth"), `expected art:goth; got: ${mustValues.join(", ")}`);
+  assert.ok(mustValues.includes("art:woman"), `expected art:woman; got: ${mustValues.join(", ")}`);
+  assert.ok(mustValues.includes("art:cleavage"), `expected art:cleavage; got: ${mustValues.join(", ")}`);
+  assert.equal(
+    parsed.unresolvedFragments.length,
+    0,
+    `art descriptor bundle should be fully resolved in phase1; unresolved: ${parsed.unresolvedFragments.map((f) => f.text).join(" | ")}`
+  );
+  console.log("[PASS] phase1: art descriptor bundle maps to ANDed art tags");
 }
 
 async function testPhase1PluralTypeIsStrippedFromArtFragments() {
@@ -977,12 +1015,14 @@ async function run() {
   testAssemblerAndsArtConceptsPerFragment();
   await testPhase3DirectQueryAddsPreferBest();
   await testPhase3RemovesUnknownTypeFilters();
+  await testPhase3PreservesAndedStandaloneArtTags();
   await testPipelineDirectEndToEnd();
   await testPipelineSimilarCardsDoesNotContradictNameExclusion();
   await testPhase1CommanderFormatColorExtraction();
   await testPhase1EtbDrawUsesOracleFilters();
   await testPhase1NoCardsInHandDamageUsesOracleAnchors();
   await testPhase1LifeStealUsesFunctionTags();
+  await testPhase1ArtDescriptorBundlesUseAndedArtTags();
   await testPhase1PluralTypeIsStrippedFromArtFragments();
   await testPhase1SorceryPluralKeepsTypeAndStripsFromArtFragment();
   await testPhase1FuzzyColorIdentityTypo();

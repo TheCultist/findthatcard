@@ -1152,6 +1152,11 @@ function countArtOrGroups(query: string): number {
 /** Collects all art/atag/arttag tokens and replaces them with a single OR chain. Leaves query unchanged when it already has multiple (art:... or ...) groups (AND of concepts). */
 function normalizeArtTagsToOrChain(query: string): string {
   if (countArtOrGroups(query) >= 2) return query;
+  // Preserve explicit AND intent when multiple standalone art tags are already
+  // present as separate clauses (e.g. "art:goth art:woman art:cleavage").
+  const standaloneArtAndChain =
+    /(?:^|\s)(?:art|atag|arttag):[^\s()]+(?:\s+(?:art|atag|arttag):[^\s()]+){1,}(?:\s|$)/i;
+  if (standaloneArtAndChain.test(query)) return query;
 
   const artPattern = /\b(?:art|atag|arttag):([^\s()]+)(?=\s|$|\))/gi;
   const tags: string[] = [];

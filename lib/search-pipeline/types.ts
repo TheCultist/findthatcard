@@ -4,6 +4,7 @@ export type ClauseSource =
   | "phase1:commander"
   | "phase1:type"
   | "phase1:subtype"
+  | "phase1:art"
   | "phase1:artist"
   | "phase1:function"
   | "phase1:set"
