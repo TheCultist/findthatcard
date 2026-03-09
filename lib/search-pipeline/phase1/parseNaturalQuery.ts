@@ -2147,6 +2147,20 @@ function detectCardNameList(
  */
 type BypassDetectResult = { cardName: string; strippedWords: string[] } | null;
 
+// Card-type words that, when they appear at the start of a "similar to" trigger
+// phrase (e.g. "instants like X", "creatures similar to X"), should NOT be
+// stripped — they carry type-filter intent that the structural parser must see.
+const BYPASS_PRESERVED_TYPE_WORDS = new Set([
+  "instant", "instants",
+  "sorcery", "sorceries",
+  "creature", "creatures",
+  "artifact", "artifacts",
+  "enchantment", "enchantments",
+  "land", "lands",
+  "planeswalker", "planeswalkers",
+  "spell", "spells",
+]);
+
 function buildBypassStrippedWords(
   fullMatch: string,
   captureGroup: string,
@@ -2154,7 +2168,11 @@ function buildBypassStrippedWords(
   canonical: string
 ): string[] {
   const triggerText = fullMatch.slice(0, fullMatch.length - captureGroup.length);
-  const triggerWords = triggerText.toLowerCase().replace(/[^a-z]/g, " ").split(/\s+/).filter((w) => w.length > 1);
+  const triggerWords = triggerText
+    .toLowerCase()
+    .replace(/[^a-z]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 1 && !BYPASS_PRESERVED_TYPE_WORDS.has(w));
   const canonicalWords = canonical.toLowerCase().replace(/[^a-z0-9'\s-]/g, " ").split(/\s+/).filter(Boolean);
   return [...new Set([...triggerWords, ...consumedInputWords, ...canonicalWords])];
 }
@@ -2224,11 +2242,40 @@ function detectArtLikeCardQuery(naturalQuery: string): BypassDetectResult {
 function detectSimilarToCardQuery(naturalQuery: string): BypassDetectResult {
   if (!hasCardNameIndex()) return null;
 
+  // --- Reverse patterns: "[CardName] effects/style/like" (card name precedes trigger word) ---
+  // These are checked first so "Blood Artist effects on creatures" isn't parsed
+  // as a bare card-name + t:creature query.
+  const effectsMatch = naturalQuery.match(/^([\s\S]+?)(\s+(?:effects?|style\s+effects?|-?like\s+effects?|abilities|-?like))\b/i);
+  if (effectsMatch) {
+    const nameText = effectsMatch[1].trim();
+    const triggerText = effectsMatch[2].trim();
+    const words = nameText
+      .toLowerCase()
+      .replace(/[^a-z0-9'\s-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    for (let len = Math.min(words.length, 8); len >= 1; len--) {
+      const candidate = words.slice(words.length - len).join(" ");
+      const canonical = lookupCardName(candidate);
+      if (canonical) {
+        const triggerWords = triggerText.toLowerCase().replace(/[^a-z]/g, " ").split(/\s+/).filter(Boolean);
+        const canonicalWords = canonical.toLowerCase().replace(/[^a-z0-9'\s-]/g, " ").split(/\s+/).filter(Boolean);
+        const strippedWords = [...new Set([...words.slice(words.length - len), ...triggerWords, ...canonicalWords])];
+        return { cardName: canonical, strippedWords };
+      }
+    }
+  }
+
   const SIMILAR_PATTERNS: RegExp[] = [
     /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?)\s+similar\s+to\s+([\s\S]+)/i,
     /\bsimilar\s+(?:cards?\s+)?to\s+([\s\S]+)/i,
     /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?|something|anything)\s+like\s+([\s\S]+)/i,
     /\balternatives?\s+(?:to|for)\s+([\s\S]+)/i,
+    /\beffects?\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
+    /\babilities?\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
   ];
 
   const CONTEXT_STOPS = new Set([

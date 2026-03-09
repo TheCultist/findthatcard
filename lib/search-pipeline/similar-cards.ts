@@ -168,9 +168,15 @@ const META_TAG_PATTERNS: RegExp[] = [
   /^cycle-/i,              // product cycle labels ("cycle-cmd-alt-commander")
   /^oversized$/i,          // physical card attribute
   /^reserved-list$/i,      // collectibility label
-  /^repeated keyword$/i,   // structural observation, not a function
+  /^repeated.keyword$/i,   // structural observation, not a function
   /^\d+(?:ph|points?)$/i,  // point-system markers ("7ph", "3points")
   /^(?:ante|manual-dexterity|silver-bordered|acorn|un-set)/i, // format/legality labels
+  /^meme$/i,               // community humour label, not a function
+  /^interchangeable/i,     // card equivalence label ("interchangeable-name"), not a function
+  /^staple$/i,             // popularity label, not a function
+  /^old-/i,                // old-templating labels ("old-lifelink", "old-typeline"), not functional
+  /^playtest-/i,           // playtest / preview labels
+  /^functional-reprint$/i, // reprint classification, not a function
 ];
 
 /**
@@ -231,7 +237,7 @@ function buildQueryFromTaggerData(tagger: TaggerCardData): string | null {
   }
 
   // AND chain: oracle function tags, filtered and ranked.
-  const selected = selectBestTags(tagger.functionTags, 4);
+  const selected = selectBestTags(tagger.functionTags, 2);
 
   if (selected.length > 0) {
     const andChain = selected.map((tag) => `otag:"${tag}"`).join(" ");
