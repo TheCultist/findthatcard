@@ -2389,12 +2389,19 @@ function detectSimilarToCardQuery(naturalQuery: string): BypassDetectResult {
   }
 
   const SIMILAR_PATTERNS: RegExp[] = [
+    // Standard phrasings
     /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?)\s+similar\s+to\s+([\s\S]+)/i,
     /\bsimilar\s+(?:cards?\s+)?to\s+([\s\S]+)/i,
     /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?|something|anything)\s+like\s+([\s\S]+)/i,
     /\balternatives?\s+(?:to|for)\s+([\s\S]+)/i,
     /\beffects?\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
     /\babilities?\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
+    // Grammar mistakes / non-native phrasings
+    /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?|something|anything)\s+similar\s+(?:than|as|with|of)\s+([\s\S]+)/i,
+    /\bsimilar\s+(?:cards?\s+)?(?:than|as|with|of)\s+([\s\S]+)/i,
+    /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?|something|anything)\s+(?:same|identical)\s+(?:as|to)\s+([\s\S]+)/i,
+    /\breminds?\s+(?:me\s+)?of\s+([\s\S]+)/i,
+    /\bresembles?\s+([\s\S]+)/i,
   ];
 
   const CONTEXT_STOPS = new Set([

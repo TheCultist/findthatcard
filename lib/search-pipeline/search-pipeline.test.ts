@@ -1129,6 +1129,10 @@ async function run() {
   // Similar-cards type preservation
   await testPhase1InstantsLikeCardPreservesTypeFilter();
   await testPhase1BloodArtistEffectsOnCreatures();
+  // Grammar-mistake similar-cards variants
+  await testPhase1SimilarThanGrammarMistake();
+  // Direct Scryfall queries must never be re-routed
+  await testPhase1DirectScryfallNeverModified();
   console.log("search-pipeline tests passed");
 }
 
@@ -1361,6 +1365,47 @@ async function testPhase1BloodArtistEffectsOnCreatures() {
     `expected t:creature in mustClauses for 'on creatures'; got: ${mustValues.join(", ")}`
   );
   console.log("[PASS] phase1: 'blood artist effects on creatures' → similar-cards with t:creature");
+}
+
+async function testPhase1SimilarThanGrammarMistake() {
+  // "similar than" is a common non-native speaker mistake for "similar to".
+  const variants = [
+    "card similar than the ozolith",
+    "something similar than sol ring",
+    "cards similar as lightning bolt",
+    "card similar with counterspell",
+  ];
+  for (const query of variants) {
+    const parsed = await parseNaturalQuery(query);
+    assert.equal(
+      parsed.intent,
+      "similar-cards",
+      `"${query}" should detect similar-cards; got: ${parsed.intent}`
+    );
+    assert.ok(
+      parsed.similarToCardName,
+      `"${query}" should set similarToCardName`
+    );
+  }
+  console.log("[PASS] phase1: 'similar than/as/with' grammar mistakes detect similar-cards intent");
+}
+
+async function testPhase1DirectScryfallNeverModified() {
+  // Direct Scryfall queries must NEVER be re-routed or modified.
+  const directQueries = [
+    `name:"The Ozolith"`,
+    `prefer:best name:"The Ozolith" game:paper`,
+    `t:creature id:rg function:burn-any game:paper`,
+  ];
+  for (const query of directQueries) {
+    const parsed = await parseNaturalQuery(query);
+    assert.equal(
+      parsed.intent,
+      "direct-scryfall",
+      `direct Scryfall query "${query}" should stay direct-scryfall; got: ${parsed.intent}`
+    );
+  }
+  console.log("[PASS] phase1: direct Scryfall queries are never re-routed");
 }
 
 run().catch((error) => {
