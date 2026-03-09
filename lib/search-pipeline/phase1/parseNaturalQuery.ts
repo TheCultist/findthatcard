@@ -1313,22 +1313,6 @@ function applyOracleIntentHeuristics(
     return;
   }
 
-  // --- Aristocrats ---
-  // e.g. "aristocrats commander", "aristocrat payoffs", "aristocratic strategy"
-  const hasAristocratsIntent =
-    /\baristo(?:cra(?:ts?|cts?|tic)|arts?)\b/i.test(naturalQuery);
-
-  if (hasAristocratsIntent) {
-    mustClauses.push({
-      value: "(function:sacrifice-outlet or function:sac-outlet or function:death-trigger or function:death-trigger-self or function:synergy-sacrifice)",
-      source: "phase1:function",
-    });
-    strippedTerms.push(
-      "aristocrats", "aristocrat", "aristocratic",
-      "aristocract", "aristocracts", "aristocarts",
-    );
-    return;
-  }
 }
 
 /**
@@ -2710,9 +2694,9 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     }
   } else {
     const wantsCommanderCreature =
-      /\b(?:a\s+)?(?:easy\s+)?commander\b|\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b|\bcan\s+be\s+commanders?\b/i.test(
+      /\b(?:a\s+)?(?:easy\s+)?commander\b|\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b|\bcan\s+be\s+commanders?\b|\bcommanders\b/i.test(
         naturalQuery
-      );
+      ) && !/\b(?:for|in)\s+commanders\b/i.test(naturalQuery);
     if (wantsCommanderCreature) {
       mustClauses.push({ value: "is:commander", source: "phase1:commander" });
       strippedTerms.push("commander", "commanders");

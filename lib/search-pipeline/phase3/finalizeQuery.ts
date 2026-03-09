@@ -84,9 +84,9 @@ function ensureCommanderCreatureFilter(naturalQuery: string, scryfallQuery: stri
   if (hasCommanderDeckContext(naturalQuery)) return scryfallQuery;
   if (/\bis:commander\b/i.test(scryfallQuery)) return scryfallQuery;
   // "for commander"/"in commander" means format context, not commander creatures.
-  if (/\b(for|in)\s+commander\b/i.test(naturalQuery)) return scryfallQuery;
+  if (/\b(for|in)\s+commanders?\b/i.test(naturalQuery)) return scryfallQuery;
   const wantsCommanderCreature =
-    /\b(?:a|an|my)\s+(?:easy\s+)?commander\b|\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b|\bcan\s+be\s+commanders?\b/i.test(
+    /\b(?:a|an|my)\s+(?:easy\s+)?commander\b|\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b|\bcan\s+be\s+commanders?\b|\bcommanders\b/i.test(
       naturalQuery
     );
   if (!wantsCommanderCreature) return scryfallQuery;
