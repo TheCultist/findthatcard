@@ -1638,6 +1638,81 @@ function applyFuzzyKeywordCorrections(
   return { correctedQuery, matchedTypos };
 }
 
+/**
+ * Maps well-known MTG functional concepts to their tagger function tags
+ * deterministically in Phase 1, preventing Phase 2 from misclassifying them.
+ *
+ * Examples:
+ *   "cheap blue draw cantrips"     → function:cantrip
+ *   "looting effects in red"       → function:loot
+ *   "blue counterspells"           → function:counterspell
+ *   "green recursion spells"       → function:recursion
+ *   "green mana dorks"             → function:mana-dork
+ *   "white anthem effects"         → function:anthem
+ *   "goblin lords"                 → function:lord
+ */
+function detectFunctionConceptClauses(
+  naturalQuery: string
+): { clauses: QueryClause[]; strippedTerms: string[] } {
+  const clauses: QueryClause[] = [];
+  const strippedTerms: string[] = [];
+  const lower = naturalQuery.toLowerCase();
+
+  // Cantrip — spells that replace themselves by drawing a card.
+  // Must be checked before the draw-engine archetype to prevent over-broad draw tags.
+  if (/\bcantrips?\b/i.test(lower)) {
+    clauses.push({ value: "function:cantrip", source: "phase1:function" });
+    strippedTerms.push("cantrip", "cantrips");
+  }
+
+  // Looting — draw then discard (Faithless Looting style).
+  if (/\b(?:loot(?:ing)?|loots?)\b/i.test(lower) && !/\btarget\s+opponent\s+loot\b/i.test(lower)) {
+    clauses.push({ value: "function:loot", source: "phase1:function" });
+    strippedTerms.push("loot", "looting", "loots");
+  }
+
+  // Counterspells — hard and soft counters.
+  // Require PLURAL "counterspells" or the two-word "counter spell(s)" to avoid conflicting
+  // with the actual card name "Counterspell" (singular). Phase 3's normalizeCounterspellIntent
+  // handles the singular form after card-name detection has already run.
+  if (/\bcounterspells\b|\bcounter\s+spells?\b/i.test(lower)) {
+    clauses.push({ value: "function:counterspell", source: "phase1:function" });
+    strippedTerms.push("counterspells", "counter spell", "counter spells");
+  }
+
+  // Recursion — graveyard recursion / self-recursion effects.
+  // Distinct from the reanimator archetype (which fires on "reanimate"/"return from graveyard").
+  if (/\brecursion\b/i.test(lower)) {
+    clauses.push({ value: "function:recursion", source: "phase1:function" });
+    strippedTerms.push("recursion");
+  }
+
+  // Mana dork — creatures that tap to produce mana.
+  if (/\bmana[\s-]?dorks?\b/i.test(lower)) {
+    clauses.push({ value: "function:mana-dork", source: "phase1:function" });
+    strippedTerms.push("mana dork", "mana dorks", "mana-dork", "mana-dorks");
+  }
+
+  // Anthem — effects that buff all your creatures (e.g. Glorious Anthem).
+  if (/\banthems?\b/i.test(lower)) {
+    clauses.push({ value: "function:anthem", source: "phase1:function" });
+    strippedTerms.push("anthem", "anthems");
+  }
+
+  // Lord — tribal lords that grant +1/+1 or abilities to a creature type.
+  // Exclude "lord of the rings" and similar proper nouns.
+  if (
+    /\b(?:tribal\s+)?lords?\b/i.test(lower) &&
+    !/\blord\s+of\s+the\b/i.test(lower) &&
+    !/\btime\s+lords?\b/i.test(lower)
+  ) {
+    clauses.push({ value: "function:lord", source: "phase1:function" });
+    strippedTerms.push("lord", "lords", "tribal lord", "tribal lords");
+  }
+
+  return { clauses, strippedTerms };
+}
+
 function detectStrategyClauses(
   naturalQuery: string
 ): { clauses: QueryClause[]; strippedTerms: string[] } {
@@ -3204,6 +3279,10 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   const strategyResult = detectStrategyClauses(correctedQuery);
   mustClauses.push(...strategyResult.clauses);
   strippedTerms.push(...strategyResult.strippedTerms);
+
+  const functionConceptResult = detectFunctionConceptClauses(naturalQuery);
+  mustClauses.push(...functionConceptResult.clauses);
+  strippedTerms.push(...functionConceptResult.strippedTerms);
 
   const statResult = resolveNumericStatFilters(naturalQuery);
   mustClauses.push(...statResult.clauses);

@@ -1129,6 +1129,9 @@ async function run() {
   // Similar-cards type preservation
   await testPhase1InstantsLikeCardPreservesTypeFilter();
   await testPhase1BloodArtistEffectsOnCreatures();
+  // Function concept clauses
+  await testPhase1CantripsMapToFunctionCantrip();
+  await testPhase1LootingMapsFunctionLoot();
   // Scaling oracle text heuristics
   await testPhase1ManaForEachSpell();
   await testPhase1ForEachArtifactScaling();
@@ -1368,6 +1371,37 @@ async function testPhase1BloodArtistEffectsOnCreatures() {
     `expected t:creature in mustClauses for 'on creatures'; got: ${mustValues.join(", ")}`
   );
   console.log("[PASS] phase1: 'blood artist effects on creatures' → similar-cards with t:creature");
+}
+
+async function testPhase1CantripsMapToFunctionCantrip() {
+  const queries = [
+    "cheap blue draw cantrips",
+    "white cantrip spells",
+    "cantrips in modern",
+  ];
+  for (const query of queries) {
+    const parsed = await parseNaturalQuery(query);
+    const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+    assert.ok(
+      mustValues.includes("function:cantrip"),
+      `"${query}" expected function:cantrip; got: ${mustValues.join(", ")}`
+    );
+    assert.ok(
+      !mustValues.some((v) => /function:(draw-engine|repeatable-draw|pure-draw|impulse-draw|burst-draw)/.test(v)),
+      `"${query}" should NOT have draw-engine tags; got: ${mustValues.join(", ")}`
+    );
+  }
+  console.log("[PASS] phase1: 'cantrips' → function:cantrip, not draw-engine tags");
+}
+
+async function testPhase1LootingMapsFunctionLoot() {
+  const parsed = await parseNaturalQuery("red looting effects");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.includes("function:loot"),
+    `expected function:loot; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'looting' → function:loot");
 }
 
 async function testPhase1ManaForEachSpell() {

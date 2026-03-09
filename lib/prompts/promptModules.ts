@@ -58,7 +58,7 @@ COMMANDERS VS COMMANDER FORMAT: If the user asks for commanders/commander cards 
 MY COMMANDER CONTEXT: When players mention "my commander" or properties of their commander, they are looking for cards for their deck (cards that work with their deck), NOT creatures that can be commanders. Use f:commander (format legal) and NEVER is:commander. "My commander is green and white" = id:gw f:commander. "My commander synergizes with flyers" = f:commander + synergy with flying (function:synergy-flying, kw:flying). "Cards that make tokens for my commander" = f:commander + token generation function tags in OR chain (function:repeatable-token-generator or function:repeatable-creature-tokens or ...). Do NOT add set: filters for Commander precon sets when the user describes their commander—they want cards for their deck, not from a specific product.
 GAME CHANGER LIST: If the user asks for cards in the "game changer" list (or "game changer list", "gamechanger"), use is:gamechanger.
 FORMAT WORDING VARIANTS: Treat leading format adjectives as f:FORMAT even if not explicitly "legal in". "legacy free counterspells" and "legacy-legal free counterspells" -> f:legacy function:counterspell-free (no o:counterspell).
-Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -is:reprint). "Not in X"/"without X" must be -c:x where X is the letter or color nickname of that color.`,
+Negation: Leading dash (-t:human, -function:boardwipe) or not: (not:reprint = -is:reprint). "Not in X"/"without X" must be -c:x where X is the letter or color nickname of that color.`,
   examples: [
     `Mono blue -> id=u`,
     `Jeskai commander -> is:commander id=urw`,
@@ -69,7 +69,7 @@ Negation: Leading dash (-t:human, -function:board-wipe) or not: (not:reprint = -
 
 // Function tags module
 const PACK_FUNCTION_TAGS: PackDefinition = {
-  rules: `Function tags: function:/oracletag:/otag: for card functions (removal, ramp, tutor, counterspell, board-wipe, token-creator, treasure-creator, clue-creator, food-creator, sacrifice-outlet, sacrifice-payoff, lifegain, lifegain-matters, mill, synergy, package, counters-matter, etc.).
+  rules: `Function tags: function:/oracletag:/otag: for card functions (removal, ramp, tutor, counterspell, boardwipe, token-creator, treasure-creator, clue-creator, food-creator, sacrifice-outlet, sacrifice-payoff, lifegain, lifegain-matters, mill, synergy, package, counters-matter, etc.).
 FUNCTION TAGS FIRST: Check available function tags before using o:. If uncertain tag exists, use o: as fallback. Multiple alternatives -> (function:x or function:y), NOT spaces.
 PREFIX: When using function tags, include the full prefix exactly as shown (e.g., function:discount-self).
 FUNCTION TAG SPECIFICITY: If a more specific function tag exists in the available list that matches the user’s intent, prefer it over a broader tag (e.g., "tutor for lands" -> function:land-tutor if available, not just function:tutor).

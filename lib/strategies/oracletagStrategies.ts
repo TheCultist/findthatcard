@@ -13,33 +13,33 @@ export const STRATEGY_ORACLETAGS: StrategyOracletagGroup[] = [
   {
     strategy: "Aristocrats",
     oracletags: [
-      "oracletag:sacrifice-outlet",
-      "oracletag:death-trigger",
-      "oracletag:death-trigger-self",
-      "oracletag:sacrifice-self",
-      "oracletag:alternate-cost-sacrifice",
+      "function:sacrifice-outlet",
+      "function:death-trigger",
+      "function:death-trigger-self",
+      "function:sacrifice-self",
+      "function:alternate-cost-sacrifice",
     ],
   },
   {
     strategy: "Sacrifice",
-    // oracletag:sacrifice-payoff does not exist in Scryfall Tagger;
+    // function:sacrifice-payoff does not exist in Scryfall Tagger;
     // function:synergy-sacrifice is the valid tag covering sacrifice payoffs/synergy.
-    oracletags: ["oracletag:sacrifice-outlet", "function:synergy-sacrifice"],
+    oracletags: ["function:sacrifice-outlet", "function:synergy-sacrifice"],
     aliases: ["sacrifice matters"],
   },
   {
     strategy: "Lifegain",
-    oracletags: ["oracletag:lifegain", "oracletag:lifegain-matters"],
+    oracletags: ["function:lifegain", "function:lifegain-matters"],
     aliases: ["life gain"],
   },
   {
     strategy: "+1/+1 Counters",
-    oracletags: ["oracletag:counters-matter", "oracletag:gives-pp-counters"],
+    oracletags: ["function:counters-matter", "function:gives-pp-counters"],
     aliases: ["plus one counters", "plus-one counters", "pp-counters"],
   },
   {
     strategy: "Board Wipe",
-    oracletags: ["oracletag:board-wipe"],
+    oracletags: ["function:boardwipe"],
     aliases: [
       "board wipes", "boardwipe", "boardwipes",
       "mass removal", "sweeper", "sweepers",
@@ -51,22 +51,22 @@ export const STRATEGY_ORACLETAGS: StrategyOracletagGroup[] = [
   {
     strategy: "Control",
     oracletags: [
-      "oracletag:counterspell",
-      "oracletag:removal",
-      "oracletag:board-wipe",
+      "function:counterspell",
+      "function:removal",
+      "function:boardwipe",
     ],
   },
   {
     strategy: "Spellslinger",
     oracletags: [
-      "oracletag:copy-spell",
-      "oracletag:affinity-for-spells",
-      "oracletag:second-spell-matters",
-      "oracletag:prowess-anthem",
-      "oracletag:gains-prowess",
-      "oracletag:gives-prowess",
-      "oracletag:grants-prowess",
-      "oracletag:storm-like",
+      "function:copy-spell",
+      "function:affinity-for-spells",
+      "function:second-spell-matters",
+      "function:prowess-anthem",
+      "function:gains-prowess",
+      "function:gives-prowess",
+      "function:grants-prowess",
+      "function:storm-like",
       "o:\"whenever you cast an instant or sorcery\"",
       "o:\"whenever a player casts an instant or sorcery\"",
       "o:\"whenever you cast an instant\"",

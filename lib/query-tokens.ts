@@ -173,7 +173,7 @@ const FIELD_DESCRIPTIONS: Record<
     title: "Function / Oracle Tag",
     description:
       "Filters by community-curated role tags from Scryfall's Tagger project. " +
-      "These describe what a card does in a deck (e.g. function:ramp, oracletag:draw, function:board-wipe).",
+      "These describe what a card does in a deck (e.g. function:ramp, function:draw, function:boardwipe).",
     tip: "Tag coverage varies — not every card is tagged. If results seem sparse, combine with o: oracle text filters as a fallback.",
   },
   art: {
