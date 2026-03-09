@@ -641,8 +641,8 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
     }
   }
 
-  // 2. Oracle-text targets — "that destroy/exile/bounce/create/make/... a/an/each X"
-  capture(/\bthat\s+(?:destroy|exile|bounce|target|counter|sacrifice|kill|remove|discard|copy|tap|untap|create|make|generate|produce|add)\s+(?:a\s+|an\s+|all\s+|each\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s+(?:card|permanent|spell|ability|token)\b|\s+or\b|\s+and\b|\s+from\b|\s+in\b|\s+you\b|$)/gi);
+  // 2. Oracle-text targets — "that destroy/exile/bounce/reanimate/... a/an/each X"
+  capture(/\bthat\s+(?:destroy|exile|bounce|target|counter|sacrifice|kill|remove|discard|copy|tap|untap|create|make|generate|produce|add|reanimate|return|recur|revive|resurrect|animate|regrow)\s+(?:a\s+|an\s+|all\s+|each\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s+(?:card|permanent|spell|ability|token)\b|\s+or\b|\s+and\b|\s+from\b|\s+in\b|\s+you\b|$)/gi);
 
   // 3. Damage targets — "deals/deal damage to a/an/each X"
   capture(/\bdeals?\s+(?:\w+\s+)?damage\s+to\s+(?:a\s+|an\s+|each\s+|any\s+|all\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s|$)/gi);
@@ -1959,7 +1959,8 @@ function detectCardNamePostPass(
 
       // Skip names that appear as verb phrases in the original query
       // (e.g. "cards that deal damage" — "deal damage" is oracle text, not a name)
-      if (len >= 2 && isInVerbPhraseContext(naturalQuery, candidate)) continue;
+      // Also applies to single words: "artifacts that reanimate creatures" → "reanimate" is a verb.
+      if (isInVerbPhraseContext(naturalQuery, candidate)) continue;
 
       clauses.push({ value: `name:"${canonical}"`, source: "phase1:cardname" });
       extraStripped.push(...tokens.slice(start, start + len));
