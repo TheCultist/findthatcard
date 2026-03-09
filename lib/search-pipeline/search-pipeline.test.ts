@@ -1129,6 +1129,9 @@ async function run() {
   // Similar-cards type preservation
   await testPhase1InstantsLikeCardPreservesTypeFilter();
   await testPhase1BloodArtistEffectsOnCreatures();
+  // Scaling oracle text heuristics
+  await testPhase1ManaForEachSpell();
+  await testPhase1ForEachArtifactScaling();
   // Grammar-mistake similar-cards variants
   await testPhase1SimilarThanGrammarMistake();
   // Direct Scryfall queries must never be re-routed
@@ -1365,6 +1368,43 @@ async function testPhase1BloodArtistEffectsOnCreatures() {
     `expected t:creature in mustClauses for 'on creatures'; got: ${mustValues.join(", ")}`
   );
   console.log("[PASS] phase1: 'blood artist effects on creatures' → similar-cards with t:creature");
+}
+
+async function testPhase1ManaForEachSpell() {
+  const parsed = await parseNaturalQuery("card that makes blue mana for each spell you cast");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.some((v) => v === 'o:"add {u}"'),
+    `expected o:"add {U}"; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.some((v) => v === 'o:"for each"'),
+    `expected o:"for each"; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.some((v) => v === "o:spell"),
+    `expected o:spell; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    !mustValues.some((v) => /function:(ramp|mana-ramp)/.test(v)),
+    `should NOT have function:ramp or function:mana-ramp; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(mustValues.includes("id:u"), `expected id:u; got: ${mustValues.join(", ")}`);
+  console.log("[PASS] phase1: 'makes blue mana for each spell' → oracle text, not function:ramp");
+}
+
+async function testPhase1ForEachArtifactScaling() {
+  const parsed = await parseNaturalQuery("creatures that get +1/+1 for each artifact you control");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.some((v) => v === 'o:"for each"'),
+    `expected o:"for each"; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.some((v) => v === "o:artifact"),
+    `expected o:artifact; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'for each artifact' scaling → oracle text anchors");
 }
 
 async function testPhase1SimilarThanGrammarMistake() {

@@ -1237,6 +1237,78 @@ function applyOracleIntentHeuristics(
     return;
   }
 
+  // --- Scaling mana production: "makes/adds [color] mana for each X" ---
+  // e.g. "card that makes blue mana for each spell you cast"
+  //      "produces green mana for every land you control"
+  // These are SPECIFIC conditional mana effects, NOT generic ramp.
+  // Resolve deterministically here so Phase 2 never misclassifies them as
+  // the "ramp" archetype (which would inject function:ramp/mana-ramp instead).
+  const COLOR_WORDS: Record<string, string> = {
+    blue: "{U}", red: "{R}", green: "{G}", white: "{W}", black: "{B}",
+    colorless: "{C}", any: "{", // "any mana" → match start of add-expression
+  };
+  const hasManaForScaling =
+    /\b(?:make[sd]?|add[sd]?|produce[sd]?|generate[sd]?|get[sd]?)\s+(?:\w+\s+)?mana\b.*?\bfor\s+(?:each|every)\b/is.test(naturalQuery) ||
+    /\bmana\b.*?\bfor\s+(?:each|every)\b/is.test(naturalQuery);
+
+  if (hasManaForScaling) {
+    const colorMatch = naturalQuery.match(
+      /\b(blue|red|green|white|black|colorless|any)\s+mana\b/i
+    );
+    const colorWord = colorMatch?.[1]?.toLowerCase() ?? null;
+    const symbol = colorWord ? (COLOR_WORDS[colorWord] ?? null) : null;
+
+    if (symbol && symbol !== "{") {
+      mustClauses.push({ value: `o:"add ${symbol}"`, source: "phase1:oracle" });
+    } else {
+      mustClauses.push({ value: 'o:"add {"', source: "phase1:oracle" });
+    }
+    mustClauses.push({ value: 'o:"for each"', source: "phase1:oracle" });
+
+    // Extract the "for each/every X" subject (first meaningful word after the quantifier)
+    const subjectMatch = naturalQuery.match(/\bfor\s+(?:each|every)\s+(\w+)/i);
+    const subject = subjectMatch?.[1]?.toLowerCase();
+    const STOP = new Set(["the", "a", "an", "you", "your", "that", "each", "every"]);
+    if (subject && !STOP.has(subject)) {
+      mustClauses.push({ value: `o:${subject}`, source: "phase1:oracle" });
+    }
+
+    strippedTerms.push(
+      "makes", "make", "adds", "add", "produces", "produce", "generates", "generate",
+      "mana", "for each", "for every",
+      ...(colorWord ? [colorWord, `${colorWord} mana`] : []),
+    );
+    return;
+  }
+
+  // --- General "for each / for every" scaling effects (non-mana) ---
+  // e.g. "gets +1/+1 for each artifact you control"
+  //      "deals damage equal to the number of creatures you control"
+  // Adds o:"for each" anchor to prevent broad archetype misclassification.
+  const forEachMatch = naturalQuery.match(
+    /\bfor\s+(?:each|every)\s+(\w+(?:\s+(?:you|they|your|their)\s+\w+)?)/i
+  );
+  const equalToNumberMatch = naturalQuery.match(
+    /\bequal\s+to\s+(?:the\s+)?(?:number\s+of|amount\s+of)\s+(\w+)/i
+  );
+
+  if (forEachMatch || equalToNumberMatch) {
+    if (forEachMatch) {
+      mustClauses.push({ value: 'o:"for each"', source: "phase1:oracle" });
+      const subject = (forEachMatch[1] ?? "").split(/\s+/)[0]?.toLowerCase();
+      const STOP2 = new Set(["the", "a", "an", "you", "your", "that"]);
+      if (subject && !STOP2.has(subject)) {
+        mustClauses.push({ value: `o:${subject}`, source: "phase1:oracle" });
+      }
+    } else if (equalToNumberMatch) {
+      mustClauses.push({ value: 'o:"equal to"', source: "phase1:oracle" });
+      const subject = (equalToNumberMatch[1] ?? "").toLowerCase();
+      mustClauses.push({ value: `o:${subject}`, source: "phase1:oracle" });
+    }
+    strippedTerms.push("for each", "for every", "equal to", "number of", "amount of");
+    return;
+  }
+
   // --- ETB + life gain ---
   // e.g. "creatures that gain life when they enter", "ETB lifegain"
   const hasLifegainIntent =

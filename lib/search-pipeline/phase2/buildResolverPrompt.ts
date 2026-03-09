@@ -34,14 +34,18 @@ function formatArchetypeMenu(entries: ArchetypeMenuEntry[]): string {
 const FEW_SHOT_EXAMPLES = `Examples:
 {"results":[{"fragment":"make opponents pay to swing at me","archetype":"pillow-fort","qualifier":null,"tags":[],"confidence":0.9}]}
 {"results":[{"fragment":"etb draw effects","archetype":null,"qualifier":null,"tags":["o:\"~ enters\"","o:draw"],"confidence":0.85}]}
-{"results":[{"fragment":"give mana when enter","archetype":null,"qualifier":null,"tags":["o:\"~ enters\"","o:\\"add\\""],"confidence":0.85}]}
+{"results":[{"fragment":"give mana when enter","archetype":null,"qualifier":null,"tags":["o:\"~ enters\"","o:\"add\""],"confidence":0.85}]}
 {"results":[{"fragment":"trigger when a zombie enters","archetype":null,"qualifier":null,"tags":["o:enters","o:zombie"],"confidence":0.85}]}
 {"results":[{"fragment":"deal damage to creatures","archetype":"damage","qualifier":"creature","tags":[],"confidence":0.9}]}
 {"results":[{"fragment":"cards depicting a forest at night","archetype":null,"qualifier":null,"tags":["art:forest","art:night"],"confidence":0.8}]}
 {"results":[{"fragment":"ways to get lands back from graveyard","archetype":"reanimator","qualifier":"self","tags":[],"confidence":0.7}]}
 {"results":[{"fragment":"give creatures indestructible","archetype":null,"qualifier":null,"tags":["o:indestructible"],"confidence":0.9}]}
 {"results":[{"fragment":"grants flying to others","archetype":null,"qualifier":null,"tags":["o:flying"],"confidence":0.9}]}
-{"results":[{"fragment":"make tokens hexproof","archetype":null,"qualifier":null,"tags":["o:hexproof"],"confidence":0.85}]}`;
+{"results":[{"fragment":"make tokens hexproof","archetype":null,"qualifier":null,"tags":["o:hexproof"],"confidence":0.85}]}
+{"results":[{"fragment":"makes blue mana for each spell you cast","archetype":null,"qualifier":null,"tags":["o:\"add {U}\"","o:\"for each\"","o:spell"],"confidence":0.9}]}
+{"results":[{"fragment":"gets bigger for each artifact you control","archetype":null,"qualifier":null,"tags":["o:\"+1/+1\"","o:\"for each\"","o:artifact"],"confidence":0.9}]}
+{"results":[{"fragment":"deals damage equal to the number of cards in hand","archetype":null,"qualifier":null,"tags":["o:\"equal to\"","o:\"cards in hand\""],"confidence":0.9}]}
+{"results":[{"fragment":"whenever you cast an instant or sorcery draw a card","archetype":null,"qualifier":null,"tags":["o:\"whenever you cast\"","o:\"instant or sorcery\"","o:draw"],"confidence":0.9}]}`;
 
 export function buildResolverPrompt({
   category,
@@ -72,11 +76,13 @@ export function buildResolverPrompt({
     "- If the fragment matches a known archetype above, set archetype (and qualifier if applicable). Leave tags empty -- we handle tag mapping.",
     "- If no archetype fits, set archetype to null and provide raw Scryfall tags (function:..., art:..., kw:..., o:\"...\", t:...).",
     "- use art: ONLY when the query explicitly mentions art, illustration, depiction, or visual appearance (e.g. 'with thopter art', 'depicting a dragon'). Do NOT use art: for creature types, card mechanics, or named MTG permanents that happen to appear in card art. use artist: for illustrator names.",
-    "- max 4 raw tags per fragment. Prefer function: tags from the sample list below.",
+    "- max 4 raw tags per fragment.",
     "- confidence: 0.0-1.0. If uncertain, return empty tags with low confidence.",
     "- Do NOT return color identity, format, or type tags already handled by the rest of the query.",
-    "- IMPORTANT: When the fragment describes a SPECIFIC trigger condition (enters, dies, attacks, taps, etc.), use o: oracle text tags to capture that specificity. Do NOT fall back to a broad function: archetype tag that ignores the trigger. Example: 'give mana when enters' → o:\"~ enters\" + o:\"add\", 'trigger when a land enters' → o:enters + o:land.",
-    "- IMPORTANT: When you emit a function: tag, do NOT also add o: oracle text for the same intent. The function: tag already covers that search space and adding oracle text will over-restrict the results to zero.",
+    "- SPECIFIC CONDITIONS / TRIGGERS: When the fragment describes a specific trigger condition (enters, dies, attacks, taps, etc.) or a named effect unique to certain cards, use o: oracle text tags. Do NOT fall back to a broad function: tag that ignores the condition. Example: 'give mana when enters' → o:\"~ enters\" + o:\"add\", 'trigger when a land enters' → o:enters + o:land.",
+    "- SCALING / CONDITIONAL EFFECTS: When the fragment contains 'for each', 'for every', 'equal to the number of', 'per [noun]', 'proportional to', or any other quantitative scaling, you MUST use o: oracle text filters. NEVER map these to a broad function: tag AND NEVER classify them as any archetype (e.g. 'makes mana for each spell' is NOT archetype:ramp and is NOT function:ramp — it is o:\"add\" + o:\"for each\" + o:spell).",
+    "- BROAD FUNCTION TAGS: Use function: tags only for broad, untriggered gameplay roles (e.g. 'counterspell effects', 'card draw engines', 'removal spells'). If the fragment is more specific than what a function tag captures, use o: instead.",
+    "- When you emit a function: tag, do NOT also add o: oracle text for the same intent. The function: tag already covers that search space and adding oracle text will over-restrict results.",
     "- GRANT/GIVE KEYWORDS: When the fragment describes granting or giving a keyword ability (flying, hexproof, indestructible, lifelink, haste, trample, etc.) to other permanents, use o:<keyword> (e.g. o:indestructible, o:flying). Do NOT use function:grows-others or similar generic tags — use the specific keyword in an oracle text filter.",
     "",
     FEW_SHOT_EXAMPLES,
