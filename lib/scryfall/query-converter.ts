@@ -982,6 +982,41 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     defaultTags: ["hate-indestructible"],
     strayPattern: /\bfunction:hate-indestructible\b/gi,
   },
+  {
+    name: "copy",
+    description: "Create token copies of permanents or copy spells on the stack",
+    detect: /\b(?:cop(?:y|ies|ying)|clone[sd]?|cloning|create[sd]?\s+(?:a\s+)?cop(?:y|ies)|fork(?:ing|s)?)\b/i,
+    disqualify: /\b(?:copy\s+of\s+a\s+card|copy\s+opponent|copy\s+target\s+(?:instant|sorcery)|graveyard\s+cop)\b/i,
+    defaultTags: ["clone", "copy-permanent", "copy-spell", "creates-oracle-copy"],
+    qualifiers: [
+      {
+        name: "spell",
+        detect: /\bcop(?:y|ies|ying)\s+(?:a\s+)?(?:instant|sorcery|spells?)\b|\bfork(?:ing|s)?\b|\bspell\s+cop(?:y|ies)\b/i,
+        tags: ["copy-spell", "copy-instant", "copy-sorcery"],
+      },
+      {
+        name: "creature",
+        detect: /\bcop(?:y|ies|ying)\s+(?:a\s+)?creatures?\b|\bclone[sd]?\s+(?:a\s+)?creatures?\b|\bcreature\s+cop(?:y|ies)\b/i,
+        tags: ["clone", "copy-creature"],
+      },
+      {
+        name: "permanent",
+        detect: /\bcop(?:y|ies|ying)\s+(?:a\s+)?permanents?\b|\bpermanent\s+cop(?:y|ies)\b/i,
+        tags: ["copy-permanent", "clone"],
+      },
+      {
+        name: "artifact",
+        detect: /\bcop(?:y|ies|ying)\s+(?:a\s+)?artifacts?\b|\bartifact\s+cop(?:y|ies)\b/i,
+        tags: ["copy-artifact"],
+      },
+      {
+        name: "enchantment",
+        detect: /\bcop(?:y|ies|ying)\s+(?:a\s+)?enchantments?\b|\benchantment\s+cop(?:y|ies)\b/i,
+        tags: ["copy-enchantment"],
+      },
+    ],
+    strayPattern: /\bfunction:(?:clone|copy-(?:permanent|creature|spell|instant|sorcery|artifact|enchantment|token|legendary|nonland|noncreature)|creates-oracle-copy)\b/gi,
+  },
 ];
 
 function normalizeArchetypeIntents(
@@ -1201,11 +1236,63 @@ function normalizeTokenGenerationIntent(
   }
 
   const availableTags = tagContext?.function?.map((t) => t.toLowerCase()) || [];
-  const eligibleTags = TOKEN_GENERATION_FUNCTION_TAGS.filter((tag) =>
+  let eligibleTags = TOKEN_GENERATION_FUNCTION_TAGS.filter((tag) =>
     availableTags.includes(tag.toLowerCase())
   );
   if (eligibleTags.length <= 1) {
     return query;
+  }
+
+  // When the user asks for a specific token type, exclude tags that produce other types.
+  const wantsCreatureTokens =
+    /\bcreature\s+tokens?\b|\btoken\s+creatures?\b/i.test(naturalQuery);
+  const wantsArtifactTokens =
+    /\b(?:artifact|treasure|food|clue|gold|blood|map|junk)\s+tokens?\b|\btoken\s+(?:artifact|treasure|food|clue)s?\b/i.test(naturalQuery);
+  const wantsLandTokens =
+    /\bland\s+tokens?\b|\btoken\s+lands?\b/i.test(naturalQuery);
+  const wantsNoncreatureTokens =
+    /\bnon-?creature\s+tokens?\b|\btoken\s+non-?creatures?\b/i.test(naturalQuery);
+
+  type TagName = typeof TOKEN_GENERATION_FUNCTION_TAGS[number];
+  let tagsToExclude: Set<TagName> | null = null;
+
+  if (wantsCreatureTokens && !wantsArtifactTokens && !wantsLandTokens) {
+    tagsToExclude = new Set<TagName>([
+      "repeatable-token-generator",
+      "repeatable-artifact-tokens",
+      "repeatable-noncreature-tokens",
+      "create-land-tokens",
+    ]);
+  } else if (wantsLandTokens && !wantsCreatureTokens && !wantsArtifactTokens) {
+    tagsToExclude = new Set<TagName>([
+      "repeatable-token-generator",
+      "repeatable-creature-tokens",
+      "repeatable-artifact-tokens",
+      "repeatable-noncreature-tokens",
+      "creates-token-of-a-card",
+      "creates-oracle-token",
+      "creates-card-token",
+    ]);
+  } else if (wantsArtifactTokens && !wantsCreatureTokens && !wantsLandTokens) {
+    tagsToExclude = new Set<TagName>([
+      "repeatable-token-generator",
+      "repeatable-creature-tokens",
+      "repeatable-noncreature-tokens",
+      "create-land-tokens",
+      "creates-token-of-a-card",
+      "creates-oracle-token",
+      "creates-card-token",
+    ]);
+  } else if (wantsNoncreatureTokens && !wantsCreatureTokens) {
+    tagsToExclude = new Set<TagName>([
+      "repeatable-token-generator",
+      "repeatable-creature-tokens",
+    ]);
+  }
+
+  if (tagsToExclude) {
+    const narrowed = eligibleTags.filter((tag) => !(tagsToExclude as Set<TagName>).has(tag));
+    if (narrowed.length > 0) eligibleTags = narrowed;
   }
 
   const orChain = `(${eligibleTags.map((t) => `function:${t}`).join(" or ")})`;
