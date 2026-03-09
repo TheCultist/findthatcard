@@ -28,7 +28,7 @@ function testAssemblerBooleanComposition() {
       { value: "set:one", source: "phase1:set" },
     ],
     mustNotClauses: [{ value: "set:c20", source: "phase1:set" }],
-    unresolvedFragments: [{ text: "etb effects" }],
+    unresolvedFragments: [{ text: "etb effects", category: "effect" }],
     resolvedFragments: [
       { fragment: "etb effects", tags: ['o:"~ enters"'], confidence: 0.9, category: "effect" },
     ],
@@ -623,7 +623,7 @@ function testAssemblerEmitsRawTagsForNonArchetypeFragments() {
     ],
     shouldClauses: [],
     mustNotClauses: [],
-    unresolvedFragments: [{ text: "cool effects" }],
+    unresolvedFragments: [{ text: "cool effects", category: "semantic" }],
     resolvedFragments: [
       { fragment: "cool effects", tags: ["function:some-effect"], confidence: 0.8, category: "semantic" },
     ],
@@ -645,8 +645,8 @@ function testAssemblerAndsArtConceptsPerFragment() {
     shouldClauses: [],
     mustNotClauses: [],
     unresolvedFragments: [
-      { text: "spider art" },
-      { text: "sword art" },
+      { text: "spider art", category: "art" },
+      { text: "sword art", category: "art" },
     ],
     resolvedFragments: [
       { fragment: "spider art", tags: ["art:spider", "art:spider-like"], confidence: 0.9, category: "art" },
@@ -680,7 +680,7 @@ async function testPhase3InjectsArchetypeTagsFromResolvedFragments() {
     ],
     shouldClauses: [],
     mustNotClauses: [],
-    unresolvedFragments: [{ text: "prevent attacking" }],
+    unresolvedFragments: [{ text: "prevent attacking", category: "effect" }],
     resolvedFragments: [
       { fragment: "prevent attacking", tags: [], confidence: 0.9, category: "effect", archetype: "pillow-fort" },
     ],
@@ -705,7 +705,7 @@ async function testPhase3InjectsDamageArchetypeFromResolvedFragments() {
     ],
     shouldClauses: [],
     mustNotClauses: [],
-    unresolvedFragments: [{ text: "hurt opponents" }],
+    unresolvedFragments: [{ text: "hurt opponents", category: "effect" }],
     resolvedFragments: [
       { fragment: "hurt opponents", tags: [], confidence: 0.85, category: "effect", archetype: "damage", qualifier: "opponent" },
     ],
@@ -1115,6 +1115,20 @@ async function run() {
   await testPhase1SynergyWithCardDoesNotFalsePositive();
   await testPhase1SynergyWithCardPreservesExtraConstraints();
   await testPhase1SimilarToCardPreservesExtraConstraints();
+  // Rarity filter tests
+  await testPhase1RarityExact();
+  await testPhase1RarityRareOrHigher();
+  await testPhase1RarityAtLeastUncommon();
+  await testPhase1RarityRarePlus();
+  await testPhase1RarityNoArtThopter();
+  // Aristocrats + commanders
+  await testPhase1AristocratCommandersResolves();
+  await testPhase1CommandersPluralIsCommander();
+  // Reanimate verb protection
+  await testPhase1ArtifactsReanimateCreaturesNoNameClause();
+  // Similar-cards type preservation
+  await testPhase1InstantsLikeCardPreservesTypeFilter();
+  await testPhase1BloodArtistEffectsOnCreatures();
   console.log("search-pipeline tests passed");
 }
 
@@ -1193,6 +1207,160 @@ async function testPhase1SimilarToCardPreservesExtraConstraints() {
     `expected f:modern in mustClauses; got: ${mustValues.join(", ")}`
   );
   console.log("[PASS] phase1: similar-cards preserves extra format constraint (f:modern)");
+}
+
+// ---------------------------------------------------------------------------
+// Rarity filter tests
+// ---------------------------------------------------------------------------
+
+async function testPhase1RarityExact() {
+  const parsed = await parseNaturalQuery("blue rare instants");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.some((v) => v === "r:r" || v === "rarity:rare"),
+    `expected r:r or rarity:rare; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'rare' resolves to exact rarity filter r:r");
+}
+
+async function testPhase1RarityRareOrHigher() {
+  const parsed = await parseNaturalQuery("blue card that has to do with thopters rarity rare or higher");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.some((v) => v === "r>=r" || v === "rarity>=rare"),
+    `expected r>=r; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    !mustValues.some((v) => v === "r:r" || v === "rarity:rare"),
+    `should use >= not exact; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'rarity rare or higher' resolves to r>=r");
+}
+
+async function testPhase1RarityAtLeastUncommon() {
+  const parsed = await parseNaturalQuery("at least uncommon green creatures");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.some((v) => v === "r>=u" || v === "rarity>=uncommon"),
+    `expected r>=u; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'at least uncommon' resolves to r>=u");
+}
+
+async function testPhase1RarityRarePlus() {
+  const parsed = await parseNaturalQuery("white mythic+ removal spells");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.some((v) => v === "r>=m" || v === "rarity>=mythic"),
+    `expected r>=m; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'mythic+' resolves to r>=m");
+}
+
+async function testPhase1RarityNoArtThopter() {
+  // art:thopter should NOT appear for a general thopter query even if AI would suggest it
+  // This is a Phase 2 / prompt rule — we just verify the rarity was extracted correctly.
+  const parsed = await parseNaturalQuery("blue card that has to do with thopters rarity rare or higher");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(mustValues.includes("id:u"), `expected id:u; got: ${mustValues.join(", ")}`);
+  assert.ok(
+    mustValues.some((v) => v === "r>=r"),
+    `expected r>=r from 'rarity rare or higher'; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: thopter rarity query has id:u and r>=r");
+}
+
+// ---------------------------------------------------------------------------
+// Aristocrats commanders / plural commanders tests
+// ---------------------------------------------------------------------------
+
+async function testPhase1AristocratCommandersResolves() {
+  const parsed = await parseNaturalQuery("aristocrat commanders");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  assert.ok(
+    mustValues.some((v) => /strategy:"?Aristocrats"?/i.test(v)),
+    `expected strategy:Aristocrats; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.some((v) => /is:commander/i.test(v)),
+    `expected is:commander; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    !mustValues.some((v) => /\bt:creature\b/i.test(v)),
+    `t:creature should NOT appear for 'aristocrat commanders'; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'aristocrat commanders' → strategy:Aristocrats + is:commander, no t:creature");
+}
+
+async function testPhase1CommandersPluralIsCommander() {
+  const parsed = await parseNaturalQuery("simic commanders");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.some((v) => /is:commander/i.test(v)),
+    `expected is:commander for 'simic commanders'; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.some((v) => /id[:=<]*(gu|ug)/i.test(v)),
+    `expected simic color identity; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'simic commanders' → is:commander");
+}
+
+// ---------------------------------------------------------------------------
+// Reanimate verb-phrase protection tests
+// ---------------------------------------------------------------------------
+
+async function testPhase1ArtifactsReanimateCreaturesNoNameClause() {
+  const parsed = await parseNaturalQuery("artifacts that reanimate creatures");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.includes("t:artifact"),
+    `expected t:artifact; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    !mustValues.some((v) => v.startsWith('name:"reanimate"') || v === 'name:"reanimate"'),
+    `name:"Reanimate" should NOT appear; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    !mustValues.includes("t:creature"),
+    `t:creature should NOT appear (creature is object of reanimate); got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'artifacts that reanimate creatures' → t:artifact, no name:reanimate, no t:creature");
+}
+
+// ---------------------------------------------------------------------------
+// Similar-cards type preservation tests
+// ---------------------------------------------------------------------------
+
+async function testPhase1InstantsLikeCardPreservesTypeFilter() {
+  const parsed = await parseNaturalQuery("instants like lava axe");
+  assert.equal(parsed.intent, "similar-cards", `expected similar-cards, got: ${parsed.intent}`);
+  assert.ok(parsed.similarToCardName, "expected similarToCardName to be set");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.some((v) => v === "t:instant" || v === "(t:instant or t:sorcery)"),
+    `expected t:instant in mustClauses; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'instants like Lava Axe' → similar-cards with t:instant preserved");
+}
+
+async function testPhase1BloodArtistEffectsOnCreatures() {
+  const parsed = await parseNaturalQuery("blood artist effects on creatures");
+  assert.equal(parsed.intent, "similar-cards", `expected similar-cards, got: ${parsed.intent}`);
+  assert.ok(
+    parsed.similarToCardName,
+    "expected similarToCardName to be set"
+  );
+  assert.ok(
+    /blood artist/i.test(parsed.similarToCardName ?? ""),
+    `expected similarToCardName to contain 'blood artist'; got: "${parsed.similarToCardName}"`
+  );
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.includes("t:creature"),
+    `expected t:creature in mustClauses for 'on creatures'; got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'blood artist effects on creatures' → similar-cards with t:creature");
 }
 
 run().catch((error) => {

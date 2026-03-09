@@ -71,7 +71,7 @@ export function buildResolverPrompt({
     "Rules:",
     "- If the fragment matches a known archetype above, set archetype (and qualifier if applicable). Leave tags empty -- we handle tag mapping.",
     "- If no archetype fits, set archetype to null and provide raw Scryfall tags (function:..., art:..., kw:..., o:\"...\", t:...).",
-    "- use art: for depicted visual subjects (objects, creatures, scenery in card art). use artist: for illustrator names.",
+    "- use art: ONLY when the query explicitly mentions art, illustration, depiction, or visual appearance (e.g. 'with thopter art', 'depicting a dragon'). Do NOT use art: for creature types, card mechanics, or named MTG permanents that happen to appear in card art. use artist: for illustrator names.",
     "- max 4 raw tags per fragment. Prefer function: tags from the sample list below.",
     "- confidence: 0.0-1.0. If uncertain, return empty tags with low confidence.",
     "- Do NOT return color identity, format, or type tags already handled by the rest of the query.",
