@@ -34,5 +34,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# cursor / ai
+.cursor
+CLAUDE.md
 data/scryfall-sets.json
 data/tagger-tags.json
