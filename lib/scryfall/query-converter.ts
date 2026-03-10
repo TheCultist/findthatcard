@@ -1068,6 +1068,12 @@ function normalizeArchetypeIntents(
   naturalQuery: string,
   query: string
 ): string {
+  // If Phase 1 resolved the query to a specific card name, skip archetype injection —
+  // "flicker" should be either the card OR the mechanic, not both ANDed together.
+  if (/\bname:/i.test(query)) {
+    return query;
+  }
+
   const lower = naturalQuery.toLowerCase();
   let updated = query;
 
@@ -1563,6 +1569,14 @@ function detectNegatedStrategies(naturalQuery: string): string[] {
 function appendStrategyTags(query: string, naturalQuery: string): string {
   const detected = detectStrategies(naturalQuery);
   if (detected.length === 0) {
+    return query;
+  }
+
+  // If Phase 1 already resolved the query to a card name, don't also inject strategy
+  // tags for the same keyword — "flicker" should be either the card OR the mechanic,
+  // not both ANDed together (which would return only cards that both ARE named "Flicker"
+  // AND carry flicker function tags).
+  if (/\bname:/i.test(query)) {
     return query;
   }
 
