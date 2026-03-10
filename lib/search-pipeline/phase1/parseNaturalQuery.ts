@@ -2536,13 +2536,16 @@ function detectSimilarToCardQuery(naturalQuery: string): BypassDetectResult {
   }
 
   const SIMILAR_PATTERNS: RegExp[] = [
-    // Standard phrasings
+    // Standard phrasings (direct)
     /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?)\s+similar\s+to\s+([\s\S]+)/i,
     /\bsimilar\s+(?:cards?\s+)?to\s+([\s\S]+)/i,
     /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?|something|anything)\s+like\s+([\s\S]+)/i,
     /\balternatives?\s+(?:to|for)\s+([\s\S]+)/i,
     /\beffects?\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
     /\babilities?\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
+    // With filler words between type and trigger ("card that are like X", "cards which is similar to X")
+    /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?|something|anything)\s+(?:that|which)\s+(?:are?\s+|is\s+)?like\s+([\s\S]+)/i,
+    /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?|something|anything)\s+(?:that|which)\s+(?:are?\s+|is\s+)?similar\s+to\s+([\s\S]+)/i,
     // Grammar mistakes / non-native phrasings
     /\b(?:cards?|spells?|instants?|sorceries|enchantments?|artifacts?|creatures?|lands?|something|anything)\s+similar\s+(?:than|as|with|of)\s+([\s\S]+)/i,
     /\bsimilar\s+(?:cards?\s+)?(?:than|as|with|of)\s+([\s\S]+)/i,
@@ -2733,8 +2736,11 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
 
   for (const w of bypassStrippedWords) strippedTerms.push(w);
 
-  // Early exit: comma-separated card name list ("Bolt, Counterspell, Growth")
-  const cardNameList = detectCardNameList(naturalQuery);
+  // Early exit: comma-separated card name list ("Bolt, Counterspell, Growth").
+  // Must be skipped when a bypass intent (similar-cards, art-like, synergy-with)
+  // has already been detected — e.g. "cards like Sheoldred, the Apocalypse"
+  // contains a comma but should trigger similar-cards, not a card-name list.
+  const cardNameList = !bypassIntent ? detectCardNameList(naturalQuery) : null;
   if (cardNameList) {
     return {
       naturalQuery,
@@ -3065,7 +3071,18 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     }
   }
 
-  const setFilters = await resolveSetFilters(naturalQuery);
+  const allSetFilters = await resolveSetFilters(naturalQuery);
+  // Drop set filters whose name was already claimed by a bypass intent
+  // (e.g. "cards like Sheoldred, the Apocalypse" → "Apocalypse" is the card name,
+  // not a request for cards from the Apocalypse set).
+  const setFilters = bypassIntent
+    ? allSetFilters.filter((f) => {
+        const norm = f.name.toLowerCase();
+        return !bypassStrippedWords.some(
+          (w) => norm === w.toLowerCase() || norm.startsWith(w.toLowerCase() + " ")
+        );
+      })
+    : allSetFilters;
   if (hasSetContext) {
     strippedTerms.push("set", "sets", "edition", "editions", "printing", "printings");
   }

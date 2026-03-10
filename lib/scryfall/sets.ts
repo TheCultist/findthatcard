@@ -386,7 +386,8 @@ function normalizeOrphanedOr(query: string): string {
 
 function removeSetFilters(query: string): string {
   let updated = query;
-  updated = updated.replace(/-?(?:set|s|e|edition):[^\s)]+/gi, "");
+  // \b prevents matching `e:` inside `name:`, `type:`, etc.
+  updated = updated.replace(/-?\b(?:set|s|e|edition):[^\s)]+/gi, "");
   updated = updated.replace(/\s{2,}/g, " ").trim();
   return normalizeOrphanedOr(updated);
 }

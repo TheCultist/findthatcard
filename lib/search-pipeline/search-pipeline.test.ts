@@ -1137,6 +1137,10 @@ async function run() {
   await testPhase1ForEachArtifactScaling();
   // Grammar-mistake similar-cards variants
   await testPhase1SimilarThanGrammarMistake();
+  // Comma in card name must not trigger card-name-list detection
+  await testPhase1SimilarToCardWithCommaInName();
+  // Filler words between type and "like/similar to"
+  await testPhase1SimilarWithFillerWords();
   // Direct Scryfall queries must never be re-routed
   await testPhase1DirectScryfallNeverModified();
   console.log("search-pipeline tests passed");
@@ -1462,6 +1466,53 @@ async function testPhase1SimilarThanGrammarMistake() {
     );
   }
   console.log("[PASS] phase1: 'similar than/as/with' grammar mistakes detect similar-cards intent");
+}
+
+async function testPhase1SimilarToCardWithCommaInName() {
+  // Cards whose names contain a comma (e.g. "Sheoldred, the Apocalypse") must
+  // trigger similar-cards, not the comma-separated card-name-list detector.
+  const queries = [
+    "cards like sheoldred, the apocalypse",
+    "something like jace, the mind sculptor",
+    "similar to emrakul, the aeons torn",
+  ];
+  for (const query of queries) {
+    const parsed = await parseNaturalQuery(query);
+    assert.equal(
+      parsed.intent,
+      "similar-cards",
+      `"${query}" should detect similar-cards; got: ${parsed.intent}`
+    );
+    assert.ok(
+      parsed.similarToCardName,
+      `"${query}" should set similarToCardName; got: ${parsed.similarToCardName}`
+    );
+  }
+  console.log("[PASS] phase1: 'cards like X, the Y' with comma in card name → similar-cards, not card-name-list");
+}
+
+async function testPhase1SimilarWithFillerWords() {
+  // "card that are like X" has filler words between the type and "like".
+  const variants = [
+    "card that are like scrawling crawler",
+    "white black blue card that are like scrawling crawler",
+    "cards that are like lightning bolt",
+    "cards which are similar to sol ring",
+    "something that is like counterspell",
+  ];
+  for (const query of variants) {
+    const parsed = await parseNaturalQuery(query);
+    assert.equal(
+      parsed.intent,
+      "similar-cards",
+      `"${query}" should detect similar-cards; got: ${parsed.intent}`
+    );
+    assert.ok(
+      parsed.similarToCardName,
+      `"${query}" should set similarToCardName`
+    );
+  }
+  console.log("[PASS] phase1: 'card that are like X' filler words detect similar-cards intent");
 }
 
 async function testPhase1DirectScryfallNeverModified() {

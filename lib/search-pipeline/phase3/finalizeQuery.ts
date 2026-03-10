@@ -361,8 +361,19 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     });
   }
 
+  const isBypassIntent =
+    ir.intent === "similar-cards" ||
+    ir.intent === "art-like-cards" ||
+    ir.intent === "synergy-with-card";
+
   if (ir.intent !== "direct-scryfall") {
-    query = await applySetFiltersFromNaturalQuery(ir.naturalQuery, query);
+    // For bypass intents (similar-cards, art-like, synergy), Phase 1 already ran
+    // set detection with bypass-word exclusions, so skip Phase 3's second pass.
+    // Without this, card names like "Sheoldred, the Apocalypse" would cause
+    // "Apocalypse" to be re-detected as set:apc here.
+    if (!isBypassIntent) {
+      query = await applySetFiltersFromNaturalQuery(ir.naturalQuery, query);
+    }
     query = await applyKeywordFiltersFromNaturalQuery(ir.naturalQuery, query);
     query = applyCommanderContextFromNaturalQuery(ir.naturalQuery, query);
     query = ensureCommanderCreatureFilter(ir.naturalQuery, query);
