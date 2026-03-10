@@ -584,20 +584,35 @@ async function testPhase3StripsDamageTargetCreatureTypeFilter() {
 }
 
 async function testPhase1MakeTokensDoesNotProduceTokenType() {
-  const queries = [
-    "cards that make 1/1 tokens",
-    "white creature that creates 2/2 knight tokens",
-    "spell that produces tokens each turn",
+  // No P/T specified — should not produce t:token, but no o:"P/T" either
+  const parsed0 = await parseNaturalQuery("spell that produces tokens each turn");
+  const mustValues0 = parsed0.mustClauses.map((c) => c.value);
+  assert.ok(
+    !mustValues0.some((v) => /\bt:token\b/i.test(v)),
+    `t:token must not appear for generic token query; got: ${mustValues0.join(", ")}`
+  );
+  console.log("[PASS] phase1: generic token query does not produce t:token");
+}
+
+async function testPhase1MakeTokensWithPtAddsOracleClause() {
+  const cases: [string, string][] = [
+    ["cards that make 1/1 tokens", "1/1"],
+    ["white creature that creates 2/2 knight tokens", "2/2"],
+    ["enchantment that generates 3/3 beast tokens each turn", "3/3"],
   ];
-  for (const q of queries) {
+  for (const [q, expectedPt] of cases) {
     const parsed = await parseNaturalQuery(q);
     const mustValues = parsed.mustClauses.map((c) => c.value);
     assert.ok(
       !mustValues.some((v) => /\bt:token\b/i.test(v)),
       `t:token must not appear for "${q}"; got: ${mustValues.join(", ")}`
     );
+    assert.ok(
+      mustValues.some((v) => v === `o:"${expectedPt}"`),
+      `expected o:"${expectedPt}" for "${q}"; got: ${mustValues.join(", ")}`
+    );
   }
-  console.log("[PASS] phase1: make/create token queries do not produce t:token");
+  console.log("[PASS] phase1: make/create P/T token queries produce o:\"P/T\" clause");
 }
 
 async function testPhase1ToFindLandsDoesNotMatchCardName() {
@@ -1286,6 +1301,7 @@ async function run() {
   await testPhase3RemovesAnyTokenTypeForGenerationIntent();
   await testPhase3StripsDamageTargetCreatureTypeFilter();
   await testPhase1MakeTokensDoesNotProduceTokenType();
+  await testPhase1MakeTokensWithPtAddsOracleClause();
   await testPhase1ToFindLandsDoesNotMatchCardName();
   await testPhase1TutorFetchesMultiWordTargetNotType();
   await testPhase1CreaturesThatDestroyOtherCreaturesKeepsType();

@@ -764,14 +764,15 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   //    e.g. "give your creatures haste"  → "creatures" (not t:creature)
   //         "grant all permanents indestructible" → "permanents" (not t:permanent)
   //    Quantifier group handles possessives, articles, and number words.
-  capture(/\b(?:gives?|grants?|make[sd]?|creates?|creating|produces?|producing)\s+(?:(?:your|all|each|every|target|a|an|any|the|friendly|one|two|three|four|five|six|seven|eight|nine|ten)\s+)*([a-z][a-z-]*)\b/gi);
+  capture(/\b(?:gives?|grants?|make[sd]?|creates?|creating|produces?|producing|generates?|generating)\s+(?:(?:your|all|each|every|target|a|an|any|the|friendly|one|two|three|four|five|six|seven|eight|nine|ten)\s+)*([a-z][a-z-]*)\b/gi);
   // 8b. Token creation with P/T values — "make 1/1 tokens", "create two 2/2 fliers"
   //     The P/T value (e.g. "1/1") is not a word, so the pattern above can't consume it.
-  //     This pattern specifically handles the case where a numeric P/T value appears
-  //     between the creation verb and the type noun.
-  //     e.g. "make 1/1 tokens" → "tokens" (not t:token)
-  //          "creates three 2/2 white soldier tokens" → "tokens" (not t:token)
-  capture(/\b(?:make[sd]?|creates?|creating|produces?|producing)\s+(?:(?:your|all|each|every|a|an|any|the|one|two|three|four|five|six|seven|eight|nine|ten)\s+)*[\d]+\/[\d]+\s+(?:[a-z]+\s+){0,4}(tokens?)\b/gi);
+  //     Captures everything from P/T to "tokens" as a single phrase (e.g. "beast tokens",
+  //     "white soldier tokens") so ALL those words enter semanticRoleTokens, preventing
+  //     both t:token AND t:beast / t:soldier from being generated.
+  //     e.g. "make 1/1 tokens" → ["tokens"] (not t:token)
+  //          "creates three 2/2 beast tokens" → ["beast", "tokens"] (not t:token, t:beast)
+  capture(/\b(?:make[sd]?|creates?|creating|produces?|producing|generates?|generating)\s+(?:(?:your|all|each|every|a|an|any|the|one|two|three|four|five|six|seven|eight|nine|ten)\s+)*[\d]+\/[\d]+\s+((?:[a-z]+\s+){0,4}tokens?)\b/gi);
 
   // 10. Enchant / equip / attach targets — the permanent being enchanted/equipped is not
   //     the card type of the spell being searched.
@@ -1440,6 +1441,19 @@ function applyOracleIntentHeuristics(
     mustClauses.push({ value: 'o:"create"', source: "phase1:oracle" });
     strippedTerms.push(...ETB_TERMS, "create", "creates", "token", "tokens", "make", "makes");
     return;
+  }
+
+  // --- Token creation with explicit P/T stat ---
+  // e.g. "cards that make 1/1 tokens", "creates three 2/2 knight tokens"
+  // The P/T value is meaningful — add o:"P/T" so results are specific to that stat.
+  // This fires regardless of ETB intent.
+  const tokenPtMatch = naturalQuery.match(
+    /\b(?:make[sd]?|creates?|creating|produces?|producing|generates?|generating)\b[^.]{0,40}?\b(\d+\/\d+)\b[^.]{0,30}?\btokens?\b/i
+  );
+  if (tokenPtMatch) {
+    const pt = tokenPtMatch[1];
+    mustClauses.push({ value: `o:"${pt}"`, source: "phase1:oracle" });
+    strippedTerms.push(pt);
   }
 
   // --- ETB + discard / hand disruption ---
