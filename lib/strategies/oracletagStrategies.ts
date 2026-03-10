@@ -1,4 +1,4 @@
-export type StrategyOracletagGroup = {
+type StrategyOracletagGroup = {
   strategy: string;
   oracletags: string[];
   aliases?: string[];
@@ -29,7 +29,7 @@ export const STRATEGY_ORACLETAGS: StrategyOracletagGroup[] = [
   },
   {
     strategy: "Lifegain",
-    oracletags: ["function:lifegain", "function:lifegain-matters"],
+    oracletags: ["function:lifegain", "function:lifegain-matters", "function:soul-warden-ability", "function:pridemate"],
     aliases: ["life gain"],
   },
   {
@@ -39,7 +39,7 @@ export const STRATEGY_ORACLETAGS: StrategyOracletagGroup[] = [
   },
   {
     strategy: "Board Wipe",
-    oracletags: ["function:boardwipe"],
+    oracletags: ["function:boardwipe", "function:wrath-of-god"],
     aliases: [
       "board wipes", "boardwipe", "boardwipes",
       "mass removal", "sweeper", "sweepers",

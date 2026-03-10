@@ -10,6 +10,7 @@ import {
   STRATEGY_ORACLETAGS,
 } from "@/lib/strategies/oracletagStrategies";
 import { hasCommanderDeckContext } from "@/lib/commander-context";
+import { escapeRegex } from "@/lib/utils/text";
 
 let openaiClient: OpenAI | null = null;
 
@@ -42,10 +43,6 @@ const FORMAT_NAMES = [
   "commander",
   "brawl",
 ] as const;
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 function normalizeFormatFunctionTags(query: string): string {
   return FORMAT_NAMES.reduce((acc, format) => {
@@ -545,7 +542,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     description: "Destroy, exile, bounce, or tuck permanents",
     detect: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?|kill\s+spell|kill\s+spells)\b/i,
     disqualify: /\b(graveyard|reanimate|return|recursion)\b/i,
-    defaultTags: ["removal", "spot-removal", "repeatable-removal"],
+    defaultTags: ["removal", "spot-removal", "repeatable-removal", "oblivion-ring-effect"],
     qualifiers: [
       {
         name: "creature",
@@ -605,7 +602,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     name: "tokens",
     description: "Create or multiply creature/artifact/treasure tokens",
     detect: /\b(token\s+(?:generat(?:or|ion|e|es|ing)|creat(?:or|ion|e|es|ing)|mak(?:er?|es?|ing))|(?:make|create|generate|produce)s?\s+tokens?)\b/i,
-    defaultTags: ["repeatable-token-generator", "repeatable-creature-tokens"],
+    defaultTags: ["repeatable-token-generator", "repeatable-creature-tokens", "young-pyromancer-ability"],
     qualifiers: [
       {
         name: "treasure",
@@ -722,7 +719,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
       {
         name: "opponent",
         detect: /\b(?:discard|hand\s+disruption|hand\s+attack)\s+.*opponents?\b|\bopponents?\s+discards?\b|\bforced?\s+discard\b/i,
-        tags: ["discard", "opponent-discard-matters", "random-discard"],
+        tags: ["discard", "opponent-discard-matters", "random-discard", "specter-ability", "thoughtseize"],
       },
     ],
     strayPattern: /\bfunction:(discard(?:-[a-z0-9-]+)?|free-discard-outlet|self-discard-matters|opponent-discard-matters|random-discard|discarded-type-matters)\b/gi,
@@ -791,7 +788,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     name: "stax",
     description: "Tax or restrict opponents' actions (casting, attacking, untapping)",
     detect: /\b(stax|tax\s+(?:effects?|spells?|cards?)|hatebears?|hate\s+bears?)\b/i,
-    defaultTags: ["tax", "tax-attack", "tax-block", "cast-tax"],
+    defaultTags: ["tax", "tax-attack", "tax-block", "cast-tax", "kismet-effect"],
     strayPattern: /\bfunction:(tax(?:-[a-z0-9-]+)?|cast-tax)\b/gi,
   },
   {
@@ -893,7 +890,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     name: "aristocrats",
     description: "Sacrifice creatures for value: sacrifice outlets, death triggers, and payoffs when creatures die",
     detect: /\baristo(?:cra(?:ts?|cts?|tic)|arts?)\b/i,
-    defaultTags: ["sacrifice-outlet", "sac-outlet", "death-trigger", "death-trigger-self", "synergy-sacrifice"],
+    defaultTags: ["sacrifice-outlet", "sac-outlet", "death-trigger", "death-trigger-self", "synergy-sacrifice", "blood-artist-ability"],
     strayPattern: /\bfunction:(?:sacrifice-outlet|sac-outlet|death-trigger-self|death-trigger|synergy-sacrifice|sacrifice-self|alternate-cost-sacrifice)\b/gi,
   },
   {
@@ -1061,6 +1058,45 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
       },
     ],
     strayPattern: /\bfunction:(?:clone|copy-(?:permanent|creature|spell|instant|sorcery|artifact|enchantment|token|legendary|nonland|noncreature)|creates-oracle-copy)\b/gi,
+  },
+  // ── Card-name effect archetypes ─────────────────────────────────────────
+  // Card names that have become generic shorthand for an effect category.
+  {
+    name: "fog",
+    description: "Prevent all combat damage this turn (Fog effects)",
+    detect: /\b(?:fog(?:s|ged|ging)?(?:\s+(?:effects?|like|style))?|prevent(?:s|ed|ing)?\s+(?:all\s+)?combat\s+damage)\b/i,
+    disqualify: /\bfog\s+(?:bank|patch|elemental|of\s+(?:war|gnomes))\b/i,
+    defaultTags: ["fog", "fog-limited", "fog-selective", "pseudo-fog"],
+    strayPattern: /\bfunction:(?:fog(?:-[a-z0-9-]+)?|pseudo-fog)\b/gi,
+  },
+  {
+    name: "wheel",
+    description: "Each player discards their hand and draws a new hand (Wheel of Fortune effects)",
+    detect: /\bwheels?(?:\s+(?:effects?|like|style|of\s+fortune))?\b/i,
+    disqualify: /\bwheel\s+of\s+(?:sun|fate)\b/i,
+    defaultTags: ["wheel"],
+    strayPattern: /\bfunction:wheel\b/gi,
+  },
+  {
+    name: "curiosity",
+    description: "Draw a card whenever a creature deals combat damage to a player (Curiosity effects)",
+    detect: /\bcuriosity\s+(?:effects?|like|style|triggers?)\b|\bdraw\s+(?:a\s+)?cards?\s+(?:when(?:ever)?\s+)?(?:deals?|combat)\s+damage/i,
+    defaultTags: ["curiosity", "curiosity-like"],
+    strayPattern: /\bfunction:curiosity(?:-[a-z0-9-]+)?\b/gi,
+  },
+  {
+    name: "brainstorm",
+    description: "Draw cards and put cards back on top of your library (Brainstorm-style card selection)",
+    detect: /\bbrainstorms?(?:\s+(?:effects?|like|style))?\b/i,
+    defaultTags: ["brainstorm"],
+    strayPattern: /\bfunction:brainstorm\b/gi,
+  },
+  {
+    name: "impact-tremors",
+    description: "Deal damage to opponents whenever a creature enters the battlefield (Impact Tremors effects)",
+    detect: /\bimpact\s*tremors?\s*(?:effects?|like)?\b|\bdamage\s+(?:when(?:ever)?\s+)?(?:a\s+)?creatures?\s+enters?\b/i,
+    defaultTags: ["impact-effect"],
+    strayPattern: /\bfunction:impact-effect\b/gi,
   },
 ];
 

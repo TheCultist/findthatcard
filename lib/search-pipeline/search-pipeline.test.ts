@@ -220,6 +220,29 @@ async function testPhase1LifeStealUsesFunctionTags() {
   console.log("[PASS] phase1: life-steal phrasing maps to life-drain function tags");
 }
 
+async function testPhase1DeathLifeGainUsesOracleAnchors() {
+  // "gain life when another creature dies" is a death-triggered life-gain pattern,
+  // NOT aristocrats/sacrifice. Phase 1 should resolve it to oracle text anchors,
+  // and t:creature should be emitted from the leading "Creatures" subject.
+  const parsed = await parseNaturalQuery(
+    "Creatures that gain life when another creature dies"
+  );
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustValues.includes("t:creature"),
+    `t:creature should be emitted for leading "Creatures" subject — got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.includes("function:blood-artist-ability"),
+    `function:blood-artist-ability should be present — got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    !mustValues.some((v) => /sacrifice|sac-outlet|aristocrat/.test(v)),
+    `should not produce sacrifice/aristocrat tags — got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: death life-gain maps to function:blood-artist-ability, not sacrifice tags");
+}
+
 async function testPhase1ArtDescriptorBundlesUseAndedArtTags() {
   const parsed = await parseNaturalQuery("cards with big titties goth girls");
   const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
@@ -558,6 +581,23 @@ async function testPhase3StripsDamageTargetCreatureTypeFilter() {
   assert.ok(/\bt:instant\b/i.test(finalized.queryForLogs) || /\(t:instant or t:sorcery\)/i.test(finalized.queryForLogs));
   assert.ok(/\bfunction:burn-creature\b/i.test(finalized.queryForLogs));
   console.log("[PASS] phase3: strips t:creature when creature is a damage target");
+}
+
+async function testPhase1MakeTokensDoesNotProduceTokenType() {
+  const queries = [
+    "cards that make 1/1 tokens",
+    "white creature that creates 2/2 knight tokens",
+    "spell that produces tokens each turn",
+  ];
+  for (const q of queries) {
+    const parsed = await parseNaturalQuery(q);
+    const mustValues = parsed.mustClauses.map((c) => c.value);
+    assert.ok(
+      !mustValues.some((v) => /\bt:token\b/i.test(v)),
+      `t:token must not appear for "${q}"; got: ${mustValues.join(", ")}`
+    );
+  }
+  console.log("[PASS] phase1: make/create token queries do not produce t:token");
 }
 
 async function testPhase1ToFindLandsDoesNotMatchCardName() {
@@ -1226,6 +1266,7 @@ async function run() {
   await testPhase1EtbDrawUsesOracleFilters();
   await testPhase1NoCardsInHandDamageUsesOracleAnchors();
   await testPhase1LifeStealUsesFunctionTags();
+  await testPhase1DeathLifeGainUsesOracleAnchors();
   await testPhase1ArtDescriptorBundlesUseAndedArtTags();
   await testPhase1PluralTypeIsStrippedFromArtFragments();
   await testPhase1SorceryPluralKeepsTypeAndStripsFromArtFragment();
@@ -1244,6 +1285,7 @@ async function run() {
   await testPhase3RemovesTreasureTypeForTokenGenerationIntent();
   await testPhase3RemovesAnyTokenTypeForGenerationIntent();
   await testPhase3StripsDamageTargetCreatureTypeFilter();
+  await testPhase1MakeTokensDoesNotProduceTokenType();
   await testPhase1ToFindLandsDoesNotMatchCardName();
   await testPhase1TutorFetchesMultiWordTargetNotType();
   await testPhase1CreaturesThatDestroyOtherCreaturesKeepsType();

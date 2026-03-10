@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { getCacheDir } from "@/lib/cache-paths";
+import { formatTodayStamp, shouldSkipUpdate } from "@/lib/utils/cache";
 
 const CATALOG_SLUGS = [
   "artist-names",
@@ -45,15 +46,6 @@ let catalogCachePromise: Promise<void> | null = null;
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
-}
-
-function formatTodayStamp(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function shouldSkipUpdate(fileStamp: string | null, todayStamp: string): boolean {
-  if (!fileStamp) return false;
-  return fileStamp >= todayStamp;
 }
 
 async function readCatalogFile(): Promise<CatalogCacheFile | null> {
@@ -243,10 +235,6 @@ export async function getCatalog(name: CatalogName): Promise<string[]> {
 export async function getAllCatalogs(): Promise<Record<string, string[]>> {
   await ensureScryfallCatalogCache();
   return { ...(catalogCache ?? {}) };
-}
-
-export async function getCatalogNames(): Promise<CatalogName[]> {
-  return [...CATALOG_SLUGS];
 }
 
 ensureScryfallCatalogCache().catch((error) => {

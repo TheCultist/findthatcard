@@ -204,14 +204,6 @@ export function matchSupertype(token: string): string | null {
   return null;
 }
 
-export function matchArtistName(text: string): { name: string; matchedText: string } | null {
-  if (!artistIndex) return null;
-  const lower = text.toLowerCase();
-  const direct = artistIndex.get(lower);
-  if (direct) return { name: direct, matchedText: text };
-  return null;
-}
-
 /**
  * Common English words that are close (levenshtein ≤ 1) to MTG subtype names or their
  * plurals but should never be treated as subtypes. Checked before fuzzy subtype matching.
@@ -247,10 +239,6 @@ export function fuzzyMatchSubtype(
     if (distanceFn(lower, form)) return entry;
   }
   return null;
-}
-
-export function getSubtypeIndex(): Map<string, SubtypeMatch> | null {
-  return subtypeIndex;
 }
 
 export function getArtistIndex(): Map<string, string> | null {

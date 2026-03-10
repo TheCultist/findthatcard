@@ -60,9 +60,9 @@ function buildArtQueryFromTaggerData(tagger: TaggerCardData): string | null {
   const isCompound = (tag: string) => tag.includes("-") || tag.includes(" ");
   const isBroad = (tag: string) => BROAD_TAGS.has(tag.toLowerCase());
 
-  const tier1: string[] = []; // compound tags — most specific
-  const tier2: string[] = []; // uncommon single-word tags
-  const tier3: string[] = []; // broad/ambient single-word tags
+  const tier1: string[] = [];
+  const tier2: string[] = [];
+  const tier3: string[] = [];
 
   for (const tag of tagger.artTags) {
     if (isCompound(tag)) {
@@ -77,23 +77,16 @@ function buildArtQueryFromTaggerData(tagger: TaggerCardData): string | null {
   let query: string | null = null;
 
   if (tier1.length >= 2) {
-    // Two compound tags AND-chained is a tight, visually coherent set.
     query = `(art:"${tier1[0]}" art:"${tier1[1]}")`;
   } else if (tier1.length === 1 && tier2.length >= 1) {
-    // One compound tag + one specific single-word tag: AND them to narrow.
     query = `(art:"${tier1[0]}" art:"${tier2[0]}")`;
   } else if (tier1.length === 1) {
-    // Only one compound tag available, use it alone.
     query = `art:"${tier1[0]}"`;
   } else if (tier2.length >= 2) {
-    // Two moderately specific tags AND-chained gives a well-scoped result.
     query = `(art:"${tier2[0]}" art:"${tier2[1]}")`;
   } else if (tier2.length === 1) {
-    // One specific tag — use it alone.
     query = `art:"${tier2[0]}"`;
   } else if (tier3.length > 0) {
-    // Only broad tags available. OR them so the user at least sees results
-    // (AND would return almost nothing; a single broad tag is too wide alone).
     const orTerms = tier3.slice(0, 3).map((t) => `art:"${t}"`).join(" or ");
     query = tier3.length > 1 ? `(${orTerms})` : orTerms;
   }
@@ -127,8 +120,6 @@ function buildArtQueryFromTaggerData(tagger: TaggerCardData): string | null {
  * built (e.g. card has no tagger data at all).
  */
 export async function resolveSimilarCardsQuery(cardName: string): Promise<string | null> {
-  // Step 1: resolve the canonical card via the Scryfall REST API so we get
-  // a set code + collector number needed for the Tagger GraphQL query.
   const card = await fetchCardByName(cardName);
   if (!card) {
     console.warn(`[SimilarCards] Card not found: "${cardName}"`);
@@ -137,7 +128,6 @@ export async function resolveSimilarCardsQuery(cardName: string): Promise<string
 
   console.log(`[SimilarCards] Resolving similar-cards query for: "${card.name}" (${card.set}/${card.collector_number})`);
 
-  // Step 2: fetch tags and relationships from the Scryfall Tagger.
   const tagger = await fetchTaggerCardData(card.set, card.collector_number);
 
   // oracle_text may span card faces (e.g. DFCs); join them if needed.
@@ -186,8 +176,7 @@ const META_TAG_PATTERNS: RegExp[] = [
 
 /**
  * Low-priority tag patterns: real but very narrow attributes that are poor
- * signals for "similar cards" searches.  These are used only when no better
- * tags are available.
+ * signals for "similar cards" searches.  Excluded from the AND-chain entirely.
  */
 const LOW_PRIORITY_PATTERNS: RegExp[] = [
   /^hate-/i,               // color-hate tags ("hate-white", "hate-black")
@@ -230,25 +219,11 @@ function isBroadTag(tag: string): boolean {
 /**
  * Scores a tag by its specificity as a "similar cards" discriminator.
  * More hyphen-segments = narrower concept = better signal.
- * Broad and low-priority tags are capped at a low score regardless.
+ * Only called on tags already filtered to exclude meta, low-priority,
+ * and broad entries.
  */
 function tagSpecificity(tag: string): number {
-  if (isBroadTag(tag)) return 1;
-  if (isLowPriority(tag)) return 0;
   return tag.split("-").length; // "opponent-loses-life" (3) > "draw-engine" (2) > "removal" (1)
-}
-
-/**
- * Filters and ranks oracle tags, returning the `limit` most functionally
- * relevant ones.  Meta tags are dropped entirely; remaining tags are sorted
- * by specificity (segment count) with broad and low-priority tags pushed to
- * the back.
- */
-function selectBestTags(tags: string[], limit: number): string[] {
-  return tags
-    .filter((t) => !isMetaTag(t))
-    .sort((a, b) => tagSpecificity(b) - tagSpecificity(a))
-    .slice(0, limit);
 }
 
 /**
@@ -352,14 +327,12 @@ function buildOracleTextClauses(oracleText: string): string[] {
     }
   }
 
-  // Sort by score descending; break ties by phrase length (longer = more specific)
   candidates.sort((a, b) =>
     b.score !== a.score
       ? b.score - a.score
       : b.phrase.split(/\s+/).length - a.phrase.split(/\s+/).length
   );
 
-  // Deduplicate: skip a phrase if it's already covered by a higher-ranked one
   const result: string[] = [];
   for (const { phrase } of candidates) {
     if (result.length >= 2) break;
@@ -393,33 +366,29 @@ function buildAndChainItems(
   oracleText: string | undefined,
   limit: number
 ): string[] {
-  const ranked = tags
-    .filter((t) => !isMetaTag(t))
+  const usable = tags.filter((t) => !isMetaTag(t) && !isLowPriority(t));
+  const specificTags = usable
+    .filter((t) => !isBroadTag(t))
     .sort((a, b) => tagSpecificity(b) - tagSpecificity(a));
-  const specificTags = ranked.filter((t) => !isBroadTag(t) && !isLowPriority(t));
-  const broadTags    = ranked.filter((t) => isBroadTag(t));
+  const broadTags = usable.filter((t) => isBroadTag(t));
   const oracleClauses = oracleText ? buildOracleTextClauses(oracleText) : [];
 
   const items: string[] = [];
 
-  // Slot 1: top specific tagger tag
   if (specificTags.length > 0) {
     items.push(`otag:"${specificTags[0]}"`);
   }
 
-  // Slot 2+: oracle-text clause takes priority over additional tagger tags
   for (const clause of oracleClauses) {
     if (items.length >= limit) break;
     items.push(clause);
   }
 
-  // Fill any remaining slots with more specific tagger tags (slot 1 already used index 0)
   for (let i = 1; i < specificTags.length; i++) {
     if (items.length >= limit) break;
     items.push(`otag:"${specificTags[i]}"`);
   }
 
-  // Last resort: broad tags
   for (const tag of broadTags) {
     if (items.length >= limit) break;
     items.push(`otag:"${tag}"`);
@@ -431,7 +400,6 @@ function buildAndChainItems(
 function buildQueryFromTaggerData(tagger: TaggerCardData, oracleText?: string): string | null {
   const parts: string[] = [];
 
-  // OR chain: card names from similarity relationships
   const relatedNames = new Set<string>();
   for (const name of [...tagger.similarTo, ...tagger.worseThan, ...tagger.withoutBody]) {
     relatedNames.add(name);
@@ -444,7 +412,6 @@ function buildQueryFromTaggerData(tagger: TaggerCardData, oracleText?: string): 
     parts.push(names.length > 1 ? `(${orNames})` : orNames);
   }
 
-  // AND chain: specific tags + oracle-text fill for broad slots
   const andItems = buildAndChainItems(tagger.functionTags, oracleText, 2);
 
   if (andItems.length > 0) {

@@ -33,7 +33,7 @@ const finalizeCases: FinalizeTestCase[] = [
     naturalQuery: "Orzhov aristocrats",
     rawQuery: "id=wb",
     expected:
-      "id=wb (function:sacrifice-outlet or function:sac-outlet or function:death-trigger or function:death-trigger-self or function:synergy-sacrifice)",
+      "id=wb (function:sacrifice-outlet or function:sac-outlet or function:death-trigger or function:death-trigger-self or function:synergy-sacrifice or function:blood-artist-ability)",
   },
   {
     name: "normalizes format function tags",
@@ -158,7 +158,7 @@ const finalizeCases: FinalizeTestCase[] = [
     naturalQuery: "white stax pieces for commander",
     rawQuery: "c:w f:commander",
     expected:
-      "c:w f:commander (function:tax or function:tax-attack or function:tax-block or function:cast-tax)",
+      "c:w f:commander (function:tax or function:tax-attack or function:tax-block or function:cast-tax or function:kismet-effect)",
   },
   {
     name: "adds landfall tags for landfall intent",
@@ -173,6 +173,37 @@ const finalizeCases: FinalizeTestCase[] = [
     rawQuery: "c:b",
     expected:
       "c:b (function:reanimate or function:reanimate-creature or function:reanimate-permanent or function:reanimate-from-any)",
+  },
+  {
+    name: "adds fog tags for fog intent",
+    naturalQuery: "green fog effects",
+    rawQuery: "c:g",
+    expected:
+      "c:g (function:fog or function:fog-limited or function:fog-selective or function:pseudo-fog)",
+  },
+  {
+    name: "adds wheel tag for wheel intent",
+    naturalQuery: "red wheel effects",
+    rawQuery: "c:r",
+    expected: "c:r function:wheel",
+  },
+  {
+    name: "adds brainstorm tag for brainstorm intent",
+    naturalQuery: "blue brainstorm effects",
+    rawQuery: "c:u",
+    expected: "c:u function:brainstorm",
+  },
+  {
+    name: "adds curiosity tags for curiosity intent",
+    naturalQuery: "curiosity effects on creatures",
+    rawQuery: "t:creature",
+    expected: "t:creature (function:curiosity or function:curiosity-like)",
+  },
+  {
+    name: "adds impact-tremors tag for ETB damage intent",
+    naturalQuery: "damage when a creature enters",
+    rawQuery: "",
+    expected: "function:impact-effect",
   },
   {
     name: "truncates overly long query",

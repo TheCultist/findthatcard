@@ -14,6 +14,7 @@ import { isScryfallQuery } from "@/lib/scryfall/query-converter";
 import { resolveSetFilters } from "@/lib/scryfall/sets";
 import { resolveStrategyName, STRATEGY_ORACLETAGS } from "@/lib/strategies/oracletagStrategies";
 import { ensureTaggerTagCache, getTaggerTagCache } from "@/lib/tagger/cache";
+import { escapeRegex, normalizeWhitespace, levenshteinDistance } from "@/lib/utils/text";
 import { ClauseSource, Phase1Result, QueryClause, QueryIntent, ResolverCategory, UnresolvedFragment } from "@/lib/search-pipeline/types";
 
 const FORMAT_TOKENS = [
@@ -571,10 +572,6 @@ function resolveRarityFilter(naturalQuery: string): {
   return { clauses, strippedTerms };
 }
 
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s{2,}/g, " ").trim();
-}
-
 function dedupeClauses(clauses: QueryClause[]): QueryClause[] {
   const seen = new Set<string>();
   const next: QueryClause[] = [];
@@ -593,28 +590,6 @@ function tokenizeNaturalQuery(naturalQuery: string): string[] {
     .replace(/[^a-z0-9\s-]/g, " ")
     .split(/\s+/)
     .filter(Boolean);
-}
-
-function levenshteinDistance(a: string, b: string): number {
-  if (a === b) return 0;
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-
-  const row = new Array(b.length + 1);
-  for (let i = 0; i <= b.length; i += 1) row[i] = i;
-
-  for (let i = 1; i <= a.length; i += 1) {
-    let prev = row[0];
-    row[0] = i;
-    for (let j = 1; j <= b.length; j += 1) {
-      const temp = row[j];
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + cost);
-      prev = temp;
-    }
-  }
-
-  return row[b.length];
 }
 
 function normalizeFuzzyToken(value: string): string {
@@ -784,11 +759,19 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   //    Also bare "token generation", "token creation", "token production"
   capture(/\btoken\s+(?:generat(?:ion|or|ors)|creat(?:ion|or|ors)|produc(?:tion|er|ers)|maker|makers)\b/gi);
 
-  // 8. Grant/give targets — the type after "give[s]/grant[s] [quantifier]" is the recipient,
-  //    not the card type being searched for.
-  //    e.g. "give your creatures haste" → "creatures" (not t:creature)
+  // 8. Grant/give/create targets — the type after the verb is the recipient or
+  //    the thing being created, not the card type being searched for.
+  //    e.g. "give your creatures haste"  → "creatures" (not t:creature)
   //         "grant all permanents indestructible" → "permanents" (not t:permanent)
-  capture(/\b(?:gives?|grants?|make[sd]?)\s+(?:your|all|each|every|target|a|an|any|friendly)?\s*([a-z][a-z-]*)\b/gi);
+  //    Quantifier group handles possessives, articles, and number words.
+  capture(/\b(?:gives?|grants?|make[sd]?|creates?|creating|produces?|producing)\s+(?:(?:your|all|each|every|target|a|an|any|the|friendly|one|two|three|four|five|six|seven|eight|nine|ten)\s+)*([a-z][a-z-]*)\b/gi);
+  // 8b. Token creation with P/T values — "make 1/1 tokens", "create two 2/2 fliers"
+  //     The P/T value (e.g. "1/1") is not a word, so the pattern above can't consume it.
+  //     This pattern specifically handles the case where a numeric P/T value appears
+  //     between the creation verb and the type noun.
+  //     e.g. "make 1/1 tokens" → "tokens" (not t:token)
+  //          "creates three 2/2 white soldier tokens" → "tokens" (not t:token)
+  capture(/\b(?:make[sd]?|creates?|creating|produces?|producing)\s+(?:(?:your|all|each|every|a|an|any|the|one|two|three|four|five|six|seven|eight|nine|ten)\s+)*[\d]+\/[\d]+\s+(?:[a-z]+\s+){0,4}(tokens?)\b/gi);
 
   // 10. Enchant / equip / attach targets — the permanent being enchanted/equipped is not
   //     the card type of the spell being searched.
@@ -1202,6 +1185,47 @@ function applyOracleIntentHeuristics(
     return;
   }
 
+  // --- Life gain on death: "gain life when(ever) a/another creature/permanent dies" ---
+  // e.g. "creatures that gain life when another creature dies"
+  //      "whenever a creature dies you gain life"
+  // This is NOT the aristocrat/sacrifice pattern — it is a death-triggered life-gain
+  // effect (Blood Artist style). Phase 2 wrongly maps the fragment to sacrifice-outlet
+  // tags, so we resolve it deterministically here.
+  // Note: "creature" in "when another creature dies" would block t:creature via
+  // triggerSubjectTokens. Explicitly re-add t:creature when the leading subject is
+  // "Creatures/permanents" AND the die-trigger is on a different subject.
+  const hasDeathLifeGainIntent =
+    /\bgain(?:s|ed)?\s+(?:\d+\s+)?life\b.*\bdies?\b/i.test(naturalQuery) ||
+    /\bdies?\b.*\bgain(?:s|ed)?\s+(?:\d+\s+)?life\b/i.test(naturalQuery);
+
+  if (hasDeathLifeGainIntent) {
+    // Detect the trigger subject (e.g. "creature" in "when another creature dies")
+    const dieTriggerMatch = naturalQuery.match(
+      /\b(?:when(?:ever)?|if)\s+(?:a|an|another|each|any|one\s+or\s+more)?\s*([a-z][a-z-]*)\s+dies?\b/i
+    );
+    const triggerSubject = dieTriggerMatch?.[1]?.toLowerCase() ?? null;
+
+    // If the query starts with a type word, explicitly emit t:creature so it isn't
+    // silently lost (triggerSubjectTokens blocks it in the type-token loop).
+    const leadingTypeMatch = naturalQuery.match(/^\s*(creatures?|permanents?)\b/i);
+    if (leadingTypeMatch) {
+      mustClauses.push({ value: "t:creature", source: "phase1:type" });
+    }
+
+    // Use the dedicated tagger tag — covers Blood Artist, Zulaport Cutthroat, etc.
+    mustClauses.push({ value: "function:blood-artist-ability", source: "phase1:function" });
+    strippedTerms.push(
+      "gain", "gains", "gained", "gain life", "gains life",
+      "life",
+      "when", "whenever",
+      "another", "dies", "die", "dying",
+    );
+    if (triggerSubject) {
+      strippedTerms.push(triggerSubject, `${triggerSubject}s`);
+    }
+    return;
+  }
+
   // --- Life-drain / "steal life" ---
   // e.g. "steal life points", "drain life from opponents", "opponents lose life and you gain life"
   // Prefer function tags here so Phase 2 doesn't fall back to brittle oracle snippets.
@@ -1311,12 +1335,11 @@ function applyOracleIntentHeuristics(
     return;
   }
 
+  // Stop words for extracting subjects from "for each/every X" patterns.
+  const QUANTIFIER_STOPS = new Set(["the", "a", "an", "you", "your", "that", "each", "every"]);
+
   // --- Scaling mana production: "makes/adds [color] mana for each X" ---
-  // e.g. "card that makes blue mana for each spell you cast"
-  //      "produces green mana for every land you control"
-  // These are SPECIFIC conditional mana effects, NOT generic ramp.
-  // Resolve deterministically here so Phase 2 never misclassifies them as
-  // the "ramp" archetype (which would inject function:ramp/mana-ramp instead).
+  // Resolve deterministically so Phase 2 never misclassifies as "ramp" archetype.
   const COLOR_WORDS: Record<string, string> = {
     blue: "{U}", red: "{R}", green: "{G}", white: "{W}", black: "{B}",
     colorless: "{C}", any: "{", // "any mana" → match start of add-expression
@@ -1339,11 +1362,9 @@ function applyOracleIntentHeuristics(
     }
     mustClauses.push({ value: 'o:"for each"', source: "phase1:oracle" });
 
-    // Extract the "for each/every X" subject (first meaningful word after the quantifier)
     const subjectMatch = naturalQuery.match(/\bfor\s+(?:each|every)\s+(\w+)/i);
     const subject = subjectMatch?.[1]?.toLowerCase();
-    const STOP = new Set(["the", "a", "an", "you", "your", "that", "each", "every"]);
-    if (subject && !STOP.has(subject)) {
+    if (subject && !QUANTIFIER_STOPS.has(subject)) {
       mustClauses.push({ value: `o:${subject}`, source: "phase1:oracle" });
     }
 
@@ -1356,9 +1377,6 @@ function applyOracleIntentHeuristics(
   }
 
   // --- General "for each / for every" scaling effects (non-mana) ---
-  // e.g. "gets +1/+1 for each artifact you control"
-  //      "deals damage equal to the number of creatures you control"
-  // Adds o:"for each" anchor to prevent broad archetype misclassification.
   const forEachMatch = naturalQuery.match(
     /\bfor\s+(?:each|every)\s+(\w+(?:\s+(?:you|they|your|their)\s+\w+)?)/i
   );
@@ -1370,8 +1388,7 @@ function applyOracleIntentHeuristics(
     if (forEachMatch) {
       mustClauses.push({ value: 'o:"for each"', source: "phase1:oracle" });
       const subject = (forEachMatch[1] ?? "").split(/\s+/)[0]?.toLowerCase();
-      const STOP2 = new Set(["the", "a", "an", "you", "your", "that"]);
-      if (subject && !STOP2.has(subject)) {
+      if (subject && !QUANTIFIER_STOPS.has(subject)) {
         mustClauses.push({ value: `o:${subject}`, source: "phase1:oracle" });
       }
     } else if (equalToNumberMatch) {
@@ -1875,10 +1892,6 @@ function getTermForms(term: string): string[] {
     return [singular];
   }
   return [singular, `${singular}s`];
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function buildTermFormsPattern(forms: string[]): RegExp {
@@ -2559,6 +2572,13 @@ function buildBypassStrippedWords(
  * Must run BEFORE detectSimilarToCardQuery so that "art like Bad River" is
  * captured here rather than being treated as functional similarity.
  */
+
+/** Prepositions/auxiliaries that signal the end of a card name in bypass-intent patterns. */
+const CARD_NAME_CONTEXT_STOPS = new Set([
+  "in", "for", "from", "on", "at", "is", "are", "was", "were", "but",
+  "which", "that", "where", "when", "if", "to",
+]);
+
 function detectArtLikeCardQuery(naturalQuery: string): BypassDetectResult {
   if (!hasCardNameIndex()) return null;
 
@@ -2569,11 +2589,6 @@ function detectArtLikeCardQuery(naturalQuery: string): BypassDetectResult {
     /\blooks?\s+like\s+([\s\S]+)/i,
     /\billustration\s+(?:like|similar\s+to)\s+([\s\S]+)/i,
   ];
-
-  const CONTEXT_STOPS = new Set([
-    "in", "for", "from", "on", "at", "is", "are", "was", "were", "but",
-    "which", "that", "where", "when", "if", "to",
-  ]);
 
   for (const pattern of ART_LIKE_PATTERNS) {
     const match = naturalQuery.match(pattern);
@@ -2598,7 +2613,7 @@ function detectArtLikeCardQuery(naturalQuery: string): BypassDetectResult {
 
     const nameWords: string[] = [];
     for (const w of words) {
-      if (CONTEXT_STOPS.has(w)) break;
+      if (CARD_NAME_CONTEXT_STOPS.has(w)) break;
       nameWords.push(w);
       if (nameWords.length >= 6) break;
     }
@@ -2663,11 +2678,6 @@ function detectSimilarToCardQuery(naturalQuery: string): BypassDetectResult {
     /\bresembles?\s+([\s\S]+)/i,
   ];
 
-  const CONTEXT_STOPS = new Set([
-    "in", "for", "from", "on", "at", "is", "are", "was", "were", "but",
-    "which", "that", "where", "when", "if", "to",
-  ]);
-
   for (const pattern of SIMILAR_PATTERNS) {
     const match = naturalQuery.match(pattern);
     if (!match) continue;
@@ -2691,7 +2701,7 @@ function detectSimilarToCardQuery(naturalQuery: string): BypassDetectResult {
 
     const nameWords: string[] = [];
     for (const w of words) {
-      if (CONTEXT_STOPS.has(w)) break;
+      if (CARD_NAME_CONTEXT_STOPS.has(w)) break;
       nameWords.push(w);
       if (nameWords.length >= 6) break;
     }
@@ -2731,11 +2741,6 @@ function detectSynergyWithCardQuery(naturalQuery: string): BypassDetectResult {
     /\bgood\s+(?:with|in)\s+([\s\S]+)/i,
   ];
 
-  const CONTEXT_STOPS = new Set([
-    "in", "for", "from", "on", "at", "is", "are", "was", "were", "but",
-    "which", "that", "where", "when", "if", "to",
-  ]);
-
   for (const pattern of SYNERGY_PATTERNS) {
     const match = naturalQuery.match(pattern);
     if (!match) continue;
@@ -2759,7 +2764,7 @@ function detectSynergyWithCardQuery(naturalQuery: string): BypassDetectResult {
 
     const nameWords: string[] = [];
     for (const w of words) {
-      if (CONTEXT_STOPS.has(w)) break;
+      if (CARD_NAME_CONTEXT_STOPS.has(w)) break;
       nameWords.push(w);
       if (nameWords.length >= 6) break;
     }

@@ -1,11 +1,10 @@
 import { SearchResponse, CardResult, ScryfallCard } from "@/types/scryfall";
 import { getTcgPlayerLink } from "@/lib/tcgplayer/links";
+import { CARDS_PER_PAGE } from "@/lib/scryfall/client";
 
 type CardSearchResponse = {
   data?: ScryfallCard[];
 };
-
-const CARDS_PER_PAGE = 60;
 const SCRYFALL_USER_AGENT =
   process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthat.card)";
 
@@ -27,7 +26,6 @@ export async function transformScryfallResponse(
   const explicitlyAsksForAlchemy =
     queryLower.includes("is:alchemy") || queryLower.includes("game:arena");
 
-  // Slice the data starting from the offset, taking up to 60 cards
   const slicedData = scryfallResponse.data.slice(offset, offset + CARDS_PER_PAGE);
 
   const getImageUris = (card: ScryfallCard) => {
@@ -316,10 +314,7 @@ export async function transformScryfallResponse(
     }
   );
 
-  // Determine if there are more pages
-  // Calculate how many cards we've shown so far (including this page)
   const cardsShownSoFar = (page - 1) * CARDS_PER_PAGE + cards.length;
-  // We have more pages if we haven't shown all the cards yet
   const hasMore = cardsShownSoFar < scryfallResponse.total_cards;
 
   return {

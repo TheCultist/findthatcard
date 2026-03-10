@@ -1,6 +1,8 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { getCacheDir } from "@/lib/cache-paths";
+import { escapeRegex, levenshteinDistance, normalizeWhitespace } from "@/lib/utils/text";
+import { formatTodayStamp, shouldSkipUpdate } from "@/lib/utils/cache";
 
 type ScryfallSetEntry = {
   name: string;
@@ -40,17 +42,6 @@ let setCache: ScryfallSetEntry[] | null = null;
 let setCacheUpdatedAt: string | null = null;
 let setCachePromise: Promise<void> | null = null;
 let setIndex: SetIndex | null = null;
-function formatTodayStamp(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function compareDateStamp(a: string, b: string): number {
-  if (!a && !b) return 0;
-  if (!a) return -1;
-  if (!b) return 1;
-  if (a === b) return 0;
-  return a < b ? -1 : 1;
-}
 
 function normalizeSetText(value: string): string {
   return value
@@ -62,59 +53,12 @@ function normalizeSetText(value: string): string {
     .trim();
 }
 
-function levenshteinDistance(a: string, b: string): number {
-  if (a === b) {
-    return 0;
-  }
-  const aLength = a.length;
-  const bLength = b.length;
-  if (aLength === 0) {
-    return bLength;
-  }
-  if (bLength === 0) {
-    return aLength;
-  }
-
-  const row = new Array(bLength + 1);
-  for (let index = 0; index <= bLength; index += 1) {
-    row[index] = index;
-  }
-
-  for (let i = 1; i <= aLength; i += 1) {
-    let prev = row[0];
-    row[0] = i;
-    for (let j = 1; j <= bLength; j += 1) {
-      const temp = row[j];
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      row[j] = Math.min(
-        row[j] + 1,
-        row[j - 1] + 1,
-        prev + cost
-      );
-      prev = temp;
-    }
-  }
-
-  return row[bLength];
-}
-
 function normalizedDistance(a: string, b: string): number {
   const maxLength = Math.max(a.length, b.length);
   if (maxLength === 0) {
     return 0;
   }
   return levenshteinDistance(a, b) / maxLength;
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function shouldSkipUpdate(fileStamp: string | null, todayStamp: string): boolean {
-  if (!fileStamp) {
-    return false;
-  }
-  return compareDateStamp(fileStamp, todayStamp) >= 0;
 }
 
 function buildSetIndex(entries: ScryfallSetEntry[]): SetIndex {
@@ -365,10 +309,6 @@ function detectNegation(normalizedQuery: string, normalizedToken: string): boole
     "i"
   );
   return pattern.test(normalizedQuery);
-}
-
-function normalizeWhitespace(value: string): string {
-  return value.replace(/\s{2,}/g, " ").trim();
 }
 
 function normalizeOrphanedOr(query: string): string {

@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { getCacheDir } from "@/lib/cache-paths";
+import { formatTodayStamp, shouldSkipUpdate } from "@/lib/utils/cache";
 
 const TAGGER_USER_AGENT = "find-that-card/1.0 (+https://findthat.card)";
 const TAGGER_CACHE_PATH = path.join(getCacheDir(), "tagger-tags.json");
@@ -19,25 +20,6 @@ let taggerTagCache: Map<'art' | 'function', Set<string>> | null = null;
 let cacheInitializationPromise: Promise<void> | null = null;
 
 let cacheUpdatedAt: string | null = null;
-
-function formatTodayStamp(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function compareDateStamp(a: string, b: string): number {
-  if (!a && !b) return 0;
-  if (!a) return -1;
-  if (!b) return 1;
-  if (a === b) return 0;
-  return a < b ? -1 : 1;
-}
-
-function shouldSkipUpdate(fileStamp: string | null, todayStamp: string): boolean {
-  if (!fileStamp) {
-    return false;
-  }
-  return compareDateStamp(fileStamp, todayStamp) >= 0;
-}
 
 async function readTaggerCacheFile(): Promise<TaggerCacheFile | null> {
   try {

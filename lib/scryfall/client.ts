@@ -96,10 +96,8 @@ export async function searchScryfall(
 
     const data: ScryfallSearchResponse = await response.json();
 
-    // Check if we need to fetch more cards from the next Scryfall page
     const cardsAvailable = data.data.length - offset;
     if (cardsAvailable < CARDS_PER_PAGE && data.has_more) {
-      // Fetch the next Scryfall page to get remaining cards
       const nextPageUrl = new URL(`${SCRYFALL_BASE_URL}/cards/search`);
       nextPageUrl.searchParams.set("q", queryWithPrefer);
       nextPageUrl.searchParams.set("unique", "cards");

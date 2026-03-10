@@ -1,7 +1,7 @@
 import { ResolverCategory } from "../types";
 import { getArchetypeMenu, type ArchetypeMenuEntry } from "@/lib/scryfall/query-converter";
 
-export type BuildResolverPromptArgs = {
+type BuildResolverPromptArgs = {
   category: ResolverCategory;
   fragments: string[];
   naturalQuery: string;

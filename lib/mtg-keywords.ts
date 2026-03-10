@@ -2,6 +2,8 @@ import { promises as fs } from "fs";
 import path from "path";
 import { getCacheDir } from "@/lib/cache-paths";
 import { ensureScryfallCatalogCache, getCatalog } from "@/lib/scryfall/catalogs";
+import { formatTodayStamp, shouldSkipUpdate } from "@/lib/utils/cache";
+import { escapeRegex } from "@/lib/utils/text";
 
 type MtgKeywordEntry = {
   name: string;
@@ -39,25 +41,6 @@ let keywordIndex: MtgKeywordIndex | null = null;
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
-}
-
-function formatTodayStamp(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function compareDateStamp(a: string, b: string): number {
-  if (!a && !b) return 0;
-  if (!a) return -1;
-  if (!b) return 1;
-  if (a === b) return 0;
-  return a < b ? -1 : 1;
-}
-
-function shouldSkipUpdate(fileStamp: string | null, todayStamp: string): boolean {
-  if (!fileStamp) {
-    return false;
-  }
-  return compareDateStamp(fileStamp, todayStamp) >= 0;
 }
 
 function normalizeKeywordName(name: string): string {
@@ -407,15 +390,6 @@ export async function getMtgKeywordList(): Promise<string[]> {
   return list.map((entry) => entry.name);
 }
 
-export async function getMtgKeywordSlugMap(): Promise<Record<string, string>> {
-  const { bySlug } = await getKeywordIndex();
-  const map: Record<string, string> = {};
-  for (const [slug, entry] of bySlug.entries()) {
-    map[slug] = entry.name;
-  }
-  return map;
-}
-
 /**
  * Returns a map of keyword slug -> reminder text for tooltips.
  * Reads from data/mtg-keyword-reminders.json, a manually maintained static catalog.
@@ -543,10 +517,6 @@ function hasKeywordPositiveIntent(
     return true;
   }
   return false;
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function kwEscaped(kw: string): string {
