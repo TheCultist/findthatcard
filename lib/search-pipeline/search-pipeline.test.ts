@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
+import { shouldNormalize, validateResponse } from "@/lib/search-pipeline/phase0/normalizeQuery";
 import { parseNaturalQuery } from "@/lib/search-pipeline/phase1/parseNaturalQuery";
 import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
 import { runSearchPipeline } from "@/lib/search-pipeline/runSearchPipeline";
@@ -539,6 +540,53 @@ async function testPhase3StripsDamageTargetCreatureTypeFilter() {
   console.log("[PASS] phase3: strips t:creature when creature is a damage target");
 }
 
+async function testPhase1ToFindLandsDoesNotMatchCardName() {
+  // "to find" is infinitive — "find" must not be detected as "Find // Finality"
+  const parsed = await parseNaturalQuery("sorcery to find basic lands from your library");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  assert.ok(
+    mustValues.includes("t:sorcery"),
+    `expected t:sorcery; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    !mustValues.some((v) => v.toLowerCase().includes("find // finality")),
+    `name:"Find // Finality" must not appear for "to find basic lands"; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    !mustValues.includes("t:land"),
+    `t:land must not appear; got: ${mustValues.join(", ")}`
+  );
+  console.log('[PASS] phase1: "sorcery to find basic lands from your library" does not produce name:"Find // Finality"');
+}
+
+async function testPhase1TutorFetchesMultiWordTargetNotType() {
+  const parsed = await parseNaturalQuery("sorcery that finds basic lands from your library");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  assert.ok(
+    mustValues.includes("t:sorcery"),
+    `expected t:sorcery; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    !mustValues.includes("t:land"),
+    `t:land should not appear (land is the fetch target, not card type); got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    !mustValues.includes("t:basic"),
+    `t:basic should not appear (basic is an adjective on the fetch target); got: ${mustValues.join(", ")}`
+  );
+  console.log('[PASS] phase1: "sorcery that finds basic lands from your library" has t:sorcery but not t:land or t:basic');
+}
+
+async function testPhase1CreaturesThatDestroyOtherCreaturesKeepsType() {
+  const parsed = await parseNaturalQuery("creatures that destroy other creatures");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  assert.ok(
+    mustValues.includes("t:creature"),
+    `expected t:creature for "creatures that destroy other creatures"; got: ${mustValues.join(", ")}`
+  );
+  console.log('[PASS] phase1: "creatures that destroy other creatures" keeps t:creature');
+}
+
 async function testPhase3StripsCreatureTypeForRemovalCreatureIntent() {
   const ir: SearchPipelineIR = {
     naturalQuery: "white creature removal spells for commander",
@@ -1042,7 +1090,107 @@ async function testCardNameContainsWordIntent() {
   console.log('[PASS] card name: "shelob in the name" maps to name:shelob');
 }
 
+// ---- Phase 0 gate tests ----
+
+function testPhase0GateSkipsShortQueries() {
+  assert.equal(shouldNormalize("dragon elf"), false);
+  assert.equal(shouldNormalize("goblins"), false);
+  console.log("[PASS] phase0: gate skips queries with <= 2 words");
+}
+
+function testPhase0GateSkipsScryfallSyntax() {
+  assert.equal(shouldNormalize("t:creature kw:flying c:w"), false);
+  assert.equal(shouldNormalize("name:\"Sheoldred\" game:paper"), false);
+  console.log("[PASS] phase0: gate skips direct Scryfall syntax");
+}
+
+function testPhase0GateTriggersForNaturalLanguage() {
+  assert.equal(shouldNormalize("creaturs that destory other creaturs"), true);
+  assert.equal(shouldNormalize("white creatures with flying"), true);
+  assert.equal(shouldNormalize("enchantmens fly indestrutible white"), true);
+  assert.equal(shouldNormalize("red card with deal damage when enter"), true);
+  assert.equal(shouldNormalize("angels with lifelink and hexproof"), true);
+  console.log("[PASS] phase0: gate triggers for all 3+ word natural language queries");
+}
+
+// ---- Phase 0 validation tests ----
+
+function testPhase0ValidationAcceptsSpellingCorrections() {
+  const result = validateResponse(
+    "creaturs that destory other creaturs",
+    "creatures that destroy other creatures"
+  );
+  assert.equal(result, "creatures that destroy other creatures");
+  console.log("[PASS] phase0: validation accepts spelling corrections within Levenshtein <= 3");
+}
+
+function testPhase0ValidationAcceptsStructuralConnectors() {
+  const result = validateResponse(
+    "angels lifelink hexproof",
+    "angels with lifelink and hexproof"
+  );
+  assert.equal(result, "angels with lifelink and hexproof");
+  console.log("[PASS] phase0: validation accepts added connectors");
+}
+
+function testPhase0ValidationRejectsConceptChanges() {
+  const result = validateResponse(
+    "red creatures with haste",
+    "blue dragons with flying"
+  );
+  assert.equal(result, null);
+  console.log("[PASS] phase0: validation rejects hallucinated concept changes");
+}
+
+function testPhase0ValidationRejectsScryfallSyntax() {
+  const result = validateResponse(
+    "white creatures with flying",
+    "t:creature kw:flying c:w"
+  );
+  assert.equal(result, null);
+  console.log("[PASS] phase0: validation rejects Scryfall syntax in response");
+}
+
+function testPhase0ValidationRejectsExcessiveLength() {
+  const result = validateResponse(
+    "red burn spell",
+    "red burn spell that deals damage to creatures and also draws cards and gains life and creates tokens"
+  );
+  assert.equal(result, null);
+  console.log("[PASS] phase0: validation rejects responses over 2.5x original length");
+}
+
+function testPhase0ValidationAcceptsMixedFixes() {
+  const result = validateResponse(
+    "enchantmens giving fly and indestrutible",
+    "enchantments that give flying and indestructible"
+  );
+  assert.equal(result, "enchantments that give flying and indestructible");
+  console.log("[PASS] phase0: validation accepts combined spelling + grammar fixes");
+}
+
+function testPhase0ValidationStripsQuotes() {
+  const result = validateResponse(
+    "angels lifelink hexproof",
+    '"angels with lifelink and hexproof"'
+  );
+  assert.equal(result, "angels with lifelink and hexproof");
+  console.log("[PASS] phase0: validation strips surrounding quotes from response");
+}
+
 async function run() {
+  // Phase 0 tests (deterministic — no LLM calls)
+  testPhase0GateSkipsShortQueries();
+  testPhase0GateSkipsScryfallSyntax();
+  testPhase0GateTriggersForNaturalLanguage();
+  testPhase0ValidationAcceptsSpellingCorrections();
+  testPhase0ValidationAcceptsStructuralConnectors();
+  testPhase0ValidationRejectsConceptChanges();
+  testPhase0ValidationRejectsScryfallSyntax();
+  testPhase0ValidationRejectsExcessiveLength();
+  testPhase0ValidationAcceptsMixedFixes();
+  testPhase0ValidationStripsQuotes();
+
   await testPhase1DirectQueryShortCircuit();
   testAssemblerBooleanComposition();
   testAssemblerSkipsArchetypeFragmentTags();
@@ -1075,6 +1223,9 @@ async function run() {
   await testPhase3RemovesTreasureTypeForTokenGenerationIntent();
   await testPhase3RemovesAnyTokenTypeForGenerationIntent();
   await testPhase3StripsDamageTargetCreatureTypeFilter();
+  await testPhase1ToFindLandsDoesNotMatchCardName();
+  await testPhase1TutorFetchesMultiWordTargetNotType();
+  await testPhase1CreaturesThatDestroyOtherCreaturesKeepsType();
   await testPhase3StripsCreatureTypeForRemovalCreatureIntent();
   await testPhase3AddsBlinkTagsAndKeepsCreatureType();
   await testPhase3InjectsArchetypeTagsFromResolvedFragments();

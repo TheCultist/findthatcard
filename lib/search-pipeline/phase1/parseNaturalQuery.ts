@@ -761,7 +761,9 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   }
 
   // 2. Oracle-text targets — "that destroy/exile/bounce/reanimate/... a/an/each X"
-  capture(/\bthat\s+(?:destroy|exile|bounce|target|counter|sacrifice|kill|remove|discard|copy|tap|untap|create|make|generate|produce|add|reanimate|return|recur|revive|resurrect|animate|regrow)\s+(?:a\s+|an\s+|all\s+|each\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s+(?:card|permanent|spell|ability|token)\b|\s+or\b|\s+and\b|\s+from\b|\s+in\b|\s+you\b|$)/gi);
+  // "other X" is excluded: "that destroy other creatures" means the card IS a creature
+  // (reflexive self-type), so "creatures" should not be blocked from becoming t:creature.
+  capture(/\bthat\s+(?:destroy|exile|bounce|target|counter|sacrifice|kill|remove|discard|copy|tap|untap|create|make|generate|produce|add|reanimate|return|recur|revive|resurrect|animate|regrow)\s+(?:a\s+|an\s+|all\s+|each\s+)?(?!other\s)([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s+(?:card|permanent|spell|ability|token)\b|\s+or\b|\s+and\b|\s+from\b|\s+in\b|\s+you\b|$)/gi);
 
   // 3. Damage targets — "deals/deal damage to a/an/each X"
   capture(/\bdeals?\s+(?:\w+\s+)?damage\s+to\s+(?:a\s+|an\s+|each\s+|any\s+|all\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s|$)/gi);
@@ -792,7 +794,7 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   //    not a descriptor of the spell. "search your library for a land" → "land" (not t:land).
   //    "fetch a forest from your library" → "forest" (not t:forest / land-subtype filter).
   capture(/\b(?:search(?:es|ing)?|fetch(?:es|ing)?|finds?|tutor(?:s|ing)?(?:\s+for)?)\b.{0,40}\b(?:library|deck)\b.{0,30}\bfor\s+(?:a\s+|an\s+|any\s+|the\s+)?([a-z][a-z-]*)/gi);
-  capture(/\b(?:search(?:es|ing)?|fetch(?:es|ing)?|finds?|tutor(?:s|ing)?(?:\s+for)?)\s+(?:a\s+|an\s+|any\s+|the\s+)?([a-z][a-z-]*)\s+(?:from|in)\s+(?:your|the|a|my)?\s*(?:library|deck)\b/gi);
+  capture(/\b(?:search(?:es|ing)?|fetch(?:es|ing)?|finds?|tutor(?:s|ing)?(?:\s+for)?)\s+(?:a\s+|an\s+|any\s+|the\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})\s+(?:from|in)\s+(?:your|the|a|my)?\s*(?:library|deck)\b/gi);
   // "tutor for a land/creature/enchantment" without explicit library mention
   capture(/\b(?:tutor(?:s|ing)?(?:\s+for)?|tutors?\s+up)\s+(?:a\s+|an\s+|the\s+)?([a-z][a-z-]*)/gi);
   // "creature/enchantment/artifact tutor(s)" — target type precedes "tutor(s)"
@@ -1472,8 +1474,17 @@ function applyOracleIntentHeuristics(
       "in your library", "in the library",
       "for a land", "for the land", "for lands",
       "a land", "the land", "land", "lands",
+      "basic land", "basic lands", "basic",
       "library", "deck",
     );
+    // Strip the bare verb when it was the trigger — prevents "find" from being
+    // picked up as the card "Find // Finality" via the card-name post-pass.
+    if (/\bfinds?\b.{0,25}\bland.{0,25}\b(?:library|deck)\b/i.test(naturalQuery)) {
+      strippedTerms.push("find", "finds");
+    }
+    if (/\bfetch(?:es|ing)?\b.{0,25}\bland.{0,25}\b(?:library|deck)\b/i.test(naturalQuery)) {
+      strippedTerms.push("fetch", "fetches", "fetching");
+    }
     return;
   }
 
@@ -1991,28 +2002,54 @@ function resolveArtistFromQuery(
 // Card name detection helpers
 // ---------------------------------------------------------------------------
 
+// Common action verbs that are also (or could be) card name fronts.
+// Used by isInVerbPhraseContext to distinguish "to find lands" (verb) from
+// "similar to Counterspell" (noun/name), since "counterspell" is not in this set.
+const INFINITIVE_ACTION_VERBS = new Set([
+  "find", "finds", "fetch", "fetches", "search", "searches",
+  "tutor", "tutors", "seek", "seeks", "look", "looks",
+  "deal", "deals", "destroy", "destroys", "exile", "exiles",
+  "sacrifice", "tap", "untap", "bounce", "counter", "counters",
+  "return", "returns", "create", "creates", "draw", "draws",
+  "cast", "casts", "play", "plays", "use", "uses",
+  "make", "makes", "add", "reanimate", "reanimates",
+]);
+
 /**
  * Returns true when `phrase` appears in `naturalQuery` immediately after a
- * relative pronoun or auxiliary verb — indicating it is used as a verb phrase
- * (oracle-text description) rather than a card name reference.
+ * relative pronoun, auxiliary verb, or infinitive marker — indicating it is
+ * used as a verb phrase (oracle-text description) rather than a card name.
  *
  * Examples that should be blocked:
  *   "cards that deal damage to any target"   → "that deal" → verb context ✓
  *   "spells that counter a spell"            → "that counter" → verb context ✓
- *   "creatures that can fly"                 → "that can fly" → verb context ✓
+ *   "sorcery to find lands from library"     → "to find" → infinitive context ✓
  *
  * Examples that should NOT be blocked:
  *   "Lightning Bolt"                          → nothing before it
  *   "show me Counterspell"                    → "me" is not a verb-context word
+ *   "similar to Counterspell"                 → "counterspell" not an action verb
  */
 function isInVerbPhraseContext(naturalQuery: string, phrase: string): boolean {
   const lower = naturalQuery.toLowerCase();
   const pos = lower.indexOf(phrase.toLowerCase());
   if (pos < 0) return false;
   const before = lower.slice(0, pos).replace(/\s+$/, " ");
-  // Matches text that ends with a relative pronoun or auxiliary verb
-  // (optionally followed by a short adverb like "not", "also", "always")
-  return /\b(?:that|which|who(?:m)?|can|could|will|would|do(?:es)?|did|may|might|must|should|shall)\s+(?:(?:not|also|only|always|never|even|still|just)\s+)?$/.test(before);
+
+  // Relative pronoun or auxiliary verb context
+  if (/\b(?:that|which|who(?:m)?|can|could|will|would|do(?:es)?|did|may|might|must|should|shall)\s+(?:(?:not|also|only|always|never|even|still|just)\s+)?$/.test(before)) {
+    return true;
+  }
+
+  // Infinitive "to + action verb" context: "to find basic lands" should not
+  // match "Find // Finality". Only fires when phrase starts with a known
+  // action verb, avoiding false blocks on "similar to Counterspell".
+  const phraseFirstWord = phrase.toLowerCase().split(/\s+/)[0];
+  if (/\bto\s+$/.test(before) && INFINITIVE_ACTION_VERBS.has(phraseFirstWord)) {
+    return true;
+  }
+
+  return false;
 }
 
 /**

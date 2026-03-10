@@ -21,140 +21,115 @@ function shouldLog(): boolean {
   return process.env.NODE_ENV !== "production";
 }
 
-// Connectors that give Phase 1 structural cues about how concepts relate.
-const CONNECTOR_PATTERN =
-  /\b(with|that|which|who|where|for|from|when|whenever|if)\b/i;
-
-// Words that separate concepts and remove adjacency ambiguity.
-const SEPARATOR_PATTERN = /\b(and|or|but|then|also)\b|,|;/i;
-
-// Known MTG keyword abilities that are commonly listed without connectors.
-const MTG_KEYWORDS = new Set([
-  "flying", "trample", "vigilance", "lifelink", "haste",
-  "deathtouch", "hexproof", "indestructible", "reach",
-  "first strike", "double strike", "menace", "prowess",
-  "flash", "ward", "defender", "shroud", "protection",
-  "fear", "intimidate", "skulk", "shadow",
-]);
-
-// Single-word subset for fast adjacency checks.
-const SINGLE_WORD_KEYWORDS = new Set(
-  [...MTG_KEYWORDS].filter((kw) => !kw.includes(" "))
-);
-
-const GRANT_VERBS = /\b(give[sd]?|giving|grant[sd]?|granting|make[sd]?|making)\b/i;
-
 const STOPWORDS = new Set([
   "a", "an", "the", "i", "my", "me", "its", "is", "are", "was",
   "cards", "card", "some", "any", "all", "of", "to", "in", "on",
 ]);
 
 /**
- * Deterministic heuristic — returns true when the query is structurally
- * ambiguous enough that an LLM rewrite is likely to help Phase 1.
+ * Returns true when the query should go through LLM cleanup
+ * (spelling, grammar, and structural normalization).
+ * Intentionally broad — the LLM returns clean queries unchanged.
  */
 export function shouldNormalize(query: string): boolean {
   const lower = query.toLowerCase().trim();
-
-  // Very short queries are inherently unambiguous.
   const words = lower.split(/\s+/).filter(Boolean);
   if (words.length <= 2) return false;
-
-  // Already contains Scryfall syntax — user typed a direct query.
   if (/[a-z]+:[^\s]/.test(lower)) return false;
-
-  // If the query already has structural connectors, Phase 1 can parse it.
-  if (CONNECTOR_PATTERN.test(lower) && SEPARATOR_PATTERN.test(lower)) {
-    return false;
-  }
-
-  const substantive = words.filter((w) => !STOPWORDS.has(w));
-
-  // Signal 1: multiple keywords listed adjacently without separators.
-  const keywordsPresent = substantive.filter((w) => SINGLE_WORD_KEYWORDS.has(w));
-  if (keywordsPresent.length >= 2 && !SEPARATOR_PATTERN.test(lower)) {
-    return true;
-  }
-
-  // Signal 2: grant verb + keyword(s) but no connector between them.
-  if (GRANT_VERBS.test(lower) && keywordsPresent.length >= 1 && !CONNECTOR_PATTERN.test(lower)) {
-    return true;
-  }
-
-  // Signal 3: 4+ substantive tokens with NO connectors and NO separators at all.
-  // Pure "stacked nouns" like "white creatures haste flash etb draw".
-  if (
-    substantive.length >= 4 &&
-    !CONNECTOR_PATTERN.test(lower) &&
-    !SEPARATOR_PATTERN.test(lower)
-  ) {
-    return true;
-  }
-
-  return false;
+  return true;
 }
 
-const SYSTEM_PROMPT = `You add minimal grammatical structure to ambiguous Magic: The Gathering card search queries.
+const SYSTEM_PROMPT = `You clean up Magic: The Gathering card search queries — fix spelling, grammar, and add minimal structure so they read as clear English.
 
 Rules:
-- Add ONLY connecting words (with, that, and, or, for, in, to) and commas
-- NEVER remove, replace, or rephrase the user's words
-- NEVER add new search concepts, card names, or filters
+- Fix obvious spelling mistakes, especially MTG terms (creature types, keywords, card types, colors)
+- Fix broken grammar: wrong word order, missing prepositions, broken verb forms
+- Add connecting words (with, that, and, or, for, in, to) and commas when missing
+- Prefer "that [verb]s" over "to [verb]" — write "sorcery that finds" not "sorcery to find"
+- NEVER add new search concepts, card names, or filters the user did not express
 - NEVER output Scryfall syntax (no t:, o:, kw:, etc.)
-- If the query is already clear and grammatical, return it unchanged
-- Preserve typos — downstream systems handle spelling correction
-- Keep the output as close to the input as possible
-- Output ONLY the restructured query. No quotes, no explanations.
+- If the query is already clear, grammatical, and correctly spelled, return it UNCHANGED
+- Keep the output as close to the input meaning as possible
+- Output ONLY the cleaned-up query. No quotes, no explanations.
 
 Examples:
 "angels lifelink hexproof" → "angels with lifelink and hexproof"
 "white creatures haste flash etb draw" → "white creatures with haste and flash that draw on etb"
 "green ramp draw instant" → "green instant that ramps and draws"
+"creaturs that destory other creaturs" → "creatures that destroy other creatures"
+"enchantmens giving fly and indestrutible" → "enchantments that give flying and indestructible"
+"red card with deal damage when enter" → "red card that deals damage when it enters"
+"sorcary to find lands from deck" → "sorcery to find lands from deck"
 "removal not targeting destroy" → "removal that does not target or destroy"
 "red burn spell 3 damage creature" → "red burn spell that deals 3 damage to a creature"
 "flying tokens white commander" → "white flying tokens for commander"
 "sacrifice outlet aristocrats black" → "black sacrifice outlet for aristocrats"
-"give creatures indestrucible angels" → "angels that give creatures indestrucible"
+"give creatures indestructible angels" → "angels that give creatures indestructible"
 "blue counterspell cheap modern" → "cheap blue counterspell for modern"`;
+
+function levenshteinDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+
+  const row = new Array(b.length + 1);
+  for (let i = 0; i <= b.length; i += 1) row[i] = i;
+
+  for (let i = 1; i <= a.length; i += 1) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const temp = row[j];
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + cost);
+      prev = temp;
+    }
+  }
+
+  return row[b.length];
+}
 
 /**
  * Validates the LLM response. Returns the normalized query if safe,
  * or null if the response should be discarded.
+ * Allows spelling corrections (word replacements within Levenshtein <= 3)
+ * while rejecting hallucinated concept changes.
  */
-function validateResponse(original: string, response: string): string | null {
+export function validateResponse(original: string, response: string): string | null {
   const trimmed = response.trim()
-    // Strip surrounding quotes the model might add
     .replace(/^["']|["']$/g, "")
     .trim();
 
   if (!trimmed) return null;
 
-  // Reject if the model produced Scryfall syntax.
   if (/[a-z]+:[^\s]/.test(trimmed)) return null;
 
-  // Reject if unreasonably longer than original.
   if (trimmed.length > original.length * 2.5) return null;
 
-  // Reject if the model removed substantive words from the original.
   const originalWords = new Set(
     original.toLowerCase().match(/[a-z0-9]+/g) ?? []
   );
   const responseWords = new Set(
     trimmed.toLowerCase().match(/[a-z0-9]+/g) ?? []
   );
+  const responseArr = [...responseWords];
+
   for (const word of originalWords) {
     if (STOPWORDS.has(word)) continue;
-    if (!responseWords.has(word)) return null;
+    if (responseWords.has(word)) continue;
+    const hasCloseMatch = responseArr.some(
+      (rw) => levenshteinDistance(word, rw) <= 3
+    );
+    if (!hasCloseMatch) return null;
   }
 
   return trimmed;
 }
 
 /**
- * Phase 0: structural query normalization.
- * Adds grammatical connectors to ambiguous queries so Phase 1 can parse
- * them reliably. Gated — returns the original query unchanged when the
- * input is already structurally clear.
+ * Phase 0: query cleanup (spelling, grammar, and structural normalization).
+ * Fixes misspellings, broken grammar, and missing connectors so Phase 1
+ * can parse reliably. Gated on 3+ word natural language queries.
  */
 export async function normalizeQuery(
   query: string
