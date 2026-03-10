@@ -790,6 +790,15 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   //         "grant all permanents indestructible" → "permanents" (not t:permanent)
   capture(/\b(?:gives?|grants?|make[sd]?)\s+(?:your|all|each|every|target|a|an|any|friendly)?\s*([a-z][a-z-]*)\b/gi);
 
+  // 10. Enchant / equip / attach targets — the permanent being enchanted/equipped is not
+  //     the card type of the spell being searched.
+  //     e.g. "cards that enchant creatures" → "creature" (not t:creature)
+  //          "effects that trigger whenever you enchant a creature" → "creature" (not t:creature)
+  //          "equip a creature" → "creature" (not t:creature)
+  capture(/\benchant(?:s|ed|ing)?\s+(?:a\s+|an\s+|target\s+|each\s+|another\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,1})\b/gi);
+  capture(/\bequip(?:s|ped|ping)?\s+(?:a\s+|an\s+|target\s+|each\s+|another\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,1})\b/gi);
+  capture(/\battach(?:es|ed|ing)?\s+to\s+(?:a\s+|an\s+|target\s+|each\s+|another\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,1})\b/gi);
+
   // 9. Library search targets — the card type being FETCHED is an object of the action,
   //    not a descriptor of the spell. "search your library for a land" → "land" (not t:land).
   //    "fetch a forest from your library" → "forest" (not t:forest / land-subtype filter).
@@ -820,6 +829,26 @@ function extractTriggerSubjectTokens(naturalQuery: string): Set<string> {
       if (!STOPWORDS.has(tok)) tokens.add(tok);
     }
   }
+
+  // "whenever you enchant/equip/attach [a/an/target] X" — X is the attachment target.
+  // Must NOT become t:X but must stay in the fragment text for AI context.
+  const attachRe = /\b(?:when(?:ever)?|if)\s+(?:you\s+)?(?:enchant|equip|attach)\s+(?:a\s+|an\s+|target\s+|each\s+|another\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,1})\b/gi;
+  while ((m = attachRe.exec(lower)) !== null) {
+    const phrase = (m[1] ?? "").trim();
+    for (const tok of phrase.split(/\s+/).filter(Boolean)) {
+      if (!STOPWORDS.has(tok)) tokens.add(tok);
+    }
+  }
+
+  // "whenever [a/an/target] X is enchanted/equipped/attached" — X is still the attachment target.
+  const isAttachedRe = /\b(?:when(?:ever)?|if)\s+(?:a\s+|an\s+|target\s+|each\s+|any\s+)?([a-z][a-z-]*)\s+is\s+(?:enchanted|equipped|attached)\b/gi;
+  while ((m = isAttachedRe.exec(lower)) !== null) {
+    const phrase = (m[1] ?? "").trim();
+    for (const tok of phrase.split(/\s+/).filter(Boolean)) {
+      if (!STOPWORDS.has(tok)) tokens.add(tok);
+    }
+  }
+
   return tokens;
 }
 
@@ -1129,6 +1158,49 @@ function applyOracleIntentHeuristics(
     /\b(etb|enters?\s+(?:the\s+)?(?:battlefield|field)|when\s+[^.]{0,40}\s+enters?)\b/i.test(
       naturalQuery
     );
+
+  // --- Attachment trigger: "trigger(s) when(ever) you enchant/equip/attach" ---
+  // e.g. "effects that trigger whenever you enchant a creature"
+  //      "cards that do something when you equip a creature"
+  // Oracle text: o:whenever anchors the triggered ability; o:enchant/o:equip anchors
+  // the attachment condition. On aura cards "enchant creature" appears in oracle text,
+  // so o:whenever o:enchant effectively finds auras with triggered abilities.
+  const hasAttachTriggerIntent =
+    /\btrigger(?:s|ed)?\b.{0,60}\bwhen(?:ever)?\b.{0,40}\b(?:enchant|equip|attach)\b/i.test(naturalQuery) ||
+    /\beffects?\b.{0,60}\bwhen(?:ever)?\b.{0,40}\b(?:enchant|equip|attach)\b/i.test(naturalQuery) ||
+    /\bwhen(?:ever)?\s+(?:you\s+)?(?:enchant|equip|attach)\b/i.test(naturalQuery);
+
+  if (hasAttachTriggerIntent) {
+    // Determine attachment verb used for oracle filter.
+    // For enchant queries we use (o:enchant or o:aura) to cover two interpretations:
+    //   1. Aura cards with triggered abilities — oracle text contains "Enchant [type]" + "whenever"
+    //   2. Non-aura cards that watch for auras being attached — oracle text says "Aura" + "whenever"
+    //      e.g. "Whenever an Aura becomes attached to a creature you control..."
+    const isEquipFocus = /\bequip\b/i.test(naturalQuery) && !/\benchant\b/i.test(naturalQuery);
+    mustClauses.push({ value: "o:whenever", source: "phase1:oracle" });
+    mustClauses.push({
+      value: isEquipFocus ? "o:equip" : "(o:enchant or o:aura)",
+      source: "phase1:oracle",
+    });
+    // Extract the attachment target (e.g. "creature" in "whenever you enchant a creature")
+    // and strip it so Phase 2 never sees it as a type filter — the oracle clauses above
+    // already capture the full intent.
+    const targetMatch = naturalQuery.match(
+      /\b(?:when(?:ever)?)\s+(?:you\s+)?(?:enchant|equip|attach)\s+(?:a\s+|an\s+|target\s+|each\s+|another\s+)?([a-z][a-z-]*)/i
+    );
+    const attachTarget = targetMatch?.[1]?.toLowerCase() ?? null;
+    strippedTerms.push(
+      "effects", "effect", "trigger", "triggers", "triggered", "triggering", "that trigger",
+      "whenever", "when",
+      "enchant", "enchants", "enchanted", "enchanting",
+      "equip", "equips", "equipped", "equipping",
+      "attach", "attaches", "attached", "attaching",
+    );
+    if (attachTarget) {
+      strippedTerms.push(attachTarget, `${attachTarget}s`);
+    }
+    return;
+  }
 
   // --- Life-drain / "steal life" ---
   // e.g. "steal life points", "drain life from opponents", "opponents lose life and you gain life"

@@ -258,6 +258,26 @@ async function testPhase1SorceryPluralKeepsTypeAndStripsFromArtFragment() {
   console.log("[PASS] phase1: sorceries query keeps t:sorcery and clean art fragment");
 }
 
+async function testPhase1EnchantTargetNotCardType() {
+  // "creature" in "enchant a creature" is the enchant target — must NOT become t:creature.
+  // Phase 1 should detect "whenever you enchant" and produce oracle text anchors instead.
+  const parsed = await parseNaturalQuery("effects that trigger whenever you enchant a creature");
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    !mustValues.some((v) => v === "t:creature"),
+    `t:creature should NOT appear when 'creature' is the enchant target — got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.some((v) => v === "o:whenever"),
+    `o:whenever should be present for "whenever you enchant" intent — got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.some((v) => v === "(o:enchant or o:aura)"),
+    `(o:enchant or o:aura) should be present to cover both aura-trigger interpretations — got: ${mustValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: enchant target 'creature' does not become t:creature; oracle anchors produced");
+}
+
 async function testPhase1FuzzyColorIdentityTypo() {
   const parsed = await parseNaturalQuery(
     "creature in dimira color identity that draws you cards when it enters the field"
@@ -1209,6 +1229,7 @@ async function run() {
   await testPhase1ArtDescriptorBundlesUseAndedArtTags();
   await testPhase1PluralTypeIsStrippedFromArtFragments();
   await testPhase1SorceryPluralKeepsTypeAndStripsFromArtFragment();
+  await testPhase1EnchantTargetNotCardType();
   await testPhase1FuzzyColorIdentityTypo();
   await testPhase1MonocolorUsesExactIdentity();
   await testPhase1FuzzyKeywordTypo();
