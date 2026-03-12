@@ -1376,6 +1376,8 @@ async function run() {
   // Direct Scryfall queries must never be re-routed
   await testPhase1DirectScryfallNeverModified();
   // Compound OR query splitting
+  await testPhase1WheneverTypeLeavesZone();
+  await testPhase1ManaCostFullyStripped();
   testSplitCompoundCommaOr();
   testSplitCompoundBareOrAfterEmbedded();
   testSplitCompoundDoesNotSplitSimpleTypeOr();
@@ -1857,6 +1859,58 @@ function testSplitCompoundThreeBranches() {
   assert.ok(/blue enchantments/i.test(result[1]), `branch 2: ${result[1]}`);
   assert.ok(/green lands/i.test(result[2]), `branch 3: ${result[2]}`);
   console.log("[PASS] splitCompoundQuery: three-way ', or' split works");
+}
+
+async function testPhase1WheneverTypeLeavesZone() {
+  // Regression: "whenever an instant leaves your graveyard" was producing zero mustClauses
+  // because "instant" was blocked by triggerSubjectTokens and nothing else produced output.
+  // Phase 2 got the whole query, returned an unknown archetype with no raw tags, and the
+  // query was empty → 500 crash.  Phase 1 now handles this deterministically.
+  //
+  // The zone-to-tag mapping is resolved dynamically from the live tagger catalog:
+  //   - When the catalog contains "leaves-graveyard-trigger" →
+  //       function:leaves-graveyard-trigger is emitted
+  //   - When the catalog is unavailable (e.g. no cache file in CI) →
+  //       o:"leaves" + o:graveyard oracle-text fallback is emitted
+  // Both outcomes are valid; the test accepts either.
+  const parsed = await parseNaturalQuery("whenever an instant leaves your graveyard");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  const hasFunctionTag = mustValues.includes("function:leaves-graveyard-trigger");
+  const hasOracleFallback =
+    mustValues.includes('o:"leaves"') && mustValues.some((v) => /o:graveyard/.test(v));
+  assert.ok(
+    hasFunctionTag || hasOracleFallback,
+    `expected function:leaves-graveyard-trigger OR o:"leaves"+o:graveyard fallback; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.some((v) => /o:instant/.test(v)),
+    `expected o:instant (type qualifier) clause; got: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    !mustValues.some((v) => /^t:instant$/.test(v)),
+    `t:instant must NOT appear (instant is the trigger subject, not card type); got: ${mustValues.join(", ")}`
+  );
+  const resolvedAs = hasFunctionTag ? "function:leaves-graveyard-trigger" : "oracle-text fallback";
+  console.log(`[PASS] phase1: 'whenever an instant leaves your graveyard' → ${resolvedAs} + o:instant, no t:instant`);
+}
+
+async function testPhase1ManaCostFullyStripped() {
+  // "mana cost 10 or more" — the word "mana" before "cost" must be consumed
+  // by the stat detector so it doesn't survive as an unresolved fragment that
+  // Phase 2 misclassifies as ramp.
+  const parsed = await parseNaturalQuery("creatures with mana cost 10 or more");
+  const statValues = parsed.mustClauses
+    .filter((c) => c.source === "phase1:stat")
+    .map((c) => c.value);
+  assert.ok(
+    statValues.some((v) => /^mv>=10$/.test(v)),
+    `expected mv>=10; got: ${statValues.join(", ")}`
+  );
+  assert.ok(
+    parsed.unresolvedFragments.every((f) => !/\bmana\b/i.test(f.text)),
+    `'mana' should NOT survive as unresolved; got: ${parsed.unresolvedFragments.map((f) => f.text).join(" | ")}`
+  );
+  console.log("[PASS] phase1: 'mana cost N or more' fully consumed — no residual 'mana' fragment");
 }
 
 async function testCompoundPipelineEndToEnd() {

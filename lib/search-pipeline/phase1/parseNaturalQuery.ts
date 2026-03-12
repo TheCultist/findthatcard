@@ -14,6 +14,7 @@ import { isScryfallQuery } from "@/lib/scryfall/query-converter";
 import { resolveSetFilters } from "@/lib/scryfall/sets";
 import { resolveStrategyName, STRATEGY_ORACLETAGS } from "@/lib/strategies/oracletagStrategies";
 import { ensureTaggerTagCache, getTaggerTagCache } from "@/lib/tagger/cache";
+import { findFunctionTagBySegments } from "@/lib/tagger/context";
 import { escapeRegex, normalizeWhitespace, levenshteinDistance } from "@/lib/utils/text";
 import { ClauseSource, Phase1Result, QueryClause, QueryIntent, ResolverCategory, UnresolvedFragment } from "@/lib/search-pipeline/types";
 
@@ -333,26 +334,27 @@ function resolveNumericStatFilters(naturalQuery: string): {
     if (num !== null && num <= 12) emitIfNew("mv", "=", num, m[0]);
   }
 
-  // "costs [op] [num] [mana]" — e.g. "costs less than 2 mana"
-  const costsOpNum = new RegExp(`\\b(?:costs?|costing)\\s+(${OP_PAT})\\s+(${NUM_PAT})(?:\\s+mana)?\\b`, "gi");
+  // "costs [op] [num] [mana]" — e.g. "costs less than 2 mana", "mana cost less than 2"
+  // Optional leading "mana" so "mana cost ..." is consumed as a unit.
+  const costsOpNum = new RegExp(`\\b(?:mana\\s+)?(?:costs?|costing)\\s+(${OP_PAT})\\s+(${NUM_PAT})(?:\\s+mana)?\\b`, "gi");
   for (const m of lower.matchAll(costsOpNum)) {
     const op = textToComparisonOp(m[1] ?? "");
     const num = wordOrDigitToNumber(m[2] ?? "");
     if (op !== null && num !== null) emitIfNew("mv", op, num, m[0]);
   }
 
-  // "costs [num] [mana] or more/less" — e.g. "costs 10 mana or more", "costs 3 or fewer"
+  // "costs [num] [mana] or more/less" — e.g. "costs 10 mana or more", "mana cost 10 or more"
   // Must run before costsNum so the full match is stripped, preventing costsNum from
   // matching the sub-string "cost 10 mana" and emitting a conflicting mv= clause.
-  const costsNumManaOp = new RegExp(`\\b(?:costs?|costing)\\s+(${NUM_PAT})(?:\\s+mana)?\\s+(or\\s+(?:less|fewer|more|greater))\\b`, "gi");
+  const costsNumManaOp = new RegExp(`\\b(?:mana\\s+)?(?:costs?|costing)\\s+(${NUM_PAT})(?:\\s+mana)?\\s+(or\\s+(?:less|fewer|more|greater))\\b`, "gi");
   for (const m of lower.matchAll(costsNumManaOp)) {
     const num = wordOrDigitToNumber(m[1] ?? "");
     const op = textToComparisonOp(m[2] ?? "");
     if (op !== null && num !== null) emitIfNew("mv", op, num, m[0]);
   }
 
-  // "costs [num] mana" — e.g. "costs 3 mana", "costing 2"
-  const costsNum = new RegExp(`\\b(?:costs?|costing)\\s+(${NUM_PAT})(?:\\s+mana)?\\b`, "gi");
+  // "costs [num] mana" — e.g. "costs 3 mana", "mana cost 3"
+  const costsNum = new RegExp(`\\b(?:mana\\s+)?(?:costs?|costing)\\s+(${NUM_PAT})(?:\\s+mana)?\\b`, "gi");
   for (const m of lower.matchAll(costsNum)) {
     const num = wordOrDigitToNumber(m[1] ?? "");
     if (num !== null && !strippedTerms.some((t) => t.includes(m[0]))) {
@@ -1625,6 +1627,54 @@ function applyOracleIntentHeuristics(
       "library", "deck", "top of",
       "opponent", "opponents", "opponent's",
     );
+    return;
+  }
+
+  // --- "When/whenever [type] leaves [zone]" trigger ---
+  // e.g. "whenever an instant leaves your graveyard"
+  //      "when a creature leaves the battlefield"
+  //      "cards that trigger when a permanent leaves"
+  // Use the specific tagger function tag when the zone matches, otherwise
+  // fall back to oracle text so the intent is never silently lost.
+  const LEAVE_ZONE_TRIGGER =
+    /\b(?:when(?:ever)?|if)\b.{0,40}\bleaves?\b/i;
+  if (LEAVE_ZONE_TRIGGER.test(naturalQuery)) {
+    const zoneMatch = naturalQuery.match(
+      /\b(?:graveyard|battlefield|library|deck|hand|exile|command zone)\b/i
+    );
+    const zone = zoneMatch ? zoneMatch[0].toLowerCase() : null;
+
+    const typeMatch = naturalQuery.match(
+      /\b(?:when(?:ever)?|if)\s+(?:a\s+|an\s+|another\s+|the\s+|any\s+)?([a-z][a-z-]*)\s+leaves?\b/i
+    );
+    const triggerType = typeMatch ? (typeMatch[1] ?? "").toLowerCase() : null;
+    const ignoredTypes = new Set(["permanent", "card", "it", "this", "that"]);
+    const cardType = triggerType && !ignoredTypes.has(triggerType) ? triggerType : null;
+
+    // Dynamically look up the most specific "leaves-<zone>-trigger" tag from
+    // the live tagger catalog rather than hardcoding known zone names.
+    const leavesFunctionTag = zone ? findFunctionTagBySegments(["leaves", zone]) : null;
+    if (leavesFunctionTag) {
+      mustClauses.push({ value: `function:${leavesFunctionTag}`, source: "phase1:function" });
+    } else {
+      // No matching tagger tag: anchor with oracle text instead
+      mustClauses.push({ value: 'o:"leaves"', source: "phase1:oracle" });
+      if (zone) {
+        mustClauses.push({ value: `o:${zone}`, source: "phase1:oracle" });
+      }
+    }
+    // If a specific card type is mentioned as the trigger subject, add an oracle
+    // text filter so results are restricted to that object type in the trigger clause.
+    if (cardType) {
+      mustClauses.push({ value: `o:${cardType}`, source: "phase1:oracle" });
+    }
+    strippedTerms.push(
+      "whenever", "when", "trigger", "triggers", "triggered",
+      "leaves", "leave",
+      "your", "the",
+    );
+    if (zone) strippedTerms.push(zone);
+    if (cardType) strippedTerms.push(cardType, `${cardType}s`);
     return;
   }
 

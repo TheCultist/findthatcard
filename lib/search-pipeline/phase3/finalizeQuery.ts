@@ -320,6 +320,21 @@ function injectArchetypeTagsFromResolvedFragments(
     }
     const tags = lookupArchetypeTags(fragment.archetype, fragment.qualifier ?? undefined);
     if (!tags || tags.length === 0) {
+      // Unknown archetype — fall back to emitting the fragment's raw tags so
+      // they're not silently dropped (the assembler skips archetype-flagged
+      // fragments, expecting this injector to handle them).
+      if (fragment.tags.length > 0) {
+        const rawChain = fragment.tags.filter((t) => t.trim().length > 0);
+        if (rawChain.length > 0) {
+          if (unresolved.orConnected && orGroupChains.length > 0) {
+            orGroupChains.push(rawChain);
+          } else {
+            flushArchetypeOrGroup();
+            orGroupChains.push(rawChain);
+          }
+          continue;
+        }
+      }
       if (!unresolved.orConnected) flushArchetypeOrGroup();
       continue;
     }
@@ -342,9 +357,22 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
   // Archetype-resolved Phase 2 fragments are injected here, not in assembleQueryFromIR,
   // so the emptiness check must come after injection — the base alone can be empty when
   // the entire query meaning comes from Phase 2 archetypes (e.g. "deal damage to any target").
-  const withArchetypeTags = injectArchetypeTagsFromResolvedFragments(ir, queryWithoutPrefer);
+  let withArchetypeTags = injectArchetypeTagsFromResolvedFragments(ir, queryWithoutPrefer);
   if (!withArchetypeTags) {
-    throw new Error("Search pipeline produced an empty query");
+    // Last-resort fallback: assemble o: oracle terms from any unresolved fragment text
+    // so the pipeline never crashes with an empty query. This handles cases where
+    // Phase 2 returns an archetype that isn't in the registry and no raw tags were provided.
+    const oracleTerms = ir.unresolvedFragments
+      .flatMap((f) => f.text.toLowerCase().split(/\s+/))
+      .filter((w) => w.length >= 3 && !/^\d+$/.test(w))
+      .slice(0, 4)
+      .map((w) => `o:${w}`);
+    if (oracleTerms.length > 0) {
+      withArchetypeTags = oracleTerms.join(" ");
+      console.warn(`[Phase3] Empty query fallback for "${ir.naturalQuery}" → ${withArchetypeTags}`);
+    } else {
+      throw new Error("Search pipeline produced an empty query");
+    }
   }
   const tagContext = await getTaggerTagContext(ir.naturalQuery);
 

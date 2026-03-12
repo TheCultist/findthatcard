@@ -262,6 +262,33 @@ function scoreTagMatch(tag: string, keywords: string[]): number {
 }
 
 /**
+ * Finds a function tag whose hyphen-separated segments contain ALL of the
+ * provided segments (case-insensitive).  Returns the shortest match (fewest
+ * extra segments) so e.g. ["leaves","graveyard"] resolves to
+ * "leaves-graveyard-trigger" rather than a longer, more specific variant.
+ *
+ * Returns null when the cache is not yet loaded or no tag matches.
+ */
+export function findFunctionTagBySegments(segments: string[]): string | null {
+  const cache = getTaggerTagCache();
+  if (!cache) return null;
+  const functionTags = cache.get("function");
+  if (!functionTags) return null;
+
+  const lower = segments.map((s) => s.toLowerCase());
+  const matches: string[] = [];
+  for (const tag of functionTags) {
+    const tagSegs = tag.toLowerCase().split("-");
+    if (lower.every((s) => tagSegs.includes(s))) {
+      matches.push(tag);
+    }
+  }
+  if (matches.length === 0) return null;
+  // Prefer the tag with the fewest segments (most concise / least specific)
+  return matches.sort((a, b) => a.split("-").length - b.split("-").length)[0];
+}
+
+/**
  * Returns a narrowed list of Tagger tags relevant to the query.
  * Used to guide the model toward valid tags without sending the full catalog.
  */

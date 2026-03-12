@@ -234,7 +234,7 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
 // Compound OR pipeline — processes each branch through Phases 1-3 independently
 // ---------------------------------------------------------------------------
 
-const GAME_FILTER_RE = /\s+game:\w+\s*$/i;
+const GAME_FILTER_RE = /\s*\bgame:\w+\b/gi;
 const PREFER_BEST_RE = /^prefer:best\s+/i;
 
 async function runCompoundPipeline(
@@ -261,12 +261,12 @@ async function runCompoundPipeline(
     phase2Results.map((p2) => finalizeQuery(p2.ir))
   );
 
-  // Strip per-branch global decorations (prefer:best prefix, trailing game:…)
+  // Strip per-branch global decorations (prefer:best prefix, game:… filter)
   const strippedBranches = phase3Results.map((p3) => {
     let q = p3.queryForScryfall;
-    q = q.replace(PREFER_BEST_RE, "").trim();
-    q = q.replace(GAME_FILTER_RE, "").trim();
-    return q;
+    q = q.replace(PREFER_BEST_RE, "");
+    q = q.replace(GAME_FILTER_RE, "");
+    return q.replace(/\s{2,}/g, " ").trim();
   });
 
   // Build compound query with explicit grouping so global filters apply to all branches.
