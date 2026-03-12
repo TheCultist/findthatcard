@@ -10,6 +10,7 @@
     "test:queries": "tsx lib/scryfall/query-converter.test.ts && tsx lib/search-pipeline/search-pipeline.test.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@heroicons/react": "^2.2.0",
     "@vercel/analytics": "^1.6.1",
     "next": "^16.1.6",

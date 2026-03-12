@@ -1,20 +1,6 @@
-import OpenAI from "openai";
+import { callAI } from "@/lib/ai-client";
 import { fetchCardByName, ScryfallNamedCard } from "@/lib/scryfall/lookup";
 import { fetchTaggerCardData } from "@/lib/scryfall/tagger-graphql";
-
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
-
-let openaiClient: OpenAI | null = null;
-
-function getOpenAIClient(): OpenAI {
-  if (openaiClient) return openaiClient;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is missing");
-  }
-  openaiClient = new OpenAI({ apiKey });
-  return openaiClient;
-}
 
 function shouldLog(): boolean {
   const configured = process.env.LOG_AI_AGENT_PROMPT?.toLowerCase();
@@ -198,17 +184,12 @@ export async function resolveSynergyQuery(cardName: string): Promise<SynergyQuer
     console.log(`[Synergy][AI Prompt]\n${prompt}`);
   }
 
-  const client = getOpenAIClient();
-  const response = await client.responses.create({
-    model: OPENAI_MODEL,
-    reasoning: { effort: "low" },
-    input: [{ role: "user", content: prompt }],
+  const response = await callAI({
+    user: prompt,
     max_output_tokens: 2000,
   });
 
-  const inputTokens = response.usage?.input_tokens ?? 0;
-  const outputTokens = response.usage?.output_tokens ?? 0;
-  const totalTokens = response.usage?.total_tokens ?? inputTokens + outputTokens;
+  const { input_tokens: inputTokens, output_tokens: outputTokens, total_tokens: totalTokens } = response.usage;
 
   if (shouldLog()) {
     console.log(
@@ -216,7 +197,7 @@ export async function resolveSynergyQuery(cardName: string): Promise<SynergyQuer
     );
   }
 
-  const text = response.output_text?.trim() || "";
+  const text = response.text;
 
   let parsed: SynergyResponse;
   try {

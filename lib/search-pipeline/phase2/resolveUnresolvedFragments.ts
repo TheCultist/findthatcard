@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import { callAI } from "@/lib/ai-client";
 import { getTaggerTagContext } from "@/lib/tagger/context";
 import { buildResolverPrompt } from "@/lib/search-pipeline/phase2/buildResolverPrompt";
 import { Phase2Result, ResolvedFragment, ResolverCategory, SearchPipelineIR } from "../types";
@@ -15,10 +15,7 @@ type ResolverResponse = {
   results?: ResolverResponseItem[];
 };
 
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const MIN_CONFIDENCE = 0.35;
-
-let openaiClient: OpenAI | null = null;
 
 function shouldLogAiAgentPrompt(): boolean {
   const configured = process.env.LOG_AI_AGENT_PROMPT?.toLowerCase();
@@ -34,31 +31,12 @@ function shouldLogAiAgentPrompt(): boolean {
 function logAiTokenUsage(
   category: ResolverCategory,
   fragmentsCount: number,
-  usage?: {
-    input_tokens?: number;
-    output_tokens?: number;
-    total_tokens?: number;
-  } | null
+  usage: { input_tokens: number; output_tokens: number; total_tokens: number }
 ): void {
-  if (!shouldLogAiAgentPrompt()) {
-    return;
-  }
-  const input = usage?.input_tokens ?? 0;
-  const output = usage?.output_tokens ?? 0;
-  const total = usage?.total_tokens ?? input + output;
+  if (!shouldLogAiAgentPrompt()) return;
   console.log(
-    `[Phase2][AI Usage] category=${category} fragments=${fragmentsCount} input_tokens=${input} output_tokens=${output} total_tokens=${total}`
+    `[Phase2][AI Usage] category=${category} fragments=${fragmentsCount} input_tokens=${usage.input_tokens} output_tokens=${usage.output_tokens} total_tokens=${usage.total_tokens}`
   );
-}
-
-function getOpenAIClient(): OpenAI {
-  if (openaiClient) return openaiClient;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is missing");
-  }
-  openaiClient = new OpenAI({ apiKey });
-  return openaiClient;
 }
 
 const KNOWN_TAG_PREFIXES = /^(?:function|oracletag|otag|art|atag|arttag|artist|kw|o|t|type|c|id|f|set|is|mv|cmc|pow|tou|loy|year|r|rarity|banned|restricted|legal|format|game|prefer|order|direction|unique|new|not|-):/i;
@@ -108,15 +86,13 @@ async function runCategoryBatch(args: {
       `[Phase2][AI Prompt] category=${args.category} fragments=${args.fragments.length}\n${prompt}`
     );
   }
-  const response = await getOpenAIClient().responses.create({
-    model: OPENAI_MODEL,
-    reasoning: { effort: "low" },
-    input: [{ role: "user", content: prompt }],
+  const response = await callAI({
+    user: prompt,
     max_output_tokens: 800,
   });
   logAiTokenUsage(args.category, args.fragments.length, response.usage);
 
-  const text = response.output_text?.trim() || '{"results":[]}';
+  const text = response.text || '{"results":[]}';
   const parsed = parseResolverOutput(text);
   const results: ResolvedFragment[] = [];
   for (const item of parsed.results || []) {

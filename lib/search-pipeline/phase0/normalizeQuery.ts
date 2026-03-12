@@ -1,19 +1,5 @@
-import OpenAI from "openai";
+import { callAI } from "@/lib/ai-client";
 import { levenshteinDistance } from "@/lib/utils/text";
-
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
-
-let openaiClient: OpenAI | null = null;
-
-function getOpenAIClient(): OpenAI {
-  if (openaiClient) return openaiClient;
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is missing");
-  }
-  openaiClient = new OpenAI({ apiKey });
-  return openaiClient;
-}
 
 function shouldLog(): boolean {
   const configured = process.env.LOG_AI_AGENT_PROMPT?.toLowerCase();
@@ -118,27 +104,20 @@ export async function normalizeQuery(
   }
 
   try {
-    const response = await getOpenAIClient().responses.create({
-      model: OPENAI_MODEL,
-      reasoning: { effort: "low" },
-      input: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: query },
-      ],
+    const response = await callAI({
+      system: SYSTEM_PROMPT,
+      user: query,
       max_output_tokens: 200,
     });
 
-    const usage = response.usage;
     if (shouldLog()) {
-      const input = usage?.input_tokens ?? 0;
-      const output = usage?.output_tokens ?? 0;
-      const total = usage?.total_tokens ?? input + output;
+      const { input_tokens, output_tokens, total_tokens } = response.usage;
       console.log(
-        `[Phase0][AI Usage] input_tokens=${input} output_tokens=${output} total_tokens=${total}`
+        `[Phase0][AI Usage] input_tokens=${input_tokens} output_tokens=${output_tokens} total_tokens=${total_tokens}`
       );
     }
 
-    const text = response.output_text?.trim() ?? "";
+    const text = response.text;
     const validated = validateResponse(query, text);
 
     if (validated && validated.toLowerCase() !== query.toLowerCase()) {
