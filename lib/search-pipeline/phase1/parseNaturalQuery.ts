@@ -309,6 +309,16 @@ function resolveNumericStatFilters(naturalQuery: string): {
     if (op !== null && num !== null) emitIfNew("mv", op, num, m[0]);
   }
 
+  // "[mv alias] [num] or more/less" — e.g. "mana value 10 or more", "cmc 5 or less"
+  // Must run before mvEqNum so the full phrase is stripped, preventing mvEqNum from
+  // matching just "[mv alias] [num]" and emitting a conflicting mv= clause.
+  const mvNumOp = new RegExp(`\\b(${MV_ALIASES})\\s+(${NUM_PAT})\\s+(or\\s+(?:less|fewer|more|greater))\\b`, "gi");
+  for (const m of lower.matchAll(mvNumOp)) {
+    const num = wordOrDigitToNumber(m[2] ?? "");
+    const op = textToComparisonOp(m[3] ?? "");
+    if (op !== null && num !== null) emitIfNew("mv", op, num, m[0]);
+  }
+
   // "[mv alias] of [num]" or "[mv alias] [num]" — e.g. "mana value of 3", "mana value 3"
   const mvEqNum = new RegExp(`\\b(${MV_ALIASES})\\s+(?:of\\s+|equal\\s+to\\s+|exactly\\s+)?(${NUM_PAT})\\b`, "gi");
   for (const m of lower.matchAll(mvEqNum)) {

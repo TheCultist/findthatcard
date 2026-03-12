@@ -1378,6 +1378,8 @@ async function run() {
   // Compound OR query splitting
   await testPhase1WheneverTypeLeavesZone();
   await testPhase1ManaCostFullyStripped();
+  // Regression: Phase-0-normalized "mana value N or more" must not produce both mv= and mv>=
+  await testPhase1ManaValueNOrMoreNoDuplicate();
   testSplitCompoundCommaOr();
   testSplitCompoundBareOrAfterEmbedded();
   testSplitCompoundDoesNotSplitSimpleTypeOr();
@@ -1911,6 +1913,26 @@ async function testPhase1ManaCostFullyStripped() {
     `'mana' should NOT survive as unresolved; got: ${parsed.unresolvedFragments.map((f) => f.text).join(" | ")}`
   );
   console.log("[PASS] phase1: 'mana cost N or more' fully consumed — no residual 'mana' fragment");
+}
+
+async function testPhase1ManaValueNOrMoreNoDuplicate() {
+  // Regression: Phase 0 normalises "jund creatures 10 mana or more" to
+  // "jund creatures with mana value 10 or more". The phrase "[mv alias] [num] or more"
+  // previously caused BOTH mv=10 (from mvEqNum matching the prefix) AND mv>=10
+  // (from numManaOp matching the suffix) to be emitted.
+  const parsed = await parseNaturalQuery("creatures with mana value 10 or more");
+  const statValues = parsed.mustClauses
+    .filter((c) => c.source === "phase1:stat")
+    .map((c) => c.value);
+  assert.ok(
+    statValues.some((v) => /^mv>=10$/.test(v)),
+    `expected mv>=10; got: ${statValues.join(", ")}`
+  );
+  assert.ok(
+    !statValues.some((v) => /^mv=10$/.test(v)),
+    `mv=10 must NOT appear alongside mv>=10; got: ${statValues.join(", ")}`
+  );
+  console.log("[PASS] phase1: 'mana value N or more' → only mv>=N, no spurious mv=N");
 }
 
 async function testCompoundPipelineEndToEnd() {
