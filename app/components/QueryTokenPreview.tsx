@@ -8,6 +8,8 @@ type QueryTokenPreviewProps = {
   sourceQuery: string;
   variant?: "panel" | "inline";
   className?: string;
+  /** Called with the rewritten query when the user clicks the id:/id= toggle. */
+  onApplyQueryAction?: (newQuery: string) => void;
 };
 
 const SET_FIELDS = new Set(["set", "s", "e", "edition"]);
@@ -32,6 +34,7 @@ export default function QueryTokenPreview({
   sourceQuery,
   variant = "panel",
   className = "",
+  onApplyQueryAction,
 }: QueryTokenPreviewProps) {
   const [setNames, setSetNames] = useState<Record<string, string>>({});
   const [activeTooltip, setActiveTooltip] = useState<number | null>(null);

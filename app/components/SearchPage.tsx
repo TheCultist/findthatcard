@@ -14,6 +14,7 @@ import useAdBlockDetection from "@/app/hooks/useAdBlockDetection";
 import CardCard from "@/app/components/CardCard";
 import AdBanner from "@/app/components/AdBanner";
 import QueryTokenPreview from "@/app/components/QueryTokenPreview";
+import { COLOR_NAMES } from "@/lib/query-tokens";
 import CardDetailPanel from "@/app/components/CardDetailPanel";
 import ThemeToggle from "@/app/components/ThemeToggle";
 import BugReportButton from "@/app/components/BugReportButton";
@@ -475,6 +476,43 @@ export default function SearchPage() {
                 </a>
               </div>
             </div>
+            {(() => {
+              // Detect a single id: or id= token in the current query.
+              const idMatch = editableQuery.match(/\bid([=:])([a-z]+)/i);
+              if (!idMatch) return null;
+              const currentOp = idMatch[1]!;   // ":" or "="
+              const idValue = idMatch[2]!.toLowerCase();
+              const targetOp = currentOp === ":" ? "=" : ":";
+              // Normalize to WUBRG order for the color name lookup.
+              const wubrg = "wubrg";
+              const normalized = idValue.split("").sort((a, b) => wubrg.indexOf(a) - wubrg.indexOf(b)).join("");
+              const fullName = COLOR_NAMES[normalized] ?? idValue.toUpperCase();
+              // Trim the parenthetical so we just get e.g. "Jund" not "Jund (Black + Red + Green)".
+              const shortName = fullName.split(" (")[0];
+              const altQuery = editableQuery.replace(
+                new RegExp(`\\bid${currentOp === ":" ? ":" : "="}${idValue}\\b`, "i"),
+                `id${targetOp}${idValue}`
+              );
+              const label = targetOp === "="
+                ? `Exact ${shortName} identity (id=)`
+                : `Playable in ${shortName} (id:)`;
+              return (
+                <div className="mt-2 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                  <span className="text-gray-400 dark:text-gray-500">Also try:</span>
+                  <button
+                    onClick={() => {
+                      setEditableQuery(altQuery);
+                      setCurrentPage(1);
+                      setPageInput("1");
+                      handleSearch(altQuery, 1, { updateUrl: false });
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-gray-100 px-3 py-1 text-sm font-medium text-gray-700 transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-500 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
+                  >
+                    {label}
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         )}
 

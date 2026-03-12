@@ -20,7 +20,7 @@ export type TokenMetadata = QueryToken & {
 // Display helpers
 // ---------------------------------------------------------------------------
 
-const COLOR_NAMES: Record<string, string> = {
+export const COLOR_NAMES: Record<string, string> = {
   w: "White",
   u: "Blue",
   b: "Black",

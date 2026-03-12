@@ -1098,8 +1098,13 @@ function detectColorInclusionIntent(naturalQuery: string): boolean {
  * e.g. "exactly esper color identity", "only white color identity", "mono-blue identity"
  */
 function detectExactColorIdentityIntent(naturalQuery: string): boolean {
-  // "exactly/only/purely/strictly X color identity"
-  if (/\b(?:exact(?:ly)?|only|purely|strictly|just)\s+\w[\w\s-]*(?:colou?r\s+)?identit/i.test(naturalQuery)) {
+  // "exactly/only/purely/strictly/just/pure X color identity"
+  if (/\b(?:exact(?:ly)?|only|purely?|strictly|just)\s+\w[\w\s-]*(?:colou?r\s+)?identit/i.test(naturalQuery)) {
+    return true;
+  }
+  // "purely/just [color]" or "purely/just [color] colored/colors" without needing "identity"
+  // e.g. "purely jund creatures", "just esper spells", "purely white colored"
+  if (/\b(?:purely?|just)\s+[a-z]+(?:\s+colou?r(?:ed|s)?)?\b/i.test(naturalQuery)) {
     return true;
   }
   // "mono-X" or "mono X" — single-color exact identity
