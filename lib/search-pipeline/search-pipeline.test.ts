@@ -314,15 +314,15 @@ async function testPhase1FuzzyColorIdentityTypo() {
 }
 
 async function testPhase1MonocolorUsesExactIdentity() {
-  // Commander context → id<= (deck identity)
+  // Commander context → id: (deck identity)
   const parsed = await parseNaturalQuery("green creatures for commander");
   const mustValues = parsed.mustClauses.map((entry) => entry.value);
-  assert.ok(mustValues.includes("id:g") || mustValues.includes("id=g") || mustValues.includes("id<=g"), `mono + commander should use id:g/id=g/id<=g, got ${mustValues.join(",")}`);
+  assert.ok(mustValues.includes("id:g") || mustValues.includes("id=g"), `mono + commander should use id:g or id=g, got ${mustValues.join(",")}`);
 
-  // Multi-color + commander → id<= (deck identity)
+  // Multi-color + commander → id: (deck identity)
   const parsedB = await parseNaturalQuery("azorius creatures for commander");
   const mustValuesB = parsedB.mustClauses.map((entry) => entry.value);
-  assert.ok(mustValuesB.includes("id:wu") || mustValuesB.includes("id=wu") || mustValuesB.includes("id<=wu"), `multi + commander should use id:wu/id=wu/id<=wu, got ${mustValuesB.join(",")}`);
+  assert.ok(mustValuesB.includes("id:wu") || mustValuesB.includes("id=wu"), `multi + commander should use id:wu or id=wu, got ${mustValuesB.join(",")}`);
 
   // No commander context → c: (card color)
   const parsedC = await parseNaturalQuery("azorius creatures");
@@ -345,7 +345,7 @@ async function testPhase1MonocolorUsesExactIdentity() {
   assert.ok(mustValuesF.includes("id:wubr") || mustValuesF.includes("id=wubr"), `should include id:wubr or id=wubr; got: ${mustValuesF.join(", ")}`);
   assert.ok(mustValuesF.includes("c=u"), `should include c=u for mono-blue card color; got: ${mustValuesF.join(", ")}`);
 
-  console.log("[PASS] phase1: color filter uses c: by default, id<= for commander/identity contexts");
+  console.log("[PASS] phase1: color filter uses c: by default, id: for commander/identity contexts");
 }
 
 async function testPhase1FuzzyKeywordTypo() {
@@ -371,7 +371,7 @@ async function testPhase1SynergyIntentUsesFunctionTagsForMentionedSubject() {
   const parsed = await parseNaturalQuery("esper artifact synergies for commander");
   const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
   assert.ok(mustValues.includes("f:commander"));
-  assert.ok(mustValues.includes("id:wub") || mustValues.includes("id<=wub"));
+  assert.ok(mustValues.includes("id:wub") || mustValues.includes("id=wub"));
   assert.ok(!mustValues.includes("t:artifact"));
   assert.ok(
     mustValues.some(

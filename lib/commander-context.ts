@@ -164,6 +164,11 @@ export function hasCommanderDeckContext(naturalQuery: string): boolean {
     return true;
   }
   
+  // "for commander" / "in commander" (direct — no middle content required)
+  if (/\b(?:for|in)\s+commander\b/i.test(lower)) {
+    return true;
+  }
+
   const cleanedFor = lower.replace(/\b(?:looking|search(?:ing)?)\s+for\b/g, "");
   if (/\b(?:for|in|playable\s+with|goes\s+in)\s+(?:a\s+|my\s+|an\s+)?[^.]+?\s+commander\b/i.test(cleanedFor)) {
     return true;
@@ -195,11 +200,11 @@ export function applyCommanderContextFromNaturalQuery(
 
   const colorId = resolveCommanderColorIdentity(naturalQuery);
   if (colorId) {
-    // Replace any existing identity clause with id<= for deck building
+    // Replace any existing identity clause with id: for deck building
     // (supports id:, id=, id<=, id:<=, and comparator variants).
     const idPattern = /\bid(?:entity)?(?::<=|:>=|[:=]|<=|>=|<|>)\s*[wubrgc]+\b/gi;
     result = result.replace(idPattern, "");
-    result = `${result.trim()} id<=${colorId}`.trim();
+    result = `${result.trim()} id:${colorId}`.trim();
   }
 
   // Remove Commander precon/set filters—user wants deck cards, not from a specific product

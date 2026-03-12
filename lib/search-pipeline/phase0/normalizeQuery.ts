@@ -56,7 +56,9 @@ Examples:
 "blue counterspell cheap modern" → "cheap blue counterspell for modern"
 "creature removal for enchantment and artifact cards" → "removal that targets creatures, enchantments, and artifacts"
 "white creature and artifact removal" → "white removal that targets creatures and artifacts"
-"black removal for creatures and planeswalkers" → "black removal that targets creatures and planeswalkers"`;
+"black removal for creatures and planeswalkers" → "black removal that targets creatures and planeswalkers"
+"creatures that are removal for enchantment and artifacts" → "creatures that remove enchantments and artifacts"
+"spells that are removal for creatures and planeswalkers" → "spells that remove creatures and planeswalkers"`;
 
 /**
  * Validates the LLM response. Returns the normalized query if safe,

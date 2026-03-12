@@ -197,7 +197,7 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
       phase1.mustClauses.unshift({ value: synergyResult.query, source: "phase1:direct" });
       // Inject color identity as a top-level constraint so it applies to the whole query.
       if (synergyResult.colorIdentity) {
-        phase1.mustClauses.push({ value: `id<=${synergyResult.colorIdentity}`, source: "phase1:direct" });
+        phase1.mustClauses.push({ value: `id:${synergyResult.colorIdentity}`, source: "phase1:direct" });
       }
       phase1.debug.aiBatchCalls += 1;
     } else {

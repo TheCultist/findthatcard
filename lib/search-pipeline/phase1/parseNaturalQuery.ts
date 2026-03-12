@@ -780,7 +780,19 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   // 2. Oracle-text targets — "that destroy/exile/bounce/reanimate/... a/an/each X"
   // "other X" is excluded: "that destroy other creatures" means the card IS a creature
   // (reflexive self-type), so "creatures" should not be blocked from becoming t:creature.
-  capture(/\bthat\s+(?:destroy|exile|bounce|target|counter|sacrifice|kill|remove|discard|copy|tap|untap|create|make|generate|produce|add|reanimate|return|recur|revive|resurrect|animate|regrow)\s+(?:a\s+|an\s+|all\s+|each\s+)?(?!other\s)([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s+(?:card|permanent|spell|ability|token)\b|\s+or\b|\s+and\b|\s+from\b|\s+in\b|\s+you\b|$)/gi);
+  const REMOVAL_VERBS = `destroy|exile|bounce|target|counter|sacrifice|kill|remove|discard|copy|tap|untap|create|make|generate|produce|add|reanimate|return|recur|revive|resurrect|animate|regrow`;
+  capture(new RegExp(`\\bthat\\s+(?:${REMOVAL_VERBS})\\s+(?:a\\s+|an\\s+|all\\s+|each\\s+)?(?!other\\s)([a-z][a-z-]*(?:\\s+[a-z][a-z-]*){0,2})(?=\\s+(?:card|permanent|spell|ability|token)\\b|\\s+or\\b|\\s+and\\b|\\s+from\\b|\\s+in\\b|\\s+you\\b|$)`, "gi"));
+
+  // 2b. List continuation — "that [verb] X and Y" captures Y as well as X.
+  // The pattern above captures X; this captures the additional items after "and"/"or"
+  // so they also enter semanticRoleTokens and are not emitted as spurious t: filters.
+  capture(new RegExp(`\\bthat\\s+(?:${REMOVAL_VERBS})\\s+(?:a\\s+|an\\s+|all\\s+|each\\s+)?(?!other\\s)[a-z][a-z-]*(?:\\s+[a-z][a-z-]*){0,2}\\s+(?:and|or)\\s+([a-z][a-z-]*)`, "gi"));
+
+  // 2c. Noun-form removal targets — "removal for X and Y" / "removal of X and Y".
+  // When the user writes "creatures that are removal for enchantments and artifacts",
+  // Phase 0 rewrites to "that remove X and Y" (patterns 2+2b above). But the original
+  // noun form also appears in direct queries, so handle it here too.
+  capture(/\b(?:removal|removes?)\s+(?:for|of|against)\s+((?:[a-z][a-z-]*\s+(?:and|or)\s+)*[a-z][a-z-]*)(?=\s|,|$)/gi);
 
   // 3. Damage targets — "deals/deal damage to a/an/each X"
   capture(/\bdeals?\s+(?:\w+\s+)?damage\s+to\s+(?:a\s+|an\s+|each\s+|any\s+|all\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2})(?=\s|$)/gi);
@@ -2161,6 +2173,101 @@ async function resolveSynergyFunctionClauses(
   return { clauses, strippedTerms };
 }
 
+/**
+ * Detects explicit removal targets in patterns like "that remove enchantments and artifacts"
+ * or "removal for enchantments and artifacts" and emits specific function:removal-X tags from
+ * the tagger catalog. This prevents the type words from being lost from the fragment text
+ * (they are stripped by the type-loop semantic-role handling) without Phase 2 knowing what
+ * the targets were.
+ */
+function resolveRemovalTargetClauses(
+  naturalQuery: string
+): { clauses: QueryClause[]; strippedTerms: string[] } {
+  const lower = naturalQuery.toLowerCase();
+
+  // Only run if there's a removal verb present
+  if (!/\b(?:removal|removes?|destroy(?:s|ed|ing)?|exile[sd]?|kill(?:s|ed|ing)?)\b/i.test(lower)) {
+    return { clauses: [], strippedTerms: [] };
+  }
+
+  // Maps plural/singular card type words directly to the canonical removal tag name used by
+  // the ARCHETYPE_REGISTRY qualifiers in normalizeArchetypeIntents (query-converter.ts).
+  // Using the same canonical names prevents double-tagging when normalizeArchetypeIntents
+  // also runs — it will strip and re-add the same tag rather than adding a second variant.
+  const TYPE_REMOVAL_KEY: Record<string, string> = {
+    enchantment: "removal-enchantment", enchantments: "removal-enchantment",
+    artifact: "removal-artifact", artifacts: "removal-artifact",
+    creature: "removal-creature", creatures: "removal-creature",
+    planeswalker: "removal-planeswalker", planeswalkers: "removal-planeswalker",
+    land: "removal-land", lands: "removal-land",
+    permanent: "removal-permanent", permanents: "removal-permanent",
+    noncreature: "removal-noncreature", noncreatures: "removal-noncreature",
+  };
+
+  const REMOVAL_VERBS_PAT = `removal|removes?|destroy(?:s|ed|ing)?|exile[sd]?|kill(?:s|ed|ing)?|bounce[sd]?`;
+
+  // Collect target type words from removal patterns
+  const targetTypeWords = new Set<string>();
+
+  function captureTargetWords(re: RegExp): void {
+    let m: RegExpExecArray | null;
+    re.lastIndex = 0;
+    while ((m = re.exec(lower)) !== null) {
+      const phrase = (m[1] ?? "").trim();
+      for (const tok of phrase.split(/[\s,]+/).filter(Boolean)) {
+        if (TYPE_REMOVAL_KEY[tok]) targetTypeWords.add(tok);
+      }
+    }
+  }
+
+  // "that remove/destroy/exile X and Y" — capture X and then also "and Y"
+  captureTargetWords(new RegExp(
+    `\\bthat\\s+(?:${REMOVAL_VERBS_PAT})\\s+(?:(?:a|an|all|each|target)\\s+)?` +
+    `((?:[a-z][a-z-]*(?:\\s+(?:and|or)\\s+)?){1,6})(?=\\s|$|,|\\.)`,
+    "gi"
+  ));
+  // "removal for/of/against X and Y"
+  captureTargetWords(
+    /\b(?:removal|removes?)\s+(?:for|of|against)\s+((?:[a-z][a-z-]*\s+(?:and|or)\s+)*[a-z][a-z-]*)(?=\s|,|$)/gi
+  );
+
+  if (targetTypeWords.size === 0) {
+    return { clauses: [], strippedTerms: [] };
+  }
+
+  const clauses: QueryClause[] = [];
+  const strippedTerms: string[] = [];
+
+  const emittedTags = new Set<string>();
+  for (const token of targetTypeWords) {
+    const canonicalTag = TYPE_REMOVAL_KEY[token];
+    if (!canonicalTag) continue;
+    if (emittedTags.has(canonicalTag)) continue;
+    emittedTags.add(canonicalTag);
+
+    clauses.push({ value: `function:${canonicalTag}`, source: "phase1:removal-target" });
+    // Strip both singular and plural forms so they don't appear as unresolved fragments
+    strippedTerms.push(token);
+    const otherForm = token.endsWith("s") ? token.slice(0, -1) : token + "s";
+    strippedTerms.push(otherForm);
+  }
+
+  // Also strip the verb/preposition glue so fragments like "that remove for" don't survive
+  if (clauses.length > 0) {
+    strippedTerms.push(
+      "remove", "removes", "removed", "removing",
+      "removal",
+      "destroy", "destroys", "destroyed", "destroying",
+      "exile", "exiles", "exiled", "exiling",
+      "kill", "kills", "killed", "killing",
+      "bounce", "bounces", "bounced", "bouncing",
+      "that", "for", "of", "against",
+    );
+  }
+
+  return { clauses, strippedTerms };
+}
+
 function resolveArtistFromQuery(
   naturalQuery: string
 ): { name: string; matchedText: string } | null {
@@ -3244,7 +3351,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     mustClauses.push({ value: "f:commander", source: "phase1:commander" });
     strippedTerms.push("commander");
     if (commanderColor) {
-      mustClauses.push({ value: `id<=${commanderColor}`, source: "phase1:color" });
+      mustClauses.push({ value: `id:${commanderColor}`, source: "phase1:color" });
     }
   } else {
     const wantsCommanderCreature =
@@ -3539,6 +3646,10 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   const synergyResult = await resolveSynergyFunctionClauses(synergySubjects);
   mustClauses.push(...synergyResult.clauses);
   strippedTerms.push(...synergyResult.strippedTerms);
+
+  const removalTargetResult = resolveRemovalTargetClauses(naturalQuery);
+  mustClauses.push(...removalTargetResult.clauses);
+  strippedTerms.push(...removalTargetResult.strippedTerms);
 
   applyOracleIntentHeuristics(naturalQuery, mustClauses, strippedTerms);
 

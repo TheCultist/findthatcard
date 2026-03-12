@@ -147,7 +147,7 @@ const FIELD_DESCRIPTIONS: Record<
     description:
       "Filters by color identity — every color that appears on the card or in its rules text. " +
       "id= matches cards with exactly those colors. id: matches cards whose identity includes those colors.",
-    tip: "Commander players: use id<= to find cards that fit inside a commander's color identity (e.g. id<=wub for an Esper deck).",
+    tip: "Commander players: use id: to find cards that fit inside a commander's color identity (e.g. id:wub for an Esper deck).",
   },
   c: {
     title: "Color",

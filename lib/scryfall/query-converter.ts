@@ -1128,6 +1128,43 @@ function normalizeArchetypeIntents(
       }
     }
 
+    // Before stripping, record any specific (non-default) qualifier tags already in the query.
+    // These were emitted by Phase 1 or Phase 2 for targets that the detect regexes below may
+    // not pick up (e.g. "remove enchantments and artifacts" → both removal-enchantment and
+    // removal-artifact are present, but the qualifier loop only matches the first one).
+    // We preserve them so they are not silently lost when the strayPattern strips them.
+    const defaultTagSet = new Set(archetype.defaultTags);
+    const preservedSpecificTags: string[] = [];
+    if (archetype.strayPattern) {
+      const findPattern = new RegExp(archetype.strayPattern.source, "gi");
+      let pm: RegExpExecArray | null;
+      while ((pm = findPattern.exec(updated)) !== null) {
+        const slug = pm[1]?.toLowerCase();
+        if (slug && !defaultTagSet.has(slug)) {
+          preservedSpecificTags.push(slug);
+        }
+      }
+    }
+
+    // When specific qualifier tags are already present but no qualifier pattern matched
+    // (desiredTags is still the default set), skip the generic tag expansion entirely and
+    // just restore the specific tags. This prevents double-tagging like:
+    //   (function:removal or ...) function:removal-enchantment function:removal-artifact
+    const qualifierWasDetected = desiredTags !== archetype.defaultTags;
+    if (!qualifierWasDetected && preservedSpecificTags.length > 0) {
+      if (archetype.strayPattern) {
+        const cleanPattern = new RegExp(archetype.strayPattern.source, archetype.strayPattern.flags);
+        updated = updated.replace(cleanPattern, " ");
+      }
+      updated = updated.replace(/\(\s*(?:-?(?:and|or)\s*)*\)/gi, " ");
+      updated = normalizeWhitespace(updated);
+      for (const slug of preservedSpecificTags) {
+        updated = `${updated} function:${slug}`;
+      }
+      updated = normalizeWhitespace(updated);
+      continue;
+    }
+
     if (archetype.strayPattern) {
       const cleanPattern = new RegExp(archetype.strayPattern.source, archetype.strayPattern.flags);
       updated = updated.replace(cleanPattern, " ");
@@ -1149,6 +1186,16 @@ function normalizeArchetypeIntents(
       updated = `${updated} (${orChain.join(" or ")})`;
     } else if (orChain.length === 1) {
       updated = `${updated} ${orChain[0]}`;
+    }
+
+    // Re-add any specific qualifier tags that were preserved above but not included
+    // in desiredTags (they cover additional targets beyond what the qualifier detected,
+    // e.g. both enchantment and artifact when the qualifier loop only matched enchantment).
+    const desiredTagSet = new Set(desiredTags);
+    for (const slug of preservedSpecificTags) {
+      if (!desiredTagSet.has(slug)) {
+        updated = `${updated} function:${slug}`;
+      }
     }
   }
 
