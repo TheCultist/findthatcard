@@ -225,6 +225,12 @@ const SUBTYPE_FUZZY_BLOCKLIST = new Set([
   "matter", "matters",
   // "combat" → "wombat" (Wombat creature type, levenshtein 1 — first char c→w)
   "combat",
+  // "buff" / "buffs" → "guff" / "guffs" (Guff planeswalker type, levenshtein 1 — first char b→g)
+  "buff", "buffs", "buffing",
+  // "pump" → common MTG jargon for combat tricks, not a subtype
+  "pump", "pumps",
+  // "boost" → common MTG jargon for power/toughness increases, not a subtype
+  "boost", "boosts",
 ]);
 
 export function fuzzyMatchSubtype(

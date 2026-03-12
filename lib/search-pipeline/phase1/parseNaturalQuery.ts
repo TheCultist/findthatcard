@@ -1915,9 +1915,10 @@ function detectFunctionConceptClauses(
   }
 
   // Anthem — effects that buff all your creatures (e.g. Glorious Anthem).
-  if (/\banthems?\b/i.test(lower)) {
+  // Also catches colloquial phrasings: "creature buffs", "pump effects", "boost spells".
+  if (/\banthems?\b|\bcreature\s+buffs?\b|\bbuffs?\s+(?:all\s+)?(?:your\s+)?creatures?\b|\bpump\s+(?:spells?|effects?|cards?)\b|\bboost\s+(?:spells?|effects?|cards?|creatures?)\b/i.test(lower)) {
     clauses.push({ value: "function:anthem", source: "phase1:function" });
-    strippedTerms.push("anthem", "anthems");
+    strippedTerms.push("anthem", "anthems", "buff", "buffs", "buffing", "pump", "pumps", "boost", "boosts");
   }
 
   // Lord — tribal lords that grant +1/+1 or abilities to a creature type.
