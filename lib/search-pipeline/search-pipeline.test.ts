@@ -1380,6 +1380,10 @@ async function run() {
   await testPhase1ManaCostFullyStripped();
   // Regression: Phase-0-normalized "mana value N or more" must not produce both mv= and mv>=
   await testPhase1ManaValueNOrMoreNoDuplicate();
+  // Regression: "big mana creatures in jund colors" must emit mv>=6 + id:brg, not ramp
+  await testPhase1BigManaCreaturesInJundColors();
+  // "cheap" / "low mana" must emit mv<=3, not reach Phase 2
+  await testPhase1CheapLowManaEmitsMvFilter();
   testSplitCompoundCommaOr();
   testSplitCompoundBareOrAfterEmbedded();
   testSplitCompoundDoesNotSplitSimpleTypeOr();
@@ -1933,6 +1937,58 @@ async function testPhase1ManaValueNOrMoreNoDuplicate() {
     `mv=10 must NOT appear alongside mv>=10; got: ${statValues.join(", ")}`
   );
   console.log("[PASS] phase1: 'mana value N or more' → only mv>=N, no spurious mv=N");
+}
+
+async function testPhase1BigManaCreaturesInJundColors() {
+  // Regression: "big mana creatures in jund colors" was sending "big mana colors" as an
+  // unresolved fragment to Phase 2, which misclassified it as archetype:ramp.
+  // Fix 1: "big mana" is now a Phase 1 stat pattern that emits mv>=6 and strips itself.
+  // Fix 2: "colors" is now stripped when any color identity is resolved, so it no longer
+  //         bleeds into the fragment text.
+  const parsed = await parseNaturalQuery("big mana creatures in jund colors");
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  assert.ok(
+    mustValues.some((v) => /^mv>=6$/.test(v)),
+    `expected mv>=6 for "big mana"; got clauses: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.some((v) => /^id:brg$/.test(v)),
+    `expected id:brg for jund colors; got clauses: ${mustValues.join(", ")}`
+  );
+  assert.ok(
+    mustValues.some((v) => /^t:creature$/.test(v)),
+    `expected t:creature; got clauses: ${mustValues.join(", ")}`
+  );
+  // "colors" must not appear in any unresolved fragment
+  assert.ok(
+    parsed.unresolvedFragments.every((f) => !/\bcolou?rs?\b/i.test(f.text)),
+    `"colors" should NOT survive as unresolved; got: ${parsed.unresolvedFragments.map((f) => f.text).join(" | ")}`
+  );
+  console.log("[PASS] phase1: 'big mana creatures in jund colors' → mv>=6 t:creature id:brg, no 'colors' fragment");
+}
+
+async function testPhase1CheapLowManaEmitsMvFilter() {
+  const cases: [string, string][] = [
+    ["cheap blue instants", "cheap"],
+    ["low mana creatures", "low mana"],
+    ["low cost spells", "low cost"],
+    ["low cmc artifacts", "low cmc"],
+  ];
+  for (const [query, desc] of cases) {
+    const parsed = await parseNaturalQuery(query);
+    const statValues = parsed.mustClauses
+      .filter((c) => c.source === "phase1:stat")
+      .map((c) => c.value);
+    assert.ok(
+      statValues.some((v) => /^mv<=3$/.test(v)),
+      `[${desc}] expected mv<=3; got: ${statValues.join(", ")}`
+    );
+    assert.ok(
+      parsed.unresolvedFragments.every((f) => !/(cheap|low.mana|low.cost|low.cmc)/i.test(f.text)),
+      `[${desc}] phrase should not survive as unresolved; got: ${parsed.unresolvedFragments.map((f) => f.text).join(" | ")}`
+    );
+  }
+  console.log("[PASS] phase1: 'cheap' / 'low mana' / 'low cost' → mv<=3, not a fragment");
 }
 
 async function testCompoundPipelineEndToEnd() {

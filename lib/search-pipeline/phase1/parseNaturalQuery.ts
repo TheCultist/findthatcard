@@ -472,6 +472,26 @@ function resolveNumericStatFilters(naturalQuery: string): {
     }
   }
 
+  // "big mana [creatures/spells]" / "expensive [cards]" / "high cost [creatures]"
+  // These are colloquial MTG phrases meaning high-mana-value cards (MV ≥ 6).
+  // Handled here so the words never reach Phase 2 and get misclassified as ramp.
+  const bigManaMatch = lower.match(
+    /\b(big[-\s]mana|expensive|high[-\s]cost|high[-\s](?:mana[-\s])?value)\b/
+  );
+  if (bigManaMatch) {
+    emitIfNew("mv", ">=", 6, bigManaMatch[0]);
+  }
+
+  // "cheap [creatures/spells]" / "low mana [cards]" / "low cost [cards]"
+  // These are colloquial MTG phrases meaning low-mana-value cards (MV ≤ 3).
+  // Handled here so the words never reach Phase 2 and get misclassified as mana-dork/ramp.
+  const cheapManaMatch = lower.match(
+    /\b(cheap(?:[-\s](?:spells?|creatures?|cards?|permanents?))?|low[-\s](?:mana|cost|cmc|mv)|low[-\s](?:mana[-\s])?value)\b/
+  );
+  if (cheapManaMatch) {
+    emitIfNew("mv", "<=", 3, cheapManaMatch[0]);
+  }
+
   return { clauses, strippedTerms };
 }
 
@@ -3177,6 +3197,10 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       naturalQuery
     );
   strippedTerms.push(...collectMatchedColorTerms(lower));
+  // Also strip the generic noun "colors/colours" that often accompanies a color
+  // identity phrase ("in jund colors", "esper colours").  Without this, the word
+  // bleeds into the unresolved fragment text and confuses the Phase 2 AI.
+  if (/\bcolou?rs?\b/i.test(lower)) strippedTerms.push("colors", "colours", "color", "colour");
   // Strip single-color modifier prefixes that are made redundant once the color
   // term itself is stripped. "mono-blue" → "blue" is stripped above, leaving "mono"
   // as an orphaned fragment that confuses the Phase 2 AI into picking tags like
