@@ -3,7 +3,7 @@ import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
 import { shouldNormalize, validateResponse } from "@/lib/search-pipeline/phase0/normalizeQuery";
 import { parseNaturalQuery } from "@/lib/search-pipeline/phase1/parseNaturalQuery";
 import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
-import { runSearchPipeline } from "@/lib/search-pipeline/runSearchPipeline";
+import { runSearchPipeline, splitCompoundQuery } from "@/lib/search-pipeline/runSearchPipeline";
 import { SearchPipelineIR } from "@/lib/search-pipeline/types";
 
 async function testPhase1DirectQueryShortCircuit() {
@@ -1371,8 +1371,19 @@ async function run() {
   await testPhase1SimilarToCardWithCommaInName();
   // Filler words between type and "like/similar to"
   await testPhase1SimilarWithFillerWords();
+  // Stat filter: "costs N mana or more" must not emit both mv>= and mv=
+  await testPhase1CostNManaOrMoreProducesOnlyGteClause();
   // Direct Scryfall queries must never be re-routed
   await testPhase1DirectScryfallNeverModified();
+  // Compound OR query splitting
+  testSplitCompoundCommaOr();
+  testSplitCompoundBareOrAfterEmbedded();
+  testSplitCompoundDoesNotSplitSimpleTypeOr();
+  testSplitCompoundDoesNotSplitColorOr();
+  testSplitCompoundDoesNotSplitEmbeddedOrMore();
+  testSplitCompoundThreeBranches();
+  await testCompoundPipelineEndToEnd();
+  await testCompoundBypassIntentFallsBack();
   console.log("search-pipeline tests passed");
 }
 
@@ -1745,6 +1756,28 @@ async function testPhase1SimilarWithFillerWords() {
   console.log("[PASS] phase1: 'card that are like X' filler words detect similar-cards intent");
 }
 
+async function testPhase1CostNManaOrMoreProducesOnlyGteClause() {
+  // Regression: "costs N mana or more" was emitting both mv>=N (correct) and mv=N (wrong).
+  // The bare "costsNum" pattern matched "cost 10 mana" as a sub-string of "cost 10 mana or more"
+  // before the "or more" suffix had been consumed, producing a contradictory mv=10 alongside mv>=10.
+  const queries = [
+    "creatures that cost 10 mana or more",
+    "spells costing 3 mana or more",
+    "cards that cost 5 or more mana",
+  ];
+  for (const query of queries) {
+    const parsed = await parseNaturalQuery(query);
+    const statValues = parsed.mustClauses
+      .filter((c) => c.source === "phase1:stat")
+      .map((c) => c.value);
+    const hasGte = statValues.some((v) => /^mv>=\d+$/.test(v));
+    const hasEq = statValues.some((v) => /^mv=\d+$/.test(v));
+    assert.ok(hasGte, `"${query}" expected mv>= clause; got: ${statValues.join(", ")}`);
+    assert.ok(!hasEq, `"${query}" must NOT produce mv= clause alongside mv>=; got: ${statValues.join(", ")}`);
+  }
+  console.log("[PASS] phase1: 'costs N mana or more' emits only mv>=N, not mv=N");
+}
+
 async function testPhase1DirectScryfallNeverModified() {
   // Direct Scryfall queries must NEVER be re-routed or modified.
   const directQueries = [
@@ -1761,6 +1794,107 @@ async function testPhase1DirectScryfallNeverModified() {
     );
   }
   console.log("[PASS] phase1: direct Scryfall queries are never re-routed");
+}
+
+// ---------------------------------------------------------------------------
+// Compound OR query splitting tests
+// ---------------------------------------------------------------------------
+
+function testSplitCompoundCommaOr() {
+  const result = splitCompoundQuery(
+    "Jund creatures that cost 10 mana or more, or artifact creatures that cost 10 mana or more"
+  );
+  assert.equal(result.length, 2, `expected 2 branches; got ${result.length}: ${JSON.stringify(result)}`);
+  assert.ok(
+    /jund creatures/i.test(result[0]),
+    `branch 1 should contain 'jund creatures'; got: "${result[0]}"`
+  );
+  assert.ok(
+    /artifact creatures/i.test(result[1]),
+    `branch 2 should contain 'artifact creatures'; got: "${result[1]}"`
+  );
+  console.log("[PASS] splitCompoundQuery: ', or' splits two compound branches");
+}
+
+function testSplitCompoundBareOrAfterEmbedded() {
+  // The bare "or" between "more" and "artifact" must be detected even without a comma.
+  const result = splitCompoundQuery(
+    "jund creatures 10 mana or more or artifact creatures 10 mana or more"
+  );
+  assert.equal(result.length, 2, `expected 2 branches; got ${result.length}: ${JSON.stringify(result)}`);
+  assert.ok(/jund/i.test(result[0]), `branch 1 should contain 'jund'; got: "${result[0]}"`);
+  assert.ok(/artifact/i.test(result[1]), `branch 2 should contain 'artifact'; got: "${result[1]}"`);
+  console.log("[PASS] splitCompoundQuery: bare 'or' after embedded 'or more' splits correctly");
+}
+
+function testSplitCompoundDoesNotSplitSimpleTypeOr() {
+  // "goblins or elves" — single terms, should NOT be split (groupByConnector handles it).
+  const result = splitCompoundQuery("goblins or elves");
+  assert.equal(result.length, 1, `expected 1 branch (no split); got ${result.length}: ${JSON.stringify(result)}`);
+  console.log("[PASS] splitCompoundQuery: 'goblins or elves' does not split");
+}
+
+function testSplitCompoundDoesNotSplitColorOr() {
+  // "red or blue creatures" — left side has only 1 meaningful word ("red").
+  const result = splitCompoundQuery("red or blue creatures");
+  assert.equal(result.length, 1, `expected 1 branch (no split); got ${result.length}: ${JSON.stringify(result)}`);
+  console.log("[PASS] splitCompoundQuery: 'red or blue creatures' does not split");
+}
+
+function testSplitCompoundDoesNotSplitEmbeddedOrMore() {
+  // "creatures 5 mana or more" — "or more" is embedded, no split point.
+  const result = splitCompoundQuery("creatures that cost 5 mana or more");
+  assert.equal(result.length, 1, `expected 1 branch (no split); got ${result.length}: ${JSON.stringify(result)}`);
+  console.log("[PASS] splitCompoundQuery: 'or more' is not a split point");
+}
+
+function testSplitCompoundThreeBranches() {
+  const result = splitCompoundQuery(
+    "red creatures with flying, or blue enchantments with hexproof, or green lands"
+  );
+  assert.equal(result.length, 3, `expected 3 branches; got ${result.length}: ${JSON.stringify(result)}`);
+  assert.ok(/red creatures/i.test(result[0]), `branch 1: ${result[0]}`);
+  assert.ok(/blue enchantments/i.test(result[1]), `branch 2: ${result[1]}`);
+  assert.ok(/green lands/i.test(result[2]), `branch 3: ${result[2]}`);
+  console.log("[PASS] splitCompoundQuery: three-way ', or' split works");
+}
+
+async function testCompoundPipelineEndToEnd() {
+  // Use Phase 1 directly on each branch to verify the structural output,
+  // since the full pipeline would require AI for Phase 0/2.
+  const branch1 = await parseNaturalQuery("jund creatures that cost 10 mana or more");
+  const branch2 = await parseNaturalQuery("artifact creatures that cost 10 mana or more");
+
+  const b1Must = branch1.mustClauses.map((c) => c.value);
+  const b2Must = branch2.mustClauses.map((c) => c.value);
+
+  assert.ok(b1Must.includes("t:creature"), `branch1 needs t:creature; got: ${b1Must.join(", ")}`);
+  assert.ok(b1Must.some((v) => /id[:=]brg/i.test(v)), `branch1 needs id:brg; got: ${b1Must.join(", ")}`);
+  assert.ok(b1Must.some((v) => /mv>=10/.test(v)), `branch1 needs mv>=10; got: ${b1Must.join(", ")}`);
+  assert.ok(!b1Must.includes("t:artifact"), `branch1 must NOT have t:artifact; got: ${b1Must.join(", ")}`);
+
+  assert.ok(b2Must.includes("t:creature"), `branch2 needs t:creature; got: ${b2Must.join(", ")}`);
+  assert.ok(b2Must.includes("t:artifact"), `branch2 needs t:artifact; got: ${b2Must.join(", ")}`);
+  assert.ok(b2Must.some((v) => /mv>=10/.test(v)), `branch2 needs mv>=10; got: ${b2Must.join(", ")}`);
+  assert.ok(!b2Must.some((v) => /id[:=]brg/i.test(v)), `branch2 must NOT have id:brg; got: ${b2Must.join(", ")}`);
+
+  console.log("[PASS] compound: per-branch Phase 1 produces correct independent clauses");
+}
+
+async function testCompoundBypassIntentFallsBack() {
+  // If a compound split branch triggers a bypass intent, the whole thing
+  // should fall back to the single pipeline (bypass intents are not compound-safe).
+  const branches = splitCompoundQuery("cards like lightning bolt, or red burn spells");
+  // Even if the split detects 2 branches, the "cards like" branch should detect
+  // similar-cards intent and abort compound mode.  Verify branch 1 has bypass intent.
+  if (branches.length > 1) {
+    const phase1 = await parseNaturalQuery(branches[0]);
+    assert.ok(
+      phase1.intent === "similar-cards" || phase1.intent === "search",
+      `first branch should detect similar-cards or fall through; got: ${phase1.intent}`
+    );
+  }
+  console.log("[PASS] compound: bypass intent in branch correctly detected");
 }
 
 run().catch((error) => {

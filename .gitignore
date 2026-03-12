@@ -40,3 +40,5 @@ next-env.d.ts
 CLAUDE.md
 data/scryfall-sets.json
 data/tagger-tags.json
+data/mtg-keywords.json
+data/scryfall-catalogs.json

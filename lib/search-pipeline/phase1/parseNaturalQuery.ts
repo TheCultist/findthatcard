@@ -341,6 +341,16 @@ function resolveNumericStatFilters(naturalQuery: string): {
     if (op !== null && num !== null) emitIfNew("mv", op, num, m[0]);
   }
 
+  // "costs [num] [mana] or more/less" — e.g. "costs 10 mana or more", "costs 3 or fewer"
+  // Must run before costsNum so the full match is stripped, preventing costsNum from
+  // matching the sub-string "cost 10 mana" and emitting a conflicting mv= clause.
+  const costsNumManaOp = new RegExp(`\\b(?:costs?|costing)\\s+(${NUM_PAT})(?:\\s+mana)?\\s+(or\\s+(?:less|fewer|more|greater))\\b`, "gi");
+  for (const m of lower.matchAll(costsNumManaOp)) {
+    const num = wordOrDigitToNumber(m[1] ?? "");
+    const op = textToComparisonOp(m[2] ?? "");
+    if (op !== null && num !== null) emitIfNew("mv", op, num, m[0]);
+  }
+
   // "costs [num] mana" — e.g. "costs 3 mana", "costing 2"
   const costsNum = new RegExp(`\\b(?:costs?|costing)\\s+(${NUM_PAT})(?:\\s+mana)?\\b`, "gi");
   for (const m of lower.matchAll(costsNum)) {
