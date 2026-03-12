@@ -38,6 +38,7 @@ Rules:
 - If the query is already clear, grammatical, and correctly spelled, return it UNCHANGED
 - Keep the output as close to the input meaning as possible
 - Output ONLY the cleaned-up query. No quotes, no explanations.
+- REMOVAL TARGET DISAMBIGUATION: When multiple card types appear alongside "removal" (e.g. "creature removal for enchantment and artifact"), ALL of those types are removal targets, not the type of the removing card. Rewrite to make this explicit: "removal that targets creatures, enchantments, and artifacts". This avoids the ambiguity of "[type] removal for [type2]" being misread as the card being a [type].
 
 Examples:
 "angels lifelink hexproof" → "angels with lifelink and hexproof"
@@ -52,7 +53,10 @@ Examples:
 "flying tokens white commander" → "white flying tokens for commander"
 "sacrifice outlet aristocrats black" → "black sacrifice outlet for aristocrats"
 "give creatures indestructible angels" → "angels that give creatures indestructible"
-"blue counterspell cheap modern" → "cheap blue counterspell for modern"`;
+"blue counterspell cheap modern" → "cheap blue counterspell for modern"
+"creature removal for enchantment and artifact cards" → "removal that targets creatures, enchantments, and artifacts"
+"white creature and artifact removal" → "white removal that targets creatures and artifacts"
+"black removal for creatures and planeswalkers" → "black removal that targets creatures and planeswalkers"`;
 
 /**
  * Validates the LLM response. Returns the normalized query if safe,
