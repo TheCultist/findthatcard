@@ -293,6 +293,10 @@ export default function SearchPage() {
               <p className="mx-auto max-w-2xl text-base font-medium text-gray-700 dark:text-gray-400 sm:text-xl">
                 Search Magic: The Gathering cards using natural language.
               </p>
+              <p className="mt-3 text-xs text-gray-500 dark:text-gray-500">
+                Work in progress &amp; constantly evolving — if a search doesn&apos;t give you what you want, let us know via the{" "}
+                <span className="font-medium text-gray-600 dark:text-gray-400">bug button</span> in the bottom right.
+              </p>
             </div>
 
             <form onSubmit={handleSubmit} className="mt-5 sm:mt-8">
