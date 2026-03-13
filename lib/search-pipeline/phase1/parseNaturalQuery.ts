@@ -3207,8 +3207,10 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
 
   const matchedTypes: string[] = [];
   const negatedTypes: string[] = [];
+  // Common typos for type names (e.g. "cratures" -> creature) so we still emit t:creature
+  const TYPE_TYPO_FORMS: Record<string, string[]> = { creature: ["cratures", "crature"] };
   for (const type of TYPE_TOKENS) {
-    const typeForms = getTermForms(type);
+    const typeForms = [...getTermForms(type), ...(TYPE_TYPO_FORMS[type] ?? [])];
     // Check both singular ("creature") and plural ("creatures") forms against the semantic-role set,
     // because captured tokens may have been stored in plural form.
     const isSemanticRole = typeForms.some((f) => semanticRoleTokens.has(f));
@@ -3828,6 +3830,12 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
         detect: /\bsplit\s+cards?\b/i,
         flag: "is:split",
         strip: ["split"],
+      },
+      {
+        // "universes beyond", "from universes beyond sets" — card property, not a set filter
+        detect: /\buniverses\s+beyond\b|\bfrom\s+universes\s+beyond\s+sets?\b/i,
+        flag: "is:universesbeyond",
+        strip: ["universes beyond", "from universes beyond sets", "from universes beyond set", "universes beyond sets"],
       },
       {
         // "flip card(s)"

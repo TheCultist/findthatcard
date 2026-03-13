@@ -459,6 +459,18 @@ async function testPhase1CommanderFromLorwynAvoidsCommanderProductSetNoise() {
   );
 }
 
+async function testPhase1UniversesBeyondIsFlagNotSetFilter() {
+  const parsed = await parseNaturalQuery("cratures that are from universes beyond sets");
+  const mustValues = parsed.mustClauses.map((entry) => entry.value.toLowerCase());
+  const shouldValues = parsed.shouldClauses.map((entry) => entry.value.toLowerCase());
+  assert.ok(mustValues.includes("is:universesbeyond"), `expected is:universesbeyond in must; got: ${mustValues.join(", ")}`);
+  assert.ok(mustValues.includes("t:creature"), `expected t:creature (typo "cratures"); got: ${mustValues.join(", ")}`);
+  assert.ok(!shouldValues.includes("set:slx"), `universes beyond should not produce set:slx; got should: ${shouldValues.join(", ")}`);
+  const allClauses = [...parsed.mustClauses, ...parsed.shouldClauses].map((c) => c.value.toLowerCase());
+  assert.ok(!allClauses.some((v) => v === "set:slx"), `no set:slx in any clause; got: ${allClauses.join(", ")}`);
+  console.log("[PASS] phase1: universes beyond → is:universesbeyond t:creature, no set:slx (typo cratures → creature)");
+}
+
 async function testPhase3DoesNotForceCommanderCreatureForFormatIntent() {
   const ir: SearchPipelineIR = {
     naturalQuery: "rakdos cards that make treasure tokens for commander",
@@ -1295,6 +1307,7 @@ async function run() {
   await testPhase1SynergyIntentSupportsMixedTypeListBeforeOr();
   await testPhase1CommanderFromFranchiseSetsAvoidsNoise();
   await testPhase1CommanderFromLorwynAvoidsCommanderProductSetNoise();
+  await testPhase1UniversesBeyondIsFlagNotSetFilter();
   await testPhase3DoesNotForceCommanderCreatureForFormatIntent();
   await testPhase3LegalInMultipleFormatsKeepsFCommanderNoIsCommander();
   await testPhase3RemovesTreasureTypeForTokenGenerationIntent();
