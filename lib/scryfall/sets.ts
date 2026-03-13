@@ -688,6 +688,18 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
     }
   }
 
+  // "Universes Beyond" in the query means is:universesbeyond (card property), not a specific set.
+  // Do not return set:slx (or any set named "universes beyond"); Phase 1 will emit is:universesbeyond.
+  const wantsUniversesBeyond =
+    /\buniverses\s+beyond\b|\bfrom\s+universes\s+beyond\s+sets?\b/i.test(naturalQuery);
+  if (wantsUniversesBeyond) {
+    for (const [code, filter] of filters.entries()) {
+      if (code === "slx" || normalizeSetText(filter.name) === "universes beyond") {
+        filters.delete(code);
+      }
+    }
+  }
+
   return Array.from(filters.values());
 }
 
