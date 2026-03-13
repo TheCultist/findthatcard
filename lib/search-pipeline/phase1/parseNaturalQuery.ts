@@ -1677,6 +1677,69 @@ function applyOracleIntentHeuristics(
     return;
   }
 
+  // --- "When/whenever [type] enters or leaves [zone]" — combined ETB+LTB trigger ---
+  // e.g. "whenever a creature enters or leaves the battlefield"
+  //      "when a permanent leaves or enters"
+  // When the user describes both directions, emit both trigger tags as an OR group
+  // so neither half is silently dropped into unresolved fragments.
+  const ENTER_OR_LEAVE_TRIGGER =
+    /\b(?:when(?:ever)?|if)\b.{0,80}\benter(?:s|ed|ing)?\b.{0,40}\bor\b.{0,40}\bleaves?\b/i;
+  const LEAVE_OR_ENTER_TRIGGER =
+    /\b(?:when(?:ever)?|if)\b.{0,80}\bleaves?\b.{0,40}\bor\b.{0,40}\benter(?:s|ed|ing)?\b/i;
+  // Also catch the pattern without an explicit "when/whenever" — e.g. "on ETB or LTB"
+  const ENTER_AND_LEAVE_TRIGGER =
+    /\benter(?:s|ed|ing)?\b.{0,40}\bor\b.{0,40}\bleaves?\b.{0,30}\b(?:battlefield|graveyard|field)\b/i;
+
+  if (
+    ENTER_OR_LEAVE_TRIGGER.test(naturalQuery) ||
+    LEAVE_OR_ENTER_TRIGGER.test(naturalQuery) ||
+    ENTER_AND_LEAVE_TRIGGER.test(naturalQuery)
+  ) {
+    const zoneMatch = naturalQuery.match(
+      /\b(?:graveyard|battlefield|library|deck|hand|exile|command zone)\b/i
+    );
+    const zone = (zoneMatch ? zoneMatch[0].toLowerCase() : null) ?? "battlefield";
+
+    const typeMatch = naturalQuery.match(
+      /\b(?:when(?:ever)?|if)\s+(?:a\s+|an\s+|another\s+|the\s+|any\s+)?([a-z][a-z-]*)\s+(?:enters?|leaves?)\b/i
+    );
+    const triggerType = typeMatch ? (typeMatch[1] ?? "").toLowerCase() : null;
+    const ignoredTypes = new Set(["permanent", "card", "it", "this", "that"]);
+    const cardType = triggerType && !ignoredTypes.has(triggerType) ? triggerType : null;
+
+    // "etb-other-creature" covers cards that trigger when another/a creature enters.
+    // "enters"+"battlefield" segments don't exist in the catalog; use "etb"+"other" instead.
+    const entersFunctionTag =
+      zone === "battlefield"
+        ? findFunctionTagBySegments(["etb", "other"])
+        : findFunctionTagBySegments(["enters", zone]);
+    const leavesFunctionTag = findFunctionTagBySegments(["leaves", zone]);
+
+    const entersPart = entersFunctionTag
+      ? `function:${entersFunctionTag}`
+      : `o:"whenever a creature enters${zone === "battlefield" ? " the battlefield" : " " + zone}"`;
+    const leavesPart = leavesFunctionTag
+      ? `function:${leavesFunctionTag}`
+      : `o:"leaves ${zone === "battlefield" ? "the battlefield" : zone}"`;
+
+    mustClauses.push({
+      value: `(${entersPart} or ${leavesPart})`,
+      source: "phase1:function",
+    });
+
+    if (cardType) {
+      mustClauses.push({ value: `o:${cardType}`, source: "phase1:oracle" });
+    }
+    strippedTerms.push(
+      "whenever", "when", "trigger", "triggers", "triggered",
+      "enters", "enter", "entering", "leaves", "leave",
+      "the", "your", "battlefield",
+    );
+    if (zone !== "battlefield") strippedTerms.push(zone);
+    if (cardType) strippedTerms.push(cardType, `${cardType}s`);
+    return;
+  }
+
   // --- "When/whenever [type] leaves [zone]" trigger ---
   // e.g. "whenever an instant leaves your graveyard"
   //      "when a creature leaves the battlefield"

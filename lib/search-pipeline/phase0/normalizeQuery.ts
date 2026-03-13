@@ -38,6 +38,7 @@ Rules:
 - If the query is already clear, grammatical, and correctly spelled, return it UNCHANGED
 - Keep the output as close to the input meaning as possible
 - Output ONLY the cleaned-up query. No quotes, no explanations.
+- SIMPLIFY PREAMBLES: Remove verbose, meaningless preambles that add no search value. Replace "any type of card that", "any card that", "any kind of card that", "I'm looking for cards that", "show me cards that", "what cards", "find me cards that", "cards that I can use that" with just "cards that". The resulting query must still be natural English.
 - REMOVAL TARGET DISAMBIGUATION: When multiple card types appear alongside "removal" (e.g. "creature removal for enchantment and artifact"), ALL of those types are removal targets, not the type of the removing card. Rewrite to make this explicit: "removal that targets creatures, enchantments, and artifacts". This avoids the ambiguity of "[type] removal for [type2]" being misread as the card being a [type].
 - SYNERGY DECK CONTEXT: When a query uses "for [a/an/my] X deck" or "in [a/an/my] X deck" and X looks like a specific Magic: The Gathering card name (not a format like "commander"/"modern", a color like "grixis"/"naya", or a generic archetype like "tokens"/"storm"/"aristocrats"), rewrite that portion to "that synergize with X deck". Keep all other constraints (mana value, color, type, etc.) exactly as written. IMPORTANT: keep the word "deck" in the output so the meaning stays intact.
 
@@ -64,6 +65,9 @@ Examples:
 "green ramp for a Korvold deck" → "green ramp cards that synergize with Korvold deck"
 "black removal in a Meren deck" → "black removal cards that synergize with Meren deck"
 "cheap white creatures for a Breya deck" → "cheap white creatures that synergize with Breya deck"
+"any type of card that deals damage whenever a creature enters" → "cards that deal damage whenever a creature enters"
+"I'm looking for cards that give flying to all creatures" → "cards that give flying to all creatures"
+"what cards can I use that produce mana" → "cards that produce mana"
 "budget cards for commander" → "budget cards for commander" (unchanged — commander is a format)
 "1 drop creatures for a token deck" → "1 drop creatures for a token deck" (unchanged — token is a generic archetype)`;
 

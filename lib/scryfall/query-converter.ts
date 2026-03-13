@@ -1799,7 +1799,9 @@ export function finalizeScryfallQuery(args: {
   normalizedQuery = normalizeBounceCounterspellOr(naturalQuery, normalizedQuery);
   normalizedQuery = quoteOracleTextPhrases(normalizedQuery);
   normalizedQuery = normalizeOrphanedOr(normalizedQuery);
-  normalizedQuery = normalizeEtbOracleText(normalizedQuery);
+  // normalizeEtbOracleText removed: the blanket o:"enters the battlefield" → o:"~ enters"
+  // rewrite was incorrect for trigger queries (e.g. "whenever a creature enters or leaves").
+  // Phase 1 now emits function:etb-other-creature directly for the other-ETB case.
   normalizedQuery = stripFranchiseCreatureTypeConfusion(
     naturalQuery,
     normalizedQuery

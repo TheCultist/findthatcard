@@ -75,6 +75,15 @@ const COMPOUND_STOPWORDS = new Set([
 const EMBEDDED_OR_PATTERN =
   /\bor\s+(?:more|less|fewer|greater|higher|better|worse|above|below)\b/gi;
 
+/**
+ * Queries containing trigger / conditional keywords describe a triggered ability
+ * (e.g. "whenever a creature enters or leaves the battlefield").  The ORs inside
+ * such sentences connect parts of a single trigger description, not independent
+ * search intents.  Compound splitting would produce nonsensical branches.
+ */
+const TRIGGER_CONDITION_RE =
+  /\b(?:whenever|when\s+(?:a|an|it|you|they|the)\b|on\s+(?:etb|ltb|death)\b|when\s+(?:this|a\s+creature|an?\s+\w+)\s+(?:enters|leaves|dies|attacks|blocks))\b/i;
+
 function countMeaningfulWords(text: string): number {
   return text
     .toLowerCase()
@@ -96,6 +105,11 @@ function countMeaningfulWords(text: string): number {
  * 3. Accept a candidate only when **both** sides have ≥ 2 meaningful words.
  */
 export function splitCompoundQuery(query: string): string[] {
+  // Queries that describe triggered abilities ("whenever X enters or leaves…") use
+  // OR to connect parts of a single trigger description, not to separate independent
+  // search intents.  Splitting them produces nonsensical branches.
+  if (TRIGGER_CONDITION_RE.test(query)) return [query];
+
   const lower = query.toLowerCase();
 
   // 1. Collect character ranges of embedded ORs
