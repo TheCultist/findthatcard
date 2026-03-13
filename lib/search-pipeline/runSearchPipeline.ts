@@ -195,8 +195,9 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
       dropContradictoryNameClauses(phase1, synergyResult.query);
       // Inject the synergy query without extra wrapping parens — it is already sanitized.
       phase1.mustClauses.unshift({ value: synergyResult.query, source: "phase1:direct" });
-      // Inject color identity as a top-level constraint so it applies to the whole query.
-      if (synergyResult.colorIdentity) {
+      // Inject color identity only if the user hasn't already specified one explicitly.
+      const hasExplicitColorId = phase1.mustClauses.some((c) => /^id[:=<>]/.test(c.value));
+      if (synergyResult.colorIdentity && !hasExplicitColorId) {
         phase1.mustClauses.push({ value: `id:${synergyResult.colorIdentity}`, source: "phase1:direct" });
       }
       phase1.debug.aiBatchCalls += 1;

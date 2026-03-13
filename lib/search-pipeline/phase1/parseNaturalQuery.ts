@@ -2772,12 +2772,22 @@ function buildBypassStrippedWords(
   consumedInputWords: string[],
   canonical: string
 ): string[] {
-  const triggerText = fullMatch.slice(0, fullMatch.length - captureGroup.length);
-  const triggerWords = triggerText
-    .toLowerCase()
-    .replace(/[^a-z]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 1 && !BYPASS_PRESERVED_TYPE_WORDS.has(w));
+  // Locate the capture group within the full match so we can correctly extract
+  // words both before AND after it. The naive `fullMatch.slice(0, length - capture.length)`
+  // approach breaks when the pattern has tokens after the capture group (e.g. `\s+deck\b`),
+  // which causes those trailing tokens (like "deck") to be omitted from stripped words.
+  const captureIdx = fullMatch.indexOf(captureGroup);
+  const beforeCapture = captureIdx >= 0 ? fullMatch.slice(0, captureIdx) : "";
+  const afterCapture = captureIdx >= 0 ? fullMatch.slice(captureIdx + captureGroup.length) : "";
+
+  const extractWords = (text: string): string[] =>
+    text
+      .toLowerCase()
+      .replace(/[^a-z]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 1 && !BYPASS_PRESERVED_TYPE_WORDS.has(w));
+
+  const triggerWords = [...extractWords(beforeCapture), ...extractWords(afterCapture)];
   const canonicalWords = canonical.toLowerCase().replace(/[^a-z0-9'\s-]/g, " ").split(/\s+/).filter(Boolean);
   return [...new Set([...triggerWords, ...consumedInputWords, ...canonicalWords])];
 }
@@ -2955,6 +2965,10 @@ function detectSynergyWithCardQuery(naturalQuery: string): BypassDetectResult {
     /\b(?:cards?\s+(?:that\s+)?)?support\s+(?:for\s+)?([\s\S]+)/i,
     /\bbuild\s+around\s+([\s\S]+)/i,
     /\bcards?\s+for\s+(?:an?\s+)?([\s\S]+?)\s+deck\b/i,
+    // "for an X deck" / "for my X deck" anywhere in the query — handles cases like
+    // "1 cmc cards in grixis for an Impact Tremors deck" where other filters precede "for".
+    /\bfor\s+(?:an?\s+|my\s+|the\s+)?([^,.\n]+?)\s+deck\b/i,
+    /\bin\s+(?:an?\s+|my\s+|the\s+)?([^,.\n]+?)\s+deck\b/i,
     /\bgood\s+(?:with|in)\s+([\s\S]+)/i,
   ];
 
@@ -2975,7 +2989,9 @@ function detectSynergyWithCardQuery(naturalQuery: string): BypassDetectResult {
       const candidate = words.slice(0, len).join(" ");
       const canonical = lookupCardName(candidate);
       if (canonical) {
-        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], words.slice(0, len), canonical) };
+        // Pass all words (not just words.slice(0, len)) so trailing context words
+        // like "deck" are also stripped and don't leak into unresolved fragments.
+        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], words, canonical) };
       }
     }
 
@@ -2989,7 +3005,7 @@ function detectSynergyWithCardQuery(naturalQuery: string): BypassDetectResult {
       const prefixCandidate = nameWords.join(" ");
       const canonical = lookupCardNameByPrefix(prefixCandidate);
       if (canonical) {
-        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], nameWords, canonical) };
+        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], words, canonical) };
       }
     }
   }

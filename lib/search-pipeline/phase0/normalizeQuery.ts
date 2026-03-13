@@ -39,6 +39,7 @@ Rules:
 - Keep the output as close to the input meaning as possible
 - Output ONLY the cleaned-up query. No quotes, no explanations.
 - REMOVAL TARGET DISAMBIGUATION: When multiple card types appear alongside "removal" (e.g. "creature removal for enchantment and artifact"), ALL of those types are removal targets, not the type of the removing card. Rewrite to make this explicit: "removal that targets creatures, enchantments, and artifacts". This avoids the ambiguity of "[type] removal for [type2]" being misread as the card being a [type].
+- SYNERGY DECK CONTEXT: When a query uses "for [a/an/my] X deck" or "in [a/an/my] X deck" and X looks like a specific Magic: The Gathering card name (not a format like "commander"/"modern", a color like "grixis"/"naya", or a generic archetype like "tokens"/"storm"/"aristocrats"), rewrite that portion to "that synergize with X deck". Keep all other constraints (mana value, color, type, etc.) exactly as written. IMPORTANT: keep the word "deck" in the output so the meaning stays intact.
 
 Examples:
 "angels lifelink hexproof" → "angels with lifelink and hexproof"
@@ -58,7 +59,13 @@ Examples:
 "white creature and artifact removal" → "white removal that targets creatures and artifacts"
 "black removal for creatures and planeswalkers" → "black removal that targets creatures and planeswalkers"
 "creatures that are removal for enchantment and artifacts" → "creatures that remove enchantments and artifacts"
-"spells that are removal for creatures and planeswalkers" → "spells that remove creatures and planeswalkers"`;
+"spells that are removal for creatures and planeswalkers" → "spells that remove creatures and planeswalkers"
+"1 cmc in grixis colors for an Impact Tremors deck" → "1 cmc cards in grixis colors that synergize with Impact Tremors deck"
+"green ramp for a Korvold deck" → "green ramp cards that synergize with Korvold deck"
+"black removal in a Meren deck" → "black removal cards that synergize with Meren deck"
+"cheap white creatures for a Breya deck" → "cheap white creatures that synergize with Breya deck"
+"budget cards for commander" → "budget cards for commander" (unchanged — commander is a format)
+"1 drop creatures for a token deck" → "1 drop creatures for a token deck" (unchanged — token is a generic archetype)`;
 
 /**
  * Validates the LLM response. Returns the normalized query if safe,

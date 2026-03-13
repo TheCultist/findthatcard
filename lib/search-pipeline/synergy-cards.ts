@@ -96,6 +96,26 @@ function buildSynergyPrompt(
   ].join("\n");
 }
 
+/**
+ * Returns true when `query` contains an OR operator at the top level
+ * (i.e. not inside parentheses or quoted strings).
+ * Used to decide whether the expression must be wrapped in parens so that
+ * global AND filters (mv=, id:, etc.) apply to the whole expression.
+ */
+function hasTopLevelOR(query: string): boolean {
+  let depth = 0;
+  let inQuote = false;
+  for (let i = 0; i < query.length; i++) {
+    const ch = query[i];
+    if (ch === '"') { inQuote = !inQuote; continue; }
+    if (inQuote) continue;
+    if (ch === "(") { depth++; continue; }
+    if (ch === ")") { depth--; continue; }
+    if (depth === 0 && /^OR\s/i.test(query.slice(i))) return true;
+  }
+  return false;
+}
+
 function sanitizeScryfallQuery(raw: string, cardName: string): string | null {
   let query = raw.trim();
   if (!query || query.length < 3) return null;
@@ -127,6 +147,13 @@ function sanitizeScryfallQuery(raw: string, cardName: string): string | null {
   query = query.replace(/\bid(?:entity)?(?:<=|>=|=|:)\s*[wubrgc]{1,5}\b/gi, "").replace(/\s{2,}/g, " ").trim();
 
   query = query.replace(/-o:"[^"]*"/g, "").replace(/-o:\S+/g, "").replace(/-!"[^"]*"/g, "").replace(/-n:"[^"]*"/g, "").replace(/\s{2,}/g, " ").trim();
+
+  // Wrap top-level OR expressions in parens before appending the -name: exclusion.
+  // Without this, Scryfall's AND > OR precedence would bind -name: (and any user
+  // filters like mv= or id:) only to the last OR branch, not the whole expression.
+  if (hasTopLevelOR(query)) {
+    query = `(${query})`;
+  }
 
   if (!query.includes(`-name:"${cardName}"`)) {
     query = `${query} -name:"${cardName}"`;
