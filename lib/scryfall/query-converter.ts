@@ -1151,8 +1151,10 @@ function normalizeArchetypeIntents(
 
     // When specific qualifier tags are already present but no qualifier pattern matched
     // (desiredTags is still the default set), skip the generic tag expansion entirely and
-    // just restore the specific tags. This prevents double-tagging like:
+    // just restore the specific tags as an OR group. This prevents double-tagging like:
     //   (function:removal or ...) function:removal-enchantment function:removal-artifact
+    // and ensures the restored tags are OR'd (not AND'd) since they represent alternative
+    // removal methods, not cumulative requirements.
     const qualifierWasDetected = desiredTags !== archetype.defaultTags;
     if (!qualifierWasDetected && preservedSpecificTags.length > 0) {
       if (archetype.strayPattern) {
@@ -1161,8 +1163,11 @@ function normalizeArchetypeIntents(
       }
       updated = updated.replace(/\(\s*(?:-?(?:and|or)\s*)*\)/gi, " ");
       updated = normalizeWhitespace(updated);
-      for (const slug of preservedSpecificTags) {
-        updated = `${updated} function:${slug}`;
+      const orChain = preservedSpecificTags.map((slug) => `function:${slug}`);
+      if (orChain.length >= 2) {
+        updated = `${updated} (${orChain.join(" or ")})`;
+      } else {
+        updated = `${updated} ${orChain[0]}`;
       }
       updated = normalizeWhitespace(updated);
       continue;
