@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BugAntIcon, XMarkIcon, PaperClipIcon } from "@heroicons/react/24/outline";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -22,23 +22,14 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    if (open) {
-      setTimeout(() => descRef.current?.focus(), 50);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (status === "success") {
-      const t = setTimeout(() => {
-        setOpen(false);
-        setStatus("idle");
-        setDescription("");
-        setFile(null);
-        setFileError("");
-      }, 2500);
-      return () => clearTimeout(t);
-    }
+  const handleClose = useCallback(() => {
+    if (status === "loading") return;
+    setOpen(false);
+    setStatus("idle");
+    setDescription("");
+    setFile(null);
+    setFileError("");
+    setErrorMsg("");
   }, [status]);
 
   useEffect(() => {
@@ -48,17 +39,7 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [open]);
-
-  const handleClose = () => {
-    if (status === "loading") return;
-    setOpen(false);
-    setStatus("idle");
-    setDescription("");
-    setFile(null);
-    setFileError("");
-    setErrorMsg("");
-  };
+  }, [open, handleClose]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = e.target.files?.[0] ?? null;
@@ -128,7 +109,7 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
         onClick={() => setOpen(true)}
         aria-label="Report a bug or faulty search"
         title="Report a bug"
-        className="fixed bottom-[4.5rem] right-6 z-50 rounded-lg border border-gray-300 bg-gray-100/80 p-2 text-gray-700 shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-red-400/60 hover:bg-gray-200/80 hover:shadow dark:border-gray-700/80 dark:bg-gray-900/60 dark:text-gray-300 dark:hover:border-red-500/60 dark:hover:bg-gray-800/80"
+        className="fixed bottom-[4.5rem] right-6 z-50 rounded-lg border border-border bg-surface-muted p-2.5 text-foreground shadow-sm backdrop-blur-sm transition-colors duration-200 hover:border-red-500/50 hover:bg-surface hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         <BugAntIcon className="h-6 w-6" />
       </button>
@@ -138,11 +119,11 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
           onClick={(e) => e.target === e.currentTarget && handleClose()}
         >
-          <div className="w-full max-w-lg rounded-xl border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-900">
-            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700">
+          <div className="w-full max-w-lg rounded-xl border border-border bg-surface shadow-xl">
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <div className="flex items-center gap-2">
                 <BugAntIcon className="h-5 w-5 text-red-500" />
-                <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                <h2 className="text-base font-semibold text-foreground">
                   Report a faulty search
                 </h2>
               </div>
@@ -181,7 +162,7 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
                 <div>
                   <label
                     htmlFor="bug-description"
-                    className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    className="mb-1.5 block text-sm font-medium text-foreground"
                   >
                     Describe the issue <span className="text-red-500">*</span>
                   </label>
@@ -198,7 +179,7 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <label className="mb-1.5 block text-sm font-medium text-foreground">
                     Screenshot{" "}
                     <span className="font-normal text-gray-400 dark:text-gray-500">(optional, max 2 MB)</span>
                   </label>

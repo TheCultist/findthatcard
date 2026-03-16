@@ -55,7 +55,8 @@ export default function KeywordWithTooltip({ keyword, className = "" }: KeywordW
     const rect = el.getBoundingClientRect();
     const spaceAbove = rect.top;
     const spaceBelow = window.innerHeight - rect.bottom;
-    setTooltipPosition(spaceBelow >= 120 || spaceAbove < spaceBelow ? "below" : "above");
+    const position = spaceBelow >= 120 || spaceAbove < spaceBelow ? "below" : "above";
+    queueMicrotask(() => setTooltipPosition(position));
   }, [showTooltip, definition]);
 
   if (!definition) {

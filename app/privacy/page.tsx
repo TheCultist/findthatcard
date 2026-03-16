@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <main className="min-h-screen px-4 py-8 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-background px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl">
         <div className="mb-4 flex justify-end">
           <ThemeToggle />
@@ -19,22 +19,22 @@ export default function PrivacyPage() {
         <div className="mb-8">
           <Link
             href="/"
-            className="text-blue-600 hover:underline dark:text-blue-400 text-sm mb-4 inline-block"
+            className="text-accent hover:underline text-sm mb-4 inline-block"
           >
             ← Back to search
           </Link>
-          <h1 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-gray-100 sm:text-5xl">
+          <h1 className="font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
             Privacy Policy
           </h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400" suppressHydrationWarning>
+          <p className="mt-2 text-sm text-muted" suppressHydrationWarning>
             Last updated: {new Date().toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}
           </p>
         </div>
 
         {/* Content */}
-        <div className="prose max-w-none space-y-6 text-gray-700 dark:prose-invert dark:text-gray-300">
+        <div className="prose max-w-none space-y-6 text-muted">
           <section>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-3">Data Collection</h2>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Data Collection</h2>
             <p className="text-sm leading-relaxed">
               Find That Card is a search tool for Magic: The Gathering cards. We collect minimal data necessary for the service to function:
             </p>
@@ -46,7 +46,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-3">Cookies</h2>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Cookies</h2>
             <p className="text-sm leading-relaxed">
               We use cookies to:
             </p>
@@ -60,7 +60,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-3">Third-Party Services</h2>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Third-Party Services</h2>
             <p className="text-sm leading-relaxed">
               This site uses the following third-party services:
             </p>
@@ -78,7 +78,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-3">Data Storage</h2>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Data Storage</h2>
             <p className="text-sm leading-relaxed">
               All data processing happens in real-time. We do not store:
             </p>
@@ -90,7 +90,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-3">Your Rights</h2>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Your Rights</h2>
             <p className="text-sm leading-relaxed">
               Under GDPR and other privacy regulations, you have the right to:
             </p>
@@ -102,7 +102,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mb-3">Contact</h2>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Contact</h2>
             <p className="text-sm leading-relaxed">
               If you have questions about this privacy policy, please contact us at findthatcard@thecultist.it.
             </p>
@@ -110,14 +110,14 @@ export default function PrivacyPage() {
         </div>
 
         {/* Footer */}
-        <footer className="mt-16 border-t border-gray-200 pt-8 text-center text-xs text-gray-500 dark:border-gray-800">
+        <footer className="mt-16 border-t border-border pt-8 text-center text-xs text-muted">
           <p>
             Unofficial fan content. Card data and images from{" "}
             <a
               href="https://scryfall.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 hover:underline dark:text-blue-400"
+              className="text-accent hover:underline"
             >
               Scryfall
             </a>

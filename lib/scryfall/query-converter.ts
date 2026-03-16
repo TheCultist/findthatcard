@@ -385,6 +385,8 @@ function normalizeInstantSorceryTypeChain(query: string): string {
   return normalizeWhitespace(`(t:instant or t:sorcery) ${updated}`);
 }
 
+/** Reserved for future burn-tag selection logic. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function pickBurnFunctionTag(
   naturalQuery: string,
   tagContext?: TaggerTagContext
@@ -480,6 +482,7 @@ function detectDamageTarget(naturalQuery: string): DamageTarget | null {
 function normalizeBurnIntent(
   naturalQuery: string,
   query: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future tag-aware burn selection
   _tagContext?: TaggerTagContext
 ): string {
   const target = detectDamageTarget(naturalQuery);
@@ -1448,15 +1451,6 @@ function normalizeTokenGenerationIntent(
 
   updated = `${updated.trim()} ${orChain}`.trim();
   return normalizeWhitespace(updated);
-}
-
-function normalizeEtbOracleText(query: string): string {
-  // If the query specifically has "enters the battlefield" (old phrasing)
-  // we map it to self-ETB ("~ enters") to avoid matching other cards entering.
-  return query.replace(
-    /\b(?:o|oracle):\s*"enters the battlefield"/gi,
-    'o:"~ enters"'
-  );
 }
 
 function stripFranchiseCreatureTypeConfusion(

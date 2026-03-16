@@ -102,10 +102,10 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
   return (
     <div
       onClick={handleClick}
-      className="group cursor-pointer rounded-lg border border-gray-200 bg-gray-50 p-2 transition-all hover:border-gray-300 hover:shadow-lg hover:shadow-blue-500/10 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 sm:p-4"
+      className="group cursor-pointer rounded-xl border border-border bg-surface-muted p-2 transition-all hover:border-accent/40 hover:shadow-lg hover:shadow-accent/5 sm:p-4"
     >
       {imageSrc && !imageFailed ? (
-        <div className="mb-2 aspect-[5/7] overflow-hidden rounded border border-gray-300 bg-gray-100 relative dark:border-gray-800 dark:bg-gray-950 sm:mb-3">
+        <div className="mb-2 aspect-[5/7] overflow-hidden rounded-lg border border-border bg-surface relative sm:mb-3">
           <div className={`w-full h-full transition-all duration-300 ${isFlipping ? 'scale-x-0 opacity-0' : 'scale-x-100 opacity-100'}`}>
             <Image
               src={imageSrc}
@@ -126,7 +126,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
           {hasFaces && (
             <button
               onClick={handleFlipClick}
-              className="absolute top-2 right-2 rounded-full bg-black/60 p-2 text-white shadow-lg transition-all hover:bg-black/80 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-blue-500/50 backdrop-blur-sm z-10"
+              className="absolute top-2 right-2 rounded-full bg-black/60 p-2 text-white shadow-lg transition-all hover:bg-black/80 hover:scale-110 focus:outline-none focus:ring-2 focus:ring-accent/50 backdrop-blur-sm z-10"
               aria-label="Flip card"
               title="Flip card"
               disabled={isFlipping}
@@ -149,25 +149,25 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
           )}
         </div>
       ) : (
-        <div className="mb-2 flex aspect-[5/7] items-center justify-center rounded border border-gray-300 bg-gray-100 text-xs text-gray-400 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-600 sm:mb-3">
+        <div className="mb-2 flex aspect-[5/7] items-center justify-center rounded-lg border border-border bg-surface text-xs text-muted sm:mb-3">
           No image
         </div>
       )}
 
       <div className="mb-2 flex items-start justify-between gap-1 sm:mb-3 sm:gap-2">
-        <h3 className="flex-1 min-w-0 text-xs font-semibold text-gray-900 group-hover:text-blue-600 line-clamp-2 dark:text-gray-100 dark:group-hover:text-blue-400 sm:text-base sm:pr-2">
+        <h3 className="flex-1 min-w-0 text-xs font-semibold text-foreground line-clamp-2 group-hover:text-accent sm:text-base sm:pr-2">
           {card.name}
         </h3>
         <div className="hidden flex-shrink-0 mt-0.5 min-w-[60px] items-center justify-end sm:flex">
           {card.mana_cost ? (
             <ManaCost manaCost={card.mana_cost} />
           ) : (
-            <span className="text-xs text-gray-500">—</span>
+            <span className="text-xs text-muted">—</span>
           )}
         </div>
       </div>
 
-      <div className="hidden text-center text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 sm:block">
+      <div className="hidden text-center text-xs font-semibold uppercase tracking-wide text-muted sm:block">
         Buy this card
       </div>
       <div className="mt-1 flex gap-1.5 sm:mt-2 sm:gap-2">
@@ -181,7 +181,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleCardTraderClick}
-          className={`flex flex-1 items-center justify-center rounded border border-gray-700 bg-gray-800 p-2 transition-colors hover:border-blue-400 hover:bg-gray-700 dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-blue-500 dark:hover:bg-gray-800 sm:p-3 ${
+          className={`flex flex-1 items-center justify-center rounded-lg border border-stone-400/60 bg-stone-600 p-2 transition-colors hover:border-stone-400 hover:bg-stone-500 dark:border-stone-600 dark:bg-stone-700 dark:hover:bg-stone-600 sm:p-3 ${
             isCheckingLink ? "cursor-wait opacity-60" : ""
           }`}
           aria-label="Buy on CardTrader"
@@ -205,7 +205,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
           target="_blank"
           rel="noopener noreferrer"
           onClick={handleTcgPlayerClick}
-          className={`flex flex-1 items-center justify-center rounded border border-gray-700 bg-gray-800 p-2 transition-colors hover:border-blue-400 hover:bg-gray-700 dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-blue-500 dark:hover:bg-gray-800 sm:p-3 ${
+          className={`flex flex-1 items-center justify-center rounded-lg border border-stone-400/60 bg-stone-600 p-2 transition-colors hover:border-stone-400 hover:bg-stone-500 dark:border-stone-600 dark:bg-stone-700 dark:hover:bg-stone-600 sm:p-3 ${
             !tcgPlayerUrl ? "cursor-not-allowed opacity-50" : ""
           }`}
           aria-label="Buy on TCGPlayer"

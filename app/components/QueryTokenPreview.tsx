@@ -19,14 +19,15 @@ const normalizeSetCode = (value?: string) => {
   return value.replace(/^"|"$/g, "").toLowerCase();
 };
 
+/* Token styling: light mode = light bg + dark text (WCAG 4.5:1), dark mode = dark bg + light text */
 const getTokenClassName = (token: TokenMetadata) => {
+  const base =
+    "border border-solid rounded";
   if (token.type === "group") {
-    return "border-gray-700/70 text-gray-400";
+    return `${base} bg-surface-muted border-border text-muted`;
   }
-  if (token.type === "logical") {
-    return "border-purple-500/40 text-purple-300";
-  }
-  return "border-blue-500/40 text-blue-300";
+  /* Field + logical: accent theme, mode-aware contrast */
+  return `${base} bg-accent-muted border-accent/40 text-accent dark:bg-accent-muted-dark dark:border-accent/50 dark:text-accent`;
 };
 
 export default function QueryTokenPreview({
@@ -34,7 +35,6 @@ export default function QueryTokenPreview({
   sourceQuery,
   variant = "panel",
   className = "",
-  onApplyQueryAction,
 }: QueryTokenPreviewProps) {
   const [setNames, setSetNames] = useState<Record<string, string>>({});
   const [activeTooltip, setActiveTooltip] = useState<number | null>(null);
@@ -123,9 +123,9 @@ export default function QueryTokenPreview({
   };
 
   const tokens = (
-    <div ref={containerRef} className={`isolate flex flex-wrap gap-1.5 font-mono text-xs text-blue-200 sm:gap-2 sm:text-sm ${className}`}>
+    <div ref={containerRef} className={`isolate flex flex-wrap gap-1.5 font-mono text-xs sm:gap-2 sm:text-sm ${className}`}>
       {isEmpty ? (
-        <span className="rounded border border-gray-800/70 bg-gray-900/60 px-2 py-1 text-xs text-gray-500">
+        <span className="rounded border border-border bg-surface-muted px-2 py-1 text-xs text-muted">
           No query tokens yet.
         </span>
       ) : (
@@ -133,29 +133,29 @@ export default function QueryTokenPreview({
           <span
             key={`${token.raw}-${index}`}
             onClick={(e) => handleTokenTap(index, e)}
-            className={`group relative z-0 inline-flex items-center cursor-help rounded border bg-gray-900/70 px-1.5 py-1 leading-none hover:z-30 sm:px-2 ${getTokenClassName(
+            className={`group relative z-0 inline-flex items-center cursor-help px-1.5 py-1 leading-none hover:z-30 sm:px-2 ${getTokenClassName(
               token
             )}`}
           >
             {token.raw}
-            <span className={`pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-gray-700/70 bg-gray-950/95 px-3 py-2.5 text-xs text-gray-200 shadow-xl transition duration-200 sm:w-80 sm:px-4 sm:py-3 ${
+            <span className={`pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-border bg-surface px-3 py-2.5 text-xs text-foreground shadow-xl transition duration-200 sm:w-80 sm:px-4 sm:py-3 ${
               activeTooltip === index ? "opacity-100" : "opacity-0 group-hover:opacity-100"
             }`}>
-              <div className="text-sm font-semibold text-white">{token.title}</div>
-              <div className="mt-2 text-gray-300">{token.description}</div>
+              <div className="text-sm font-semibold text-foreground">{token.title}</div>
+              <div className="mt-2 text-muted">{token.description}</div>
               {token.type === "field" &&
                 token.field &&
                 SET_FIELDS.has(token.field.toLowerCase()) && (
-                  <div className="mt-3 text-gray-400">
-                    <span className="font-semibold text-gray-200">Set name</span>
+                  <div className="mt-3 text-muted-soft">
+                    <span className="font-semibold text-foreground">Set name</span>
                     <div className="mt-1">
                       {setNames[normalizeSetCode(token.value)] || "Unknown set"}
                     </div>
                   </div>
                 )}
               {token.tip && (
-                <div className="mt-3 text-gray-400">
-                  <span className="font-semibold text-gray-200">Tip</span>
+                <div className="mt-3 text-muted-soft">
+                  <span className="font-semibold text-foreground">Tip</span>
                   <div className="mt-1">{token.tip}</div>
                 </div>
               )}
@@ -171,8 +171,8 @@ export default function QueryTokenPreview({
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-gray-800/70 bg-gray-950/60 px-4 py-3">
-      <div className="text-xs uppercase tracking-wide text-gray-500">Query tokens</div>
+    <div className="mt-4 rounded-xl border border-border bg-surface-muted px-4 py-3">
+      <div className="text-xs uppercase tracking-wide text-muted">Query tokens</div>
       <div className="mt-2">{tokens}</div>
     </div>
   );

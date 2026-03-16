@@ -33,26 +33,26 @@ export default function CookieBanner() {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-gray-900 border-t border-gray-800 shadow-lg" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-border shadow-lg" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
       <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex-1">
-            <p className="text-sm text-gray-300">
-              <span className="font-semibold">We use cookies</span> to improve your experience and analyze site usage. 
+            <p className="text-sm text-muted">
+              <span className="font-semibold text-foreground">We use cookies</span> to improve your experience and analyze site usage. 
               This site uses essential cookies for functionality and may use analytics cookies to understand how visitors interact with the site.
             </p>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-soft">
               By clicking &quot;Accept&quot;, you consent to our use of cookies. You can also{" "}
               <button
                 onClick={handleReject}
-                className="underline hover:text-gray-400"
+                className="underline hover:text-muted"
               >
                 reject non-essential cookies
               </button>
               .{" "}
               <a
                 href="/privacy"
-                className="underline hover:text-gray-400"
+                className="underline hover:text-muted"
               >
                 Privacy Policy
               </a>
@@ -61,13 +61,13 @@ export default function CookieBanner() {
           <div className="flex gap-3 sm:flex-shrink-0">
             <button
               onClick={handleReject}
-              className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 transition-colors hover:border-gray-600 hover:bg-gray-700"
+              className="rounded-lg border border-border bg-surface-muted px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted"
             >
               Reject
             </button>
             <button
               onClick={handleAccept}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
             >
               Accept
             </button>

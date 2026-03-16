@@ -2,15 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design system: Editorial Luxury — warm paper, ink, single accent */
+/* WCAG 2.1: 4.5:1 contrast for normal text, 3:1 for large. Borders visible in both modes. */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 250 20% 98%;
+    --foreground: 220 18% 12%;
+    --surface: 250 25% 100%;
+    --surface-muted: 250 20% 96%;
+    --border: 220 14% 85%;
+    --border-muted: 220 12% 90%;
+    --accent: 165 55% 38%;
+    --accent-hover: 165 55% 32%;
+    --accent-muted: 165 35% 92%;
+    --accent-muted-dark: 165 25% 18%;
+    --muted: 220 12% 38%;
+    --muted-soft: 220 10% 45%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background: 222 20% 6%;
+    --foreground: 220 15% 95%;
+    --surface: 222 18% 9%;
+    --surface-muted: 222 16% 12%;
+    --border: 220 12% 18%;
+    --border-muted: 220 10% 14%;
+    --accent: 165 50% 50%;
+    --accent-hover: 165 55% 55%;
+    --accent-muted: 165 25% 20%;
+    --accent-muted-dark: 165 30% 25%;
+    --muted: 220 10% 55%;
+    --muted-soft: 220 8% 65%;
   }
 
   html {
@@ -20,14 +42,30 @@
   }
 
   * {
-    @apply border-gray-800 dark:border-gray-800;
+    border-color: hsl(var(--border));
   }
 
   body {
-    @apply bg-white text-gray-900 dark:bg-gray-950 dark:text-gray-100;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    line-height: 1.6;
     -webkit-text-size-adjust: 100%;
     touch-action: manipulation;
     overflow-x: hidden;
+  }
+
+  /* Respect user motion preference (ui-ux-pro-max, accessibility) */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }
 
@@ -35,7 +73,7 @@
   .text-balance {
     text-wrap: balance;
   }
-  
+
   .line-clamp-3 {
     display: -webkit-box;
     -webkit-line-clamp: 3;
@@ -59,5 +97,21 @@
 
   .pt-safe {
     padding-top: env(safe-area-inset-top);
+  }
+
+  /* Hero entrance */
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-up {
+    animation: fade-up 0.5s ease-out forwards;
   }
 }

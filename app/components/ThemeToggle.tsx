@@ -8,6 +8,8 @@ export default function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // SSR-safe: defer mount state to avoid hydration mismatch (server renders placeholder)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Required for client-only hydration
     setMounted(true);
     const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -26,14 +28,14 @@ export default function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <div className="h-10 w-10 rounded-lg border border-gray-300 bg-gray-100 dark:border-gray-700/80 dark:bg-gray-900/60" />
+      <div className="h-10 w-10 rounded-lg border border-border bg-surface-muted" />
     );
   }
 
   return (
     <button
       onClick={toggleTheme}
-      className="rounded-lg border border-gray-300 bg-gray-100/80 p-2 text-gray-700 shadow-sm transition-all hover:border-blue-500/40 hover:bg-gray-200/80 hover:shadow dark:border-gray-700/80 dark:bg-gray-900/60 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-gray-800/80"
+      className="rounded-lg border border-border bg-surface-muted p-2 text-foreground shadow-sm transition-all hover:border-accent/50 hover:bg-accent-muted"
       aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
       title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
     >

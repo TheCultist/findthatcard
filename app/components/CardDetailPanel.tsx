@@ -25,7 +25,7 @@ const RARITY_COLORS: Record<string, string> = {
 
 const LEGALITY_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   legal: { bg: "bg-green-100/60 border-green-300/50 dark:bg-green-900/60 dark:border-green-700/50", text: "text-green-700 dark:text-green-300", label: "Legal" },
-  not_legal: { bg: "bg-gray-100/60 border-gray-300/50 dark:bg-gray-800/60 dark:border-gray-700/50", text: "text-gray-600 dark:text-gray-500", label: "Not Legal" },
+  not_legal: { bg: "bg-surface-muted border-border", text: "text-muted", label: "Not Legal" },
   banned: { bg: "bg-red-100/60 border-red-300/50 dark:bg-red-900/60 dark:border-red-700/50", text: "text-red-700 dark:text-red-400", label: "Banned" },
   restricted: { bg: "bg-yellow-100/60 border-yellow-300/50 dark:bg-yellow-900/60 dark:border-yellow-700/50", text: "text-yellow-700 dark:text-yellow-400", label: "Restricted" },
 };
@@ -66,7 +66,7 @@ function CardFaceView({ face }: {
   return (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">{face.name}</h3>
+        <h3 className="text-base font-bold text-foreground">{face.name}</h3>
         {face.mana_cost && (
           <div className="flex-shrink-0 mt-0.5">
             <ManaCost manaCost={face.mana_cost} />
@@ -75,7 +75,7 @@ function CardFaceView({ face }: {
       </div>
 
       {face.type_line && (
-        <p className="text-xs font-medium text-gray-700 dark:text-gray-400 uppercase tracking-wide border-b border-gray-300 dark:border-gray-800 pb-2">
+        <p className="text-xs font-medium text-muted uppercase tracking-wide border-b border-border pb-2">
           {face.type_line}
         </p>
       )}
@@ -85,21 +85,21 @@ function CardFaceView({ face }: {
       )}
 
       {face.flavor_text && (
-        <OracleText text={face.flavor_text} italic className="border-t border-gray-300 dark:border-gray-800 pt-2" />
+        <OracleText text={face.flavor_text} italic className="border-t border-border pt-2" />
       )}
 
       {(face.power !== undefined || face.toughness !== undefined) && (
-        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 text-right">
+        <p className="text-sm font-bold text-foreground text-right">
           {face.power}/{face.toughness}
         </p>
       )}
       {face.loyalty !== undefined && (
-        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 text-right">
+        <p className="text-sm font-bold text-foreground text-right">
           Loyalty: {face.loyalty}
         </p>
       )}
       {face.defense !== undefined && (
-        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 text-right">
+        <p className="text-sm font-bold text-foreground text-right">
           Defense: {face.defense}
         </p>
       )}
@@ -250,12 +250,12 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
   return (
     <div
       className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-200 ${
-        visible && !isSwipingAway ? "bg-black/70 backdrop-blur-sm" : "bg-black/0 pointer-events-none"
+        visible && !isSwipingAway ? "bg-foreground/60 backdrop-blur-sm" : "bg-transparent pointer-events-none"
       }`}
       onClick={handleClose}
     >
       <div
-        className={`relative w-full sm:max-w-4xl max-h-[95dvh] sm:max-h-[90dvh] bg-white border border-gray-300 rounded-t-2xl dark:bg-gray-950 dark:border-gray-800 sm:rounded-2xl flex flex-col overflow-hidden shadow-2xl transition-all duration-200 ${
+        className={`relative w-full sm:max-w-4xl max-h-[95dvh] sm:max-h-[90dvh] bg-surface border border-border rounded-t-2xl sm:rounded-2xl flex flex-col overflow-hidden shadow-2xl transition-all duration-200 ${
           visible
             ? "opacity-100 translate-y-0 sm:scale-100"
             : "opacity-0 translate-y-8 sm:scale-95"
@@ -277,11 +277,11 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
           onTouchEnd={handleDragEnd}
           onTouchCancel={handleDragCancel}
         >
-          <div className="h-1.5 w-12 rounded-full bg-gray-300 dark:bg-gray-700" />
+          <div className="h-1.5 w-12 rounded-full bg-border" />
         </div>
 
         <div
-          className="flex items-center justify-between px-4 py-3 border-b border-gray-300 dark:border-gray-800 flex-shrink-0 sm:pt-3"
+          className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0 sm:pt-3"
           style={{ touchAction: "none" }}
           onTouchStart={handleDragStart}
           onTouchMove={handleDragMove}
@@ -289,7 +289,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
           onTouchCancel={handleDragCancel}
         >
           <div className="flex items-center gap-2 min-w-0">
-            <h2 className="text-base font-bold text-gray-900 dark:text-gray-100 truncate">{card.name}</h2>
+            <h2 className="text-base font-bold text-foreground truncate">{card.name}</h2>
             {detailData?.rarity && (
               <span className={`text-xs font-medium flex-shrink-0 ${rarityColor}`}>
                 {capitalize(detailData.rarity)}
@@ -298,7 +298,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
           </div>
           <button
             onClick={handleClose}
-            className="flex-shrink-0 ml-3 -mr-1 p-2.5 rounded-xl text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800 transition-colors"
+            className="flex-shrink-0 ml-3 -mr-1 p-2.5 rounded-xl text-muted hover:text-foreground hover:bg-surface-muted transition-colors"
             aria-label="Close"
           >
             <XMarkIcon className="w-5 h-5" />
@@ -308,7 +308,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
         <div className="flex-1 overflow-y-auto overscroll-contain">
           <div className="flex flex-col sm:flex-row gap-0 sm:gap-6 p-4 sm:p-6">
             <div className="flex-shrink-0 flex flex-col items-center gap-3 sm:w-64 lg:w-72">
-              <div className="w-56 sm:w-full aspect-[5/7] relative rounded-lg overflow-hidden border border-gray-300 bg-gray-100 dark:border-gray-800 dark:bg-gray-900 shadow-lg">
+              <div className="w-56 sm:w-full aspect-[5/7] relative rounded-lg overflow-hidden border border-border bg-surface-muted shadow-lg">
                 {imageSrc ? (
                   <Image
                     src={imageSrc}
@@ -320,7 +320,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                     priority
                   />
                 ) : (
-                  <div className="flex items-center justify-center h-full text-sm text-gray-400 dark:text-gray-600">
+                  <div className="flex items-center justify-center h-full text-sm text-muted">
                     No image
                   </div>
                 )}
@@ -334,8 +334,8 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                       onClick={() => setActiveFace(i)}
                       className={`px-3 py-1.5 text-xs rounded-lg border transition-colors ${
                         activeFace === i
-                          ? "bg-blue-600 border-blue-500 text-white"
-                          : "bg-gray-100 border-gray-300 text-gray-600 hover:border-gray-400 hover:text-gray-800 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-200"
+                          ? "bg-accent border-accent text-white"
+                          : "bg-surface-muted border-border text-muted hover:border-accent/50 hover:text-foreground"
                       }`}
                     >
                       {face.name.split(" // ")[0] ?? face.name}
@@ -345,8 +345,8 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
               )}
 
               {detailData && (
-                <div className="sm:hidden text-center text-xs text-gray-500 space-y-0.5">
-                  <p className="text-gray-600 dark:text-gray-400 font-medium">{detailData.set_name}</p>
+                <div className="sm:hidden text-center text-xs text-muted space-y-0.5">
+                  <p className="text-foreground font-medium">{detailData.set_name}</p>
                   <p>
                     #{detailData.collector_number} · {detailData.set.toUpperCase()}
                   </p>
@@ -358,11 +358,11 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
             <div className="flex-1 min-w-0 space-y-4 mt-4 sm:mt-0">
               {loading ? (
                 <div className="space-y-3 animate-pulse">
-                  <div className="h-5 bg-gray-200 dark:bg-gray-800 rounded w-3/4" />
-                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-1/2" />
-                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-full" />
-                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-full" />
-                  <div className="h-3 bg-gray-200 dark:bg-gray-800 rounded w-5/6" />
+                  <div className="h-5 bg-surface-muted rounded w-3/4" />
+                  <div className="h-3 bg-surface-muted rounded w-1/2" />
+                  <div className="h-3 bg-surface-muted rounded w-full" />
+                  <div className="h-3 bg-surface-muted rounded w-full" />
+                  <div className="h-3 bg-surface-muted rounded w-5/6" />
                 </div>
               ) : detailData ? (
                 <>
@@ -370,7 +370,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                     <div className="space-y-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 leading-tight">
+                          <h3 className="text-lg font-bold text-foreground leading-tight">
                             {detailData.name}
                           </h3>
                         </div>
@@ -381,7 +381,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                         )}
                       </div>
 
-                      <p className="text-xs font-medium text-gray-700 dark:text-gray-400 uppercase tracking-wide border-b border-gray-300 dark:border-gray-800 pb-2">
+                      <p className="text-xs font-medium text-muted uppercase tracking-wide border-b border-border pb-2">
                         {detailData.type_line}
                       </p>
 
@@ -393,22 +393,22 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                         <OracleText
                           text={detailData.flavor_text}
                           italic
-                          className="border-t border-gray-300 dark:border-gray-800 pt-2"
+                          className="border-t border-border pt-2"
                         />
                       )}
 
                       {(detailData.power !== undefined || detailData.toughness !== undefined) && (
-                        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 text-right border-t border-gray-300 dark:border-gray-800 pt-2">
+                        <p className="text-sm font-bold text-foreground text-right border-t border-border pt-2">
                           {detailData.power}/{detailData.toughness}
                         </p>
                       )}
                       {detailData.loyalty !== undefined && (
-                        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 text-right border-t border-gray-300 dark:border-gray-800 pt-2">
+                        <p className="text-sm font-bold text-foreground text-right border-t border-border pt-2">
                           Loyalty: {detailData.loyalty}
                         </p>
                       )}
                       {detailData.defense !== undefined && (
-                        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 text-right border-t border-gray-300 dark:border-gray-800 pt-2">
+                        <p className="text-sm font-bold text-foreground text-right border-t border-border pt-2">
                           Defense: {detailData.defense}
                         </p>
                       )}
@@ -419,42 +419,42 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                   )}
 
                   {detailData.keywords && detailData.keywords.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 border-t border-gray-300 dark:border-gray-800 pt-3">
+                    <div className="flex flex-wrap gap-1.5 border-t border-border pt-3">
                       {detailData.keywords.map((kw) => (
                         <KeywordWithTooltip
                           key={kw}
                           keyword={kw}
-                          className="cursor-help px-2 py-0.5 text-xs rounded-full bg-blue-100/60 border border-blue-300/50 text-blue-700 hover:border-blue-400 dark:bg-blue-950/60 dark:border-blue-800/50 dark:text-blue-300 dark:hover:border-blue-700"
+                          className="cursor-help px-2 py-0.5 text-xs rounded-full bg-accent-muted border border-accent/30 text-accent hover:border-accent/50"
                         />
                       ))}
                     </div>
                   )}
 
-                  <div className="border-t border-gray-300 dark:border-gray-800 pt-3 space-y-1 text-xs hidden sm:block">
+                  <div className="border-t border-border pt-3 space-y-1 text-xs hidden sm:block">
                     <div className="flex items-center gap-1.5">
-                      <span className="text-gray-500 dark:text-gray-600">Set</span>
-                      <span className="text-gray-800 dark:text-gray-300 font-medium">{detailData.set_name}</span>
-                      <span className="text-gray-600 dark:text-gray-600">
+                      <span className="text-muted-soft">Set</span>
+                      <span className="text-foreground font-medium">{detailData.set_name}</span>
+                      <span className="text-muted">
                         ({detailData.set.toUpperCase()} #{detailData.collector_number})
                       </span>
                     </div>
                     {detailData.artist && (
                       <div className="flex items-center gap-1.5">
-                        <span className="text-gray-500 dark:text-gray-600">Artist</span>
-                        <span className="text-gray-800 dark:text-gray-300">{detailData.artist}</span>
+                        <span className="text-muted-soft">Artist</span>
+                        <span className="text-foreground">{detailData.artist}</span>
                       </div>
                     )}
                     {detailData.released_at && (
                       <div className="flex items-center gap-1.5">
-                        <span className="text-gray-500 dark:text-gray-600">Released</span>
-                        <span className="text-gray-700 dark:text-gray-400">{detailData.released_at}</span>
+                        <span className="text-muted-soft">Released</span>
+                        <span className="text-muted">{detailData.released_at}</span>
                       </div>
                     )}
                   </div>
 
                   {detailData.legalities && (
-                    <div className="border-t border-gray-300 dark:border-gray-800 pt-3">
-                      <p className="text-xs text-gray-500 dark:text-gray-600 uppercase tracking-wide mb-2">Legalities</p>
+                    <div className="border-t border-border pt-3">
+                      <p className="text-xs text-muted-soft uppercase tracking-wide mb-2">Legalities</p>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                         {KEY_FORMATS.map(({ key, label }) => {
                           const status = detailData.legalities![key];
@@ -465,7 +465,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                               key={key}
                               className={`flex items-center justify-between px-2 py-1 rounded border text-xs ${style.bg}`}
                             >
-                              <span className="text-gray-700 dark:text-gray-400">{label}</span>
+                              <span className="text-muted">{label}</span>
                               <span className={`font-medium ${style.text}`}>{style.label}</span>
                             </div>
                           );
@@ -474,13 +474,13 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                     </div>
                   )}
 
-                  <div className="border-t border-gray-300 dark:border-gray-800 pt-3">
+                  <div className="border-t border-border pt-3">
                     <a
                       href={card.scryfall_uri}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1.5 text-xs text-gray-600 hover:text-blue-600 dark:text-gray-500 dark:hover:text-blue-400 transition-colors"
+                      className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent transition-colors"
                     >
                       <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 flex-shrink-0" />
                       <span>Open on Scryfall</span>
@@ -491,25 +491,25 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
                 /* Fallback to CardResult data if fetch failed */
                 <div className="space-y-3">
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{card.name}</h3>
+                    <h3 className="text-lg font-bold text-foreground">{card.name}</h3>
                     {card.mana_cost && (
                       <div className="flex-shrink-0 mt-1">
                         <ManaCost manaCost={card.mana_cost} />
                       </div>
                     )}
                   </div>
-                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide border-b border-gray-300 dark:border-gray-800 pb-2">
+                  <p className="text-xs font-medium text-gray-600 dark:text-gray-400 uppercase tracking-wide border-b border-border pb-2">
                     {card.type_line}
                   </p>
                   {card.oracle_text && <OracleText text={card.oracle_text} />}
-                  <p className="text-xs text-gray-500 dark:text-gray-600">{card.set_name}</p>
-                  <div className="border-t border-gray-300 dark:border-gray-800 pt-3">
+                  <p className="text-xs text-muted-soft">{card.set_name}</p>
+                  <div className="border-t border-border pt-3">
                     <a
                       href={card.scryfall_uri}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1.5 text-xs text-gray-600 hover:text-blue-600 dark:text-gray-500 dark:hover:text-blue-400 transition-colors"
+                      className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-accent transition-colors"
                     >
                       <ArrowTopRightOnSquareIcon className="w-3.5 h-3.5 flex-shrink-0" />
                       <span>Open on Scryfall</span>
@@ -521,8 +521,8 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
           </div>
         </div>
 
-        <div className="flex-shrink-0 border-t border-gray-300 dark:border-gray-800 px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-white dark:bg-gray-950 sm:pb-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-500 text-center mb-2">
+        <div className="flex-shrink-0 border-t border-border px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-surface sm:pb-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-soft text-center mb-2">
             Buy here and support the project
           </p>
           <div className="flex flex-row gap-2">
@@ -531,7 +531,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
               target="_blank"
               rel="noopener noreferrer"
               onClick={handleCardTraderClick}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 transition-colors hover:border-blue-400 hover:bg-gray-700 dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-blue-500 dark:hover:bg-gray-800 ${
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border border-stone-400/60 bg-stone-600 px-3 py-2.5 transition-colors hover:border-stone-400 hover:bg-stone-500 dark:border-stone-600 dark:bg-stone-700 dark:hover:bg-stone-600 ${
                 isCheckingLink ? "cursor-wait opacity-60" : ""
               }`}
             >
@@ -551,7 +551,7 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => { if (!tcgPlayerUrl) e.preventDefault(); e.stopPropagation(); }}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border border-gray-700 bg-gray-800 px-3 py-2.5 transition-colors hover:border-blue-400 hover:bg-gray-700 dark:border-gray-700 dark:bg-gray-800/70 dark:hover:border-blue-500 dark:hover:bg-gray-800 ${
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border border-stone-400/60 bg-stone-600 px-3 py-2.5 transition-colors hover:border-stone-400 hover:bg-stone-500 dark:border-stone-600 dark:bg-stone-700 dark:hover:bg-stone-600 ${
                 !tcgPlayerUrl ? "cursor-not-allowed opacity-50" : ""
               }`}
             >

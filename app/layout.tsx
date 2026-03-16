@@ -1,11 +1,17 @@
 import type { Metadata, Viewport } from "next";
-import { Source_Sans_3 } from "next/font/google";
+import { Syne, DM_Sans } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
 import ScrollToTop from "./components/ScrollToTop";
 import "./globals.css";
 
-const sourceSans = Source_Sans_3({
+const syne = Syne({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-display",
+});
+
+const dmSans = DM_Sans({
   subsets: ["latin"],
   display: "swap",
   variable: "--font-sans",
@@ -54,14 +60,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={sourceSans.variable}>
+    <html lang="en" suppressHydrationWarning className={`${syne.variable} ${dmSans.variable}`}>
       <head>
         <meta
           name="impact-site-verification"
           content="fe0d142c-1e97-427f-9abb-35dd9ed1c38f"
         />
       </head>
-      <body suppressHydrationWarning className={`${sourceSans.className} min-h-screen bg-white text-gray-900 subpixel-antialiased dark:antialiased dark:bg-gray-950 dark:text-gray-100`}>
+      <body suppressHydrationWarning className={`${dmSans.className} min-h-screen bg-[hsl(var(--background))] text-[hsl(var(--foreground))] subpixel-antialiased dark:antialiased`}>
         <Script
           id="schema-org"
           type="application/ld+json"

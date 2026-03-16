@@ -273,50 +273,57 @@ export default function SearchPage() {
   const trimmedQuery = query.trim();
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-blue-50/50 via-white to-white px-3 py-6 dark:from-gray-950 dark:via-gray-950 dark:to-gray-950 sm:px-6 sm:py-10 lg:px-8">
+    <main className="min-h-screen bg-background px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="mb-4 flex justify-end">
           <ThemeToggle />
         </div>
 
-        <section className="relative overflow-hidden rounded-2xl border border-gray-200/80 bg-gradient-to-b from-white to-blue-50/30 px-4 py-6 shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_20px_60px_-20px_rgba(59,130,246,0.08),0_8px_24px_-8px_rgba(0,0,0,0.06)] dark:border-gray-800/60 dark:from-gray-950/80 dark:to-gray-900/60 dark:shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_20px_60px_-30px_rgba(15,23,42,0.9)] sm:rounded-3xl sm:px-10 sm:py-14">
-          <div className="relative">
+        <section className="relative overflow-hidden rounded-2xl border border-border bg-surface px-4 py-6 shadow-[0_1px_0_0_hsl(var(--border)),0_20px_50px_-20px_rgba(0,0,0,0.08)] sm:rounded-3xl sm:px-10 sm:py-14 dark:shadow-[0_1px_0_0_hsl(var(--border)),0_20px_50px_-25px_rgba(0,0,0,0.5)]">
+          <div className="relative animate-fade-up">
             <div className="text-center">
               <Link
                 href="/"
-                className="inline-flex justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
+                className="inline-flex justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
               >
-                <h1 className="mb-2 text-3xl font-bold tracking-tight bg-gradient-to-r from-gray-900 via-blue-800 to-indigo-900 bg-clip-text text-transparent dark:from-gray-100 dark:via-blue-300 dark:to-indigo-200 sm:text-5xl lg:text-6xl">
+                <h1 className="font-display mb-2 text-3xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
                   Find That Card
                 </h1>
               </Link>
-              <p className="mx-auto max-w-2xl text-base font-medium text-gray-700 dark:text-gray-400 sm:text-xl">
+              <p className="mx-auto max-w-2xl text-base font-medium text-muted sm:text-xl">
                 Search Magic: The Gathering cards using natural language.
               </p>
-              <p className="mt-3 text-xs text-gray-500 dark:text-gray-500">
+              <p className="mt-3 text-xs text-muted-soft">
                 Work in progress &amp; constantly evolving — if a search doesn&apos;t give you what you want, let us know via the{" "}
-                <span className="font-medium text-gray-600 dark:text-gray-400">bug button</span> in the bottom right.
+                <span className="font-medium text-muted">bug button</span> in the bottom right.
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="mt-5 sm:mt-8">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                <label htmlFor="search-query" className="sr-only">
+                  Search Magic: The Gathering cards
+                </label>
                 <input
+                  id="search-query"
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder='Try "white creatures" or "dragons in the art"'
-                  className="flex-1 rounded-xl border border-gray-300 bg-white/70 px-4 py-3.5 text-base text-gray-900 placeholder-gray-400 shadow-[inset_0_1px_0_rgba(0,0,0,0.04)] focus:border-blue-500/70 focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-gray-700/80 dark:bg-gray-950/70 dark:text-gray-100 dark:placeholder-gray-500 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:py-3"
+                  className="min-h-[44px] flex-1 rounded-xl border border-border bg-surface-muted px-4 py-3.5 text-base text-foreground placeholder-muted transition-colors duration-200 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 focus:ring-offset-2 focus:ring-offset-background sm:py-3"
                   disabled={loading}
                   enterKeyHint="search"
                   autoComplete="off"
                   autoCorrect="off"
                   spellCheck={false}
+                  aria-describedby={loading ? "search-loading" : undefined}
                 />
                 <button
                   type="submit"
                   disabled={loading}
-                  className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-7 py-3.5 font-semibold text-white shadow-[0_10px_30px_-16px_rgba(59,130,246,0.8)] transition-all hover:from-blue-500 hover:to-indigo-500 hover:shadow-[0_14px_34px_-14px_rgba(99,102,241,0.7)] disabled:cursor-not-allowed disabled:opacity-50 sm:py-3"
+                  id={loading ? "search-loading" : undefined}
+                  aria-busy={loading}
+                  className="min-h-[44px] cursor-pointer rounded-xl bg-accent px-7 py-3.5 font-semibold text-white shadow-lg shadow-accent/20 transition-colors duration-200 hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 sm:py-3"
                 >
                   {loading ? "Searching..." : "Search"}
                 </button>
@@ -330,7 +337,7 @@ export default function SearchPage() {
                     key={`${example}-${index}`}
                     onClick={() => handleChipClick(example)}
                     disabled={loading}
-                    className="flex-shrink-0 rounded-full border border-gray-300 bg-gray-50/60 px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:border-blue-500/40 hover:bg-blue-50/50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700/70 dark:bg-gray-900/60 dark:text-gray-300 dark:hover:border-blue-500/40 dark:hover:bg-gray-800/80 sm:py-1.5 sm:text-base"
+                    className="min-h-[44px] min-w-[44px] flex-shrink-0 cursor-pointer rounded-full border border-border-muted bg-surface-muted px-4 py-2.5 text-sm font-medium text-muted transition-colors duration-200 hover:border-accent/50 hover:bg-accent-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent/30 focus:ring-offset-2 focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:min-w-0 sm:py-1.5 sm:text-base"
                   >
                     {example}
                   </button>
@@ -341,71 +348,73 @@ export default function SearchPage() {
         </section>
 
         {/* Static intro content - hidden during search */}
-        {!loading && !results && !editableQuery && (        <section className="mb-8 mt-6 text-base text-gray-700 dark:text-gray-400 sm:mb-10 sm:mt-10">
-          <div className="mx-auto max-w-4xl text-center">
-            <p className="text-base font-medium text-gray-800 dark:text-gray-200 sm:text-lg">
-              Find That Card is a Magic: The Gathering search tool that lets you describe cards in
-              plain language.
-            </p>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
-              Find That Card is a project by{" "}
-              <Link href="/about" className="text-blue-400 hover:underline">
-                Cardboard Cultist
-              </Link>
-              .
-            </p>
-            <div className="mt-4 grid grid-cols-1 gap-3 text-center sm:mt-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-              <div className="rounded-xl border border-gray-200 bg-gray-50/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] transition hover:border-blue-500/30 hover:bg-gray-50/60 dark:border-gray-800/80 dark:bg-gray-900/40 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] dark:hover:border-blue-500/30 dark:hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
-                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-400 sm:mb-4 sm:h-12 sm:w-12">
-                  <ShieldCheckIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
+        {!loading && !results && !editableQuery && (
+          <section className="mb-8 mt-6 text-base text-muted sm:mb-10 sm:mt-10">
+            <div className="mx-auto max-w-4xl text-center">
+              <p className="text-base font-medium text-foreground sm:text-lg">
+                Find That Card is a Magic: The Gathering search tool that lets you describe cards in
+                plain language.
+              </p>
+              <p className="mt-2 text-sm text-muted-soft">
+                Find That Card is a project by{" "}
+                <Link href="/about" className="text-accent hover:underline">
+                  Cardboard Cultist
+                </Link>
+                .
+              </p>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:mt-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+                <div className="rounded-xl border border-border bg-surface-muted px-4 py-4 transition hover:border-accent/50 hover:bg-accent-muted/30 sm:rounded-2xl sm:px-6 sm:py-6">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-accent sm:mb-4 sm:h-12 sm:w-12">
+                    <ShieldCheckIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
+                  </div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted sm:text-sm">
+                    Card intent
+                  </p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-foreground sm:mt-2 sm:text-base">
+                    Removal, ramp, tutors, tokens, or any role you can describe.
+                  </p>
                 </div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
-                  Card intent
-                </p>
-                <p className="mt-1.5 text-sm leading-relaxed text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
-                  Removal, ramp, tutors, tokens, or any role you can describe.
-                </p>
-              </div>
-              <div className="rounded-xl border border-gray-200 bg-gray-50/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] transition hover:border-violet-500/30 hover:bg-gray-50/60 dark:border-gray-800/80 dark:bg-gray-900/40 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] dark:hover:border-violet-500/30 dark:hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
-                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-400 sm:mb-4 sm:h-12 sm:w-12">
-                  <PaintBrushIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
+                <div className="rounded-xl border border-border bg-surface-muted px-4 py-4 transition hover:border-accent/50 hover:bg-accent-muted/30 sm:rounded-2xl sm:px-6 sm:py-6">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-accent sm:mb-4 sm:h-12 sm:w-12">
+                    <PaintBrushIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
+                  </div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted sm:text-sm">
+                    Art and flavor
+                  </p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-foreground sm:mt-2 sm:text-base">
+                    Dragons, angels, swords, landscapes, or other artwork subjects.
+                  </p>
                 </div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
-                  Art and flavor
-                </p>
-                <p className="mt-1.5 text-sm leading-relaxed text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
-                  Dragons, angels, swords, landscapes, or other artwork subjects.
-                </p>
-              </div>
-              <div className="rounded-xl border border-gray-200 bg-gray-50/40 px-4 py-4 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] transition hover:border-amber-500/30 hover:bg-gray-50/60 dark:border-gray-800/80 dark:bg-gray-900/40 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] dark:hover:border-amber-500/30 dark:hover:bg-gray-900/60 sm:rounded-2xl sm:px-6 sm:py-6">
-                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-500 sm:mb-4 sm:h-12 sm:w-12">
-                  <QueueListIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
+                <div className="rounded-xl border border-border bg-surface-muted px-4 py-4 transition hover:border-accent/50 hover:bg-accent-muted/30 sm:rounded-2xl sm:px-6 sm:py-6">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-accent sm:mb-4 sm:h-12 sm:w-12">
+                    <QueueListIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
+                  </div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted sm:text-sm">
+                    Formats and rules
+                  </p>
+                  <p className="mt-1.5 text-sm leading-relaxed text-foreground sm:mt-2 sm:text-base">
+                    Commander, Modern, Pauper, plus colors, keywords, and mechanics.
+                  </p>
                 </div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 sm:text-sm">
-                  Formats and rules
-                </p>
-                <p className="mt-1.5 text-sm leading-relaxed text-gray-700 dark:text-gray-300 sm:mt-2 sm:text-base">
-                  Commander, Modern, Pauper, plus colors, keywords, and mechanics.
-                </p>
               </div>
+              <p className="mt-5 text-sm text-muted-soft">
+                Results are powered by Scryfall and updated in real time.
+              </p>
             </div>
-            <p className="mt-5 text-sm text-gray-500">
-              Results are powered by Scryfall and updated in real time.
-            </p>
-          </div>
-        </section>
+          </section>
         )}
 
-        {/* Ad Space / Adblock Message */}        {trimmedQuery && (
+        {/* Ad Space / Adblock Message */}
+        {trimmedQuery && (
           <div className="mb-8 flex justify-center">
             {adBlockDetected ? (
-              <div className="w-full max-w-2xl rounded-lg border border-gray-300 bg-gray-50/50 p-4 text-center dark:border-gray-700 dark:bg-gray-900/50">
-                <p className="text-base text-gray-600 dark:text-gray-400">
-                  <span className="font-medium text-gray-800 dark:text-gray-300">Find That Card is supported by ads.</span>
+              <div className="w-full max-w-2xl rounded-lg border border-border bg-surface-muted p-4 text-center">
+                <p className="text-base text-muted">
+                  <span className="font-medium text-foreground">Find That Card is supported by ads.</span>
                   <br />
-                  <span className="text-sm text-gray-500">
+                  <span className="text-sm text-muted-soft">
                     A single, non-intrusive ad helps keep this site free. Please consider whitelisting{" "}
-                    <span className="font-medium text-gray-700 dark:text-gray-400">findthat.card</span> in your ad blocker.
+                    <span className="font-medium text-muted">findthat.card</span> in your ad blocker.
                   </span>
                 </p>
               </div>
@@ -418,9 +427,9 @@ export default function SearchPage() {
         {(editableQuery || sourceQuery || results) && !loading && (
           <div id="query-display" className="relative z-50 mb-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="flex-1 flex items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2.5 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 dark:border-gray-800 dark:bg-gray-900 sm:px-4 sm:py-2.5">
-                <span className="text-sm text-gray-500 whitespace-nowrap">Query:</span>
-                <div className="relative flex-1 min-w-0">
+              <div className="flex flex-1 items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2.5 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 sm:px-4 sm:py-2.5">
+                <span className="whitespace-nowrap text-sm text-muted">Query:</span>
+                <div className="relative min-w-0 flex-1">
                   <textarea
                     ref={editableInputRef}
                     value={editableQuery}
@@ -438,17 +447,17 @@ export default function SearchPage() {
                     }}
                     onFocus={handleEditableQueryFocus}
                     onBlur={handleEditableQueryBlur}
-                    className={`w-full bg-transparent text-sm text-blue-600 focus:outline-none font-mono dark:text-blue-400 sm:text-base resize-none overflow-hidden leading-relaxed ${
+                    className={`w-full resize-none overflow-hidden bg-transparent font-mono text-sm leading-relaxed text-accent focus:outline-none sm:text-base ${
                       isEditingQuery
                         ? "relative z-10 opacity-100"
-                        : "absolute inset-0 opacity-0 pointer-events-none h-full"
+                        : "pointer-events-none absolute inset-0 h-full opacity-0"
                     }`}
                     disabled={loading}
                     placeholder="Edit Scryfall query..."
                   />
                   {!isEditingQuery && (
                     <div
-                      className="text-blue-500 cursor-text dark:text-blue-300"
+                      className="cursor-text text-accent"
                       onClick={handleTokenOverlayClick}
                     >
                       <QueryTokenPreview
@@ -465,7 +474,7 @@ export default function SearchPage() {
                 <button
                   onClick={handleEditableQuerySearch}
                   disabled={loading || !editableQuery.trim()}
-                  className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none sm:py-2 sm:text-base"
+                  className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none sm:py-2 sm:text-base"
                 >
                   Search
                 </button>
@@ -473,7 +482,7 @@ export default function SearchPage() {
                   href={`https://scryfall.com/search?q=${encodeURIComponent(editableQuery)}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex-1 rounded-lg border border-gray-300 bg-gray-100 px-4 py-2.5 text-center text-sm text-gray-700 transition-colors hover:border-gray-400 hover:bg-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-700 sm:flex-none sm:py-2 sm:text-base"
+                  className="flex flex-1 cursor-pointer items-center justify-center rounded-lg border border-border bg-surface-muted px-4 py-2.5 text-center text-sm text-foreground transition-colors duration-200 hover:border-accent/50 hover:bg-accent-muted/30 sm:flex-none sm:py-2 sm:text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <span className="sm:hidden">Scryfall</span>
                   <span className="hidden sm:inline">View on Scryfall</span>
@@ -501,8 +510,8 @@ export default function SearchPage() {
                 ? `Exact ${shortName} identity (id=)`
                 : `Playable in ${shortName} (id:)`;
               return (
-                <div className="mt-2 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                  <span className="text-gray-400 dark:text-gray-500">Also try:</span>
+                <div className="mt-2 flex items-center gap-2 text-sm text-muted">
+                  <span className="text-muted-soft">Also try:</span>
                   <button
                     onClick={() => {
                       setEditableQuery(altQuery);
@@ -510,7 +519,7 @@ export default function SearchPage() {
                       setPageInput("1");
                       handleSearch(altQuery, 1, { updateUrl: false });
                     }}
-                    className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-gray-100 px-3 py-1 text-sm font-medium text-gray-700 transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:border-blue-500 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
+                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-muted px-3 py-1 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted"
                   >
                     {label}
                   </button>
@@ -529,13 +538,13 @@ export default function SearchPage() {
 
         {loading && (
           <div className="flex flex-col items-center justify-center gap-4 py-12 text-center">
-            <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600 dark:border-gray-700 dark:border-t-blue-500"></div>
+            <div className="h-10 w-10 animate-spin rounded-full border-4 border-accent-muted border-t-accent" />
             {proTip && (
-              <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-gray-50/50 px-5 py-4 text-sm text-gray-600 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] dark:border-gray-800/70 dark:bg-gray-900/50 dark:text-gray-400 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
-                <span className="text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400">
+              <div className="w-full max-w-2xl rounded-2xl border border-border bg-surface-muted px-5 py-4 text-sm">
+                <span className="text-xs font-semibold uppercase tracking-wider text-accent">
                   Pro tip
                 </span>
-                <p className="mt-2 text-base text-gray-700 dark:text-gray-300">{proTip}</p>
+                <p className="mt-2 text-base text-foreground">{proTip}</p>
               </div>
             )}
           </div>
@@ -543,11 +552,11 @@ export default function SearchPage() {
 
         {results && (
           <div id="results-section" className="mb-10">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-gray-200 bg-gray-50/40 px-3 py-2.5 text-sm text-gray-700 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] dark:border-gray-800/70 dark:bg-gray-900/40 dark:text-gray-300 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] sm:mb-5 sm:gap-3 sm:px-4 sm:py-3 sm:text-base">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-surface-muted px-3 py-2.5 text-sm text-foreground sm:mb-5 sm:gap-3 sm:px-4 sm:py-3 sm:text-base">
               <div>
                 Found {results.total.toLocaleString()} card{results.total !== 1 ? "s" : ""}
                 {results.total > 0 && (
-                  <span className="ml-1 text-gray-500 dark:text-gray-500 sm:ml-2 sm:text-gray-400 dark:sm:text-gray-300">
+                  <span className="ml-1 text-muted-soft sm:ml-2">
                     (p.{results.page}, {results.cards.length} shown)
                   </span>
                 )}
@@ -555,7 +564,7 @@ export default function SearchPage() {
             </div>
 
             {results.cards.length === 0 ? (
-              <div className="rounded-2xl border border-gray-200 bg-gray-50/50 p-10 text-center text-gray-700 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] dark:border-gray-800/80 dark:bg-gray-900/50 dark:text-gray-300 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)]">
+              <div className="rounded-2xl border border-border bg-surface-muted p-10 text-center text-foreground">
                 No cards found. Try a different search query.
               </div>
             ) : (
@@ -578,12 +587,12 @@ export default function SearchPage() {
                       if (cardCount >= 30 && index === 19) {
                         items.push(
                           <div key="ad-20" className="col-span-full my-4">
-                            <p className="mb-1 text-[10px] text-gray-400">Advertisement</p>
+                            <p className="mb-1 text-[10px] text-muted">Advertisement</p>
                             <a
                               href="https://cavernhold.pxf.io/yZ2rMG"
                               target="_blank"
                               rel="noopener noreferrer sponsored"
-                              className="block w-full"
+                              className="block w-full cursor-pointer"
                             >
                               <Image
                                 src="/brand/ch_ad_banner_horizontal.png"
@@ -602,12 +611,12 @@ export default function SearchPage() {
                       if (cardCount >= 50 && index === 39) {
                         items.push(
                           <div key="ad-40" className="col-span-full my-4">
-                            <p className="mb-1 text-[10px] text-gray-400">Advertisement</p>
+                            <p className="mb-1 text-[10px] text-muted">Advertisement</p>
                             <a
                               href="https://cavernhold.pxf.io/yZ2rMG"
                               target="_blank"
                               rel="noopener noreferrer sponsored"
-                              className="block w-full"
+                              className="block w-full cursor-pointer"
                             >
                               <Image
                                 src="/brand/ch_ad_banner_horizontal.png"
@@ -628,16 +637,16 @@ export default function SearchPage() {
                 </div>
 
                 {(results.has_more || results.page > 1) && (
-                  <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:mt-8 sm:gap-4">
-                    <div className="flex w-full items-center justify-center gap-3 rounded-2xl border border-gray-200 bg-gray-50/40 px-3 py-3 text-base text-gray-700 shadow-[0_18px_40px_-28px_rgba(0,0,0,0.1)] dark:border-gray-800/70 dark:bg-gray-900/40 dark:text-gray-300 dark:shadow-[0_18px_40px_-28px_rgba(15,23,42,0.9)] sm:w-auto sm:gap-4 sm:px-4">
+                    <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:mt-8 sm:gap-4">
+                    <div className="flex w-full items-center justify-center gap-3 rounded-2xl border border-border bg-surface-muted px-3 py-3 text-base text-foreground sm:w-auto sm:gap-4 sm:px-4">
                       <button
                         onClick={() => handlePageChange(results.page - 1)}
                         disabled={loading || results.page === 1}
-                        className="min-h-[44px] rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-sm font-medium text-gray-800 transition-colors hover:border-gray-400 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950/60 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800 sm:min-h-0 sm:px-4 sm:text-base"
+                        className="min-h-[44px] rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:px-4 sm:text-base"
                       >
                         Previous
                       </button>
-                      <span className="text-sm text-gray-600 dark:text-gray-400 sm:text-base">
+                      <span className="text-sm text-muted sm:text-base">
                         {results.page} / {Math.ceil(results.total / results.per_page)}
                       </span>
                       <div className="hidden flex-wrap items-center gap-2 sm:flex">
@@ -661,8 +670,8 @@ export default function SearchPage() {
                               disabled={loading || page === results.page}
                               className={
                                 page === results.page
-                                  ? "rounded-lg border border-blue-500/50 bg-blue-500/10 px-3 py-2 text-base font-semibold text-blue-600 dark:text-blue-300"
-                                  : "rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-base text-gray-700 transition-colors hover:border-gray-400 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-600 dark:hover:bg-gray-800"
+                                  ? "rounded-lg border border-accent bg-accent-muted px-3 py-2 text-base font-semibold text-accent"
+                                  : "rounded-lg border border-border bg-surface-muted px-3 py-2 text-base text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted disabled:cursor-not-allowed disabled:opacity-50"
                               }
                             >
                               {page}
@@ -673,14 +682,14 @@ export default function SearchPage() {
                       <button
                         onClick={() => handlePageChange(results.page + 1)}
                         disabled={loading || !results.has_more}
-                        className="min-h-[44px] rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-sm font-medium text-gray-800 transition-colors hover:border-gray-400 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950/60 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800 sm:min-h-0 sm:px-4 sm:text-base"
+                        className="min-h-[44px] rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:px-4 sm:text-base"
                       >
                         Next
                       </button>
                     </div>
                     {Math.ceil(results.total / results.per_page) >= 5 && (
-                      <div className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50/40 px-3 py-2.5 text-sm text-gray-700 dark:border-gray-800/70 dark:bg-gray-900/40 dark:text-gray-300 sm:px-4 sm:py-3 sm:text-base">
-                        <label htmlFor="page-jump" className="text-xs text-gray-500 sm:text-sm">
+                      <div className="flex items-center gap-2 rounded-2xl border border-border bg-surface-muted px-3 py-2.5 text-sm text-foreground sm:px-4 sm:py-3 sm:text-base">
+                        <label htmlFor="page-jump" className="text-xs text-muted sm:text-sm">
                           Jump to
                         </label>
                         <input
@@ -696,14 +705,14 @@ export default function SearchPage() {
                               handleJumpToPage();
                             }
                           }}
-                          className="w-16 rounded-lg border border-gray-300 bg-white/60 px-2 py-2 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-700 dark:bg-gray-950/60 dark:text-gray-200 sm:w-20 sm:px-3 sm:text-base"
+                          className="w-16 rounded-lg border border-border bg-surface px-2 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 sm:w-20 sm:px-3 sm:text-base"
                           disabled={loading}
                           inputMode="numeric"
                         />
                         <button
                           onClick={handleJumpToPage}
                           disabled={loading}
-                          className="min-h-[44px] rounded-lg border border-gray-300 bg-white/60 px-3 py-2 text-sm text-gray-800 transition-colors hover:border-gray-400 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:bg-gray-950/60 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-800 sm:min-h-0 sm:text-base"
+                          className="min-h-[44px] rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:text-base"
                         >
                           Go
                         </button>
@@ -716,14 +725,14 @@ export default function SearchPage() {
           </div>
         )}
 
-        <footer className="mt-10 border-t border-gray-200 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] text-center text-xs text-gray-500 dark:border-gray-800 sm:mt-16 sm:pt-8 sm:pb-24 sm:text-sm">
+        <footer className="mt-10 border-t border-border pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] text-center text-xs text-muted sm:mt-16 sm:pt-8 sm:pb-24 sm:text-sm">
           <p>
             Unofficial fan content. Card data and images from{" "}
             <a
               href="https://scryfall.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-400 hover:underline"
+              className="text-accent hover:underline"
             >
               Scryfall
             </a>{" "}
@@ -732,18 +741,18 @@ export default function SearchPage() {
               href="https://tagger.scryfall.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-400 hover:underline"
+              className="text-accent hover:underline"
             >
               Scryfall Tagger
             </a>
             . Not endorsed by Wizards of the Coast or Scryfall.
           </p>
           <p className="mt-2">
-            <Link href="/about" className="text-blue-400 hover:underline">
+            <Link href="/about" className="text-accent hover:underline">
               About
             </Link>
-            <span className="mx-2 text-gray-600">•</span>
-            <Link href="/privacy" className="text-blue-400 hover:underline">
+            <span className="mx-2 text-muted-soft">•</span>
+            <Link href="/privacy" className="text-accent hover:underline">
               Privacy Policy
             </Link>
           </p>

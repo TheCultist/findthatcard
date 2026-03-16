@@ -41,7 +41,6 @@ const CATALOGS_FILE_PATH = path.join(getCacheDir(), "scryfall-catalogs.json");
 const FETCH_DELAY_MS = 100;
 
 let catalogCache: Record<string, string[]> | null = null;
-let catalogCacheUpdatedAt: string | null = null;
 let catalogCachePromise: Promise<void> | null = null;
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
@@ -165,7 +164,6 @@ async function initializeCatalogCache(): Promise<void> {
   const existing = await readCatalogFile();
   if (existing) {
     catalogCache = existing.catalogs;
-    catalogCacheUpdatedAt = existing.updatedAt || null;
   }
 
   const todayStamp = formatTodayStamp();
@@ -191,7 +189,6 @@ async function initializeCatalogCache(): Promise<void> {
     const fetched = await fetchAllCatalogs(existing?.catalogs || null);
 
     catalogCache = fetched;
-    catalogCacheUpdatedAt = todayStamp;
 
     await writeCatalogFile({
       updatedAt: todayStamp,
