@@ -15,10 +15,11 @@ const buildMetadata = (query: string): Metadata => {
   const cleaned = query.trim();
   if (!cleaned) {
     return {
-      title: "Search",
+      title: "MTG Card Search",
       description: defaultDescription,
+      alternates: { canonical: "/" },
       openGraph: {
-        title: "Find That Card - Search",
+        title: "MTG Card Search — Find That Card",
         description: defaultDescription,
       },
     };

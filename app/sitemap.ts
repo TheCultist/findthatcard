@@ -1,28 +1,31 @@
 import type { MetadataRoute } from "next";
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export const dynamic = "force-dynamic";
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const now = new Date();
   return [
     {
       url: "https://www.findthatcard.net",
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "weekly",
-      priority: 1.0,
+      priority: 1,
     },
     {
       url: "https://www.findthatcard.net/search",
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "weekly",
       priority: 0.9,
     },
     {
       url: "https://www.findthatcard.net/about",
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly",
       priority: 0.5,
     },
     {
       url: "https://www.findthatcard.net/privacy",
-      lastModified: new Date(),
+      lastModified: now,
       changeFrequency: "monthly",
       priority: 0.3,
     },

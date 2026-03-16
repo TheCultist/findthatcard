@@ -4,7 +4,7 @@ import Link from "next/link";
 import ThemeToggle from "@/app/components/ThemeToggle";
 
 export const metadata: Metadata = {
-  title: "About",
+  title: "Cardboard Cultist — MTG Creator",
   description:
     "Meet Cardboard Cultist, creator of Find That Card — the free MTG card search that turns natural language into Scryfall queries. Commander, art tags, and more.",
   openGraph: {
