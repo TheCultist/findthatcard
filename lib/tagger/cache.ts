@@ -3,7 +3,7 @@ import path from "path";
 import { getCacheDir } from "@/lib/cache-paths";
 import { formatTodayStamp, shouldSkipUpdate } from "@/lib/utils/cache";
 
-const TAGGER_USER_AGENT = "find-that-card/1.0 (+https://findthat.card)";
+const TAGGER_USER_AGENT = "find-that-card/1.0 (+https://findthatcard.net)";
 const TAGGER_CACHE_PATH = path.join(getCacheDir(), "tagger-tags.json");
 
 type TaggerCacheFile = {

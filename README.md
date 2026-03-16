@@ -2,7 +2,7 @@
 
 A Magic: The Gathering card search tool that converts natural language queries into Scryfall search queries using a multi-phase NLP pipeline, and displays results in a clean, responsive interface.
 
-**Live at:** [findthat.card](https://findthat.card)
+**Live at:** [findthatcard.net](https://findthatcard.net)
 
 ## Features
 
@@ -84,7 +84,7 @@ The pipeline produces an intermediate representation (IR) that is assembled into
    Edit `.env.local`:
    ```env
    OPENAI_API_KEY=your_openai_api_key_here
-   SCRYFALL_USER_AGENT=find-that-card/1.0 (+https://findthat.card)
+   SCRYFALL_USER_AGENT=find-that-card/1.0 (+https://findthatcard.net)
    OPENAI_MODEL=gpt-4.1-mini
    ```
 

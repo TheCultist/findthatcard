@@ -1,6 +1,6 @@
 const TAGGER_BASE = "https://tagger.scryfall.com";
 const TAGGER_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthat.card)";
+  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 
 type TaggerSession = {
   csrfToken: string;

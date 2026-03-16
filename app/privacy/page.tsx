@@ -5,7 +5,13 @@ import ThemeToggle from "@/app/components/ThemeToggle";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "Privacy policy for Find That Card. Learn how we handle your data, cookies, and third-party services.",
+    "Find That Card privacy policy. How we handle search data, cookies, Scryfall API, and OpenAI. No personal data stored. GDPR-compliant.",
+  openGraph: {
+    title: "Privacy Policy | Find That Card",
+    description:
+      "How Find That Card handles your data, cookies, and third-party services. No personal data stored.",
+    url: "https://www.findthatcard.net/privacy",
+  },
 };
 
 export default function PrivacyPage() {

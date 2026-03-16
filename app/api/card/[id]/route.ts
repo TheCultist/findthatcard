@@ -3,7 +3,7 @@ import { CardDetailData } from "@/types/scryfall";
 
 const SCRYFALL_BASE_URL = "https://api.scryfall.com";
 const SCRYFALL_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthat.card)";
+  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 
 export async function GET(
   _request: NextRequest,

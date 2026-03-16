@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, FormEvent, useEffect, useCallback, useRef } from "react";
+import React, { useState, FormEvent, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ShieldCheckIcon, PaintBrushIcon, QueueListIcon } from "@heroicons/react/24/outline";
+import {
+  ShieldCheckIcon,
+  PaintBrushIcon,
+  QueueListIcon,
+  ChevronDownIcon,
+} from "@heroicons/react/24/outline";
 import { SearchResponse, ErrorResponse, CardResult } from "@/types/scryfall";
 import { getRandomExamples } from "@/lib/example-queries";
 import { getRandomProTip } from "@/lib/pro-tips";
@@ -74,6 +79,7 @@ export default function SearchPage() {
   const [sourceQuery, setSourceQuery] = useState("");
   const [isEditingQuery, setIsEditingQuery] = useState(false);
   const [selectedCard, setSelectedCard] = useState<CardResult | null>(null);
+  const [faqExpandedIndex, setFaqExpandedIndex] = useState<number | null>(null);
   const adBlockDetected = useAdBlockDetection();
 
   const getQueryFromUrl = useCallback(() => {
@@ -349,56 +355,166 @@ export default function SearchPage() {
 
         {/* Static intro content - hidden during search */}
         {!loading && !results && !editableQuery && (
-          <section className="mb-8 mt-6 text-base text-muted sm:mb-10 sm:mt-10">
-            <div className="mx-auto max-w-4xl text-center">
-              <p className="text-base font-medium text-foreground sm:text-lg">
-                Find That Card is a Magic: The Gathering search tool that lets you describe cards in
-                plain language.
+          <section
+            className="mb-8 mt-6 text-base text-muted sm:mb-10 sm:mt-10"
+            aria-labelledby="intro-heading"
+          >
+            <div className="mx-auto max-w-4xl">
+              <p
+                id="intro-heading"
+                className="text-center text-base font-medium text-foreground sm:text-lg"
+              >
+                No Scryfall syntax to memorize. Just describe what you want — the tool figures out
+                the query.
               </p>
-              <p className="mt-2 text-sm text-muted-soft">
-                Find That Card is a project by{" "}
+
+              {/* Feature cards — clickable example searches */}
+              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+                {[
+                  {
+                    icon: <ShieldCheckIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />,
+                    label: "Card intent",
+                    description: "Removal, ramp, tutors, tokens, or any role you can describe.",
+                    example: "Dimir removal spells",
+                  },
+                  {
+                    icon: <PaintBrushIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />,
+                    label: "Art and flavor",
+                    description: "Dragons, angels, swords, landscapes, or other artwork subjects.",
+                    example: "cards with dragon artwork",
+                  },
+                  {
+                    icon: <QueueListIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />,
+                    label: "Formats and rules",
+                    description: "Commander, Modern, Pauper, plus colors, keywords, and mechanics.",
+                    example: "Commander legal ramp under 3 mana",
+                  },
+                ].map(({ icon, label, description, example }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => handleChipClick(example)}
+                    className="group cursor-pointer rounded-xl border border-border bg-surface-muted px-4 py-4 text-left transition hover:border-accent/50 hover:bg-accent-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:rounded-2xl sm:px-6 sm:py-6"
+                  >
+                    <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-accent sm:mb-4 sm:h-12 sm:w-12">
+                      {icon}
+                    </div>
+                    <p className="text-center text-xs font-semibold uppercase tracking-wide text-muted sm:text-sm">
+                      {label}
+                    </p>
+                    <p className="mt-1.5 text-center text-sm leading-relaxed text-foreground sm:mt-2 sm:text-base">
+                      {description}
+                    </p>
+                    <p className="mt-2 text-center text-xs text-accent opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
+                      Try: {example} →
+                    </p>
+                  </button>
+                ))}
+              </div>
+
+              {/* How it works — standalone FAQ section */}
+              <section className="mt-8 sm:mt-10" aria-labelledby="faq-heading">
+                <h2
+                  id="faq-heading"
+                  className="mb-4 text-center text-xs font-semibold uppercase tracking-[0.15em] text-muted sm:mb-5 sm:text-sm"
+                >
+                  How it works
+                </h2>
+                <dl className="divide-y divide-border/50 rounded-2xl border border-border bg-surface-muted text-sm sm:text-base">
+                  {(
+                    [
+                      {
+                        q: "How do I find a Magic card I can't remember?",
+                        a: "Describe what you remember in plain English — a color, mechanic, artwork detail, or how it played. For example: \"blue instant that counters spells for 2 mana\", \"black creature with deathtouch and lifelink\", or \"art with a lighthouse\". The tool converts your description into a Scryfall query automatically.",
+                      },
+                      {
+                        q: "Can I search Commander, Modern, or Pauper cards?",
+                        a: "Yes. Include the format in your query and results are filtered by legality. For example: \"Commander legal ramp spells under 3 mana\", \"Modern removal instant\", or \"Pauper blue fliers\". Supported formats include Commander, Modern, Pauper, Standard, Pioneer, Legacy, Vintage, and more.",
+                      },
+                      {
+                        q: "Does it support Scryfall Tagger art and function tags?",
+                        a: (
+                          <>
+                            Yes — both in natural language and directly. Use{" "}
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">art:</code>{" "}
+                            for artwork subjects (e.g.{" "}
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">art:dragon</code>,{" "}
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">art:lighthouse</code>) and{" "}
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">function:</code>{" "}
+                            for card roles (e.g.{" "}
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">function:removal</code>,{" "}
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">function:card-advantage</code>). You can also just describe the art or role in plain language — "cards with dragon artwork" or "removal spells" both work.
+                          </>
+                        ),
+                      },
+                      {
+                        q: "Can I type Scryfall syntax directly?",
+                        a: (
+                          <>
+                            Yes. If your query looks like Scryfall syntax — e.g.{" "}
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">t:creature c:r cmc&lt;=3</code>{" "}
+                            or{" "}
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">name:"Sol Ring" game:paper</code>{" "}
+                            — it is passed directly to Scryfall without any conversion. You can also edit the generated query after a natural language search.
+                          </>
+                        ),
+                      },
+                      {
+                        q: "How do I search by color or color identity?",
+                        a: "Use color names, guild names, or shard/wedge names directly. For example: \"Dimir creatures\", \"Gruul aggro\", \"white and green ramp\", or \"Temur spells\". You can also specify \"exactly Rakdos\" vs \"including black and red\" if you need strict or inclusive color filtering.",
+                      },
+                    ] as { q: string; a: string | React.ReactNode }[]
+                  ).map((item, index) => {
+                    const isExpanded = faqExpandedIndex === index;
+                    return (
+                      <div key={index}>
+                        <dt>
+                          <button
+                            type="button"
+                            onClick={() => setFaqExpandedIndex(isExpanded ? null : index)}
+                            aria-expanded={isExpanded}
+                            aria-controls={`faq-answer-${index}`}
+                            id={`faq-question-${index}`}
+                            className={`flex w-full cursor-pointer items-center justify-between gap-4 px-5 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50 ${
+                              isExpanded
+                                ? "text-accent"
+                                : "text-foreground hover:bg-accent-muted/20 hover:text-accent"
+                            }`}
+                          >
+                            <span className="font-medium leading-snug">{item.q}</span>
+                            <ChevronDownIcon
+                              className={`h-4 w-4 flex-shrink-0 transition-transform duration-200 ${
+                                isExpanded ? "rotate-180 text-accent" : "text-muted"
+                              }`}
+                              aria-hidden="true"
+                            />
+                          </button>
+                        </dt>
+                        <dd
+                          id={`faq-answer-${index}`}
+                          role="region"
+                          aria-labelledby={`faq-question-${index}`}
+                          className="grid motion-safe:transition-[grid-template-rows] motion-safe:duration-200 motion-safe:ease-out"
+                          style={{ gridTemplateRows: isExpanded ? "1fr" : "0fr" }}
+                        >
+                          <div className="overflow-hidden">
+                            <div className="border-t border-border/50 px-5 py-4 leading-relaxed text-muted-soft">
+                              {item.a}
+                            </div>
+                          </div>
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              </section>
+
+              <p className="mt-5 text-center text-sm text-muted-soft">
+                Results are powered by Scryfall and updated in real time. A project by{" "}
                 <Link href="/about" className="text-accent hover:underline">
                   Cardboard Cultist
                 </Link>
                 .
-              </p>
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:mt-6 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-                <div className="rounded-xl border border-border bg-surface-muted px-4 py-4 transition hover:border-accent/50 hover:bg-accent-muted/30 sm:rounded-2xl sm:px-6 sm:py-6">
-                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-accent sm:mb-4 sm:h-12 sm:w-12">
-                    <ShieldCheckIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
-                  </div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted sm:text-sm">
-                    Card intent
-                  </p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-foreground sm:mt-2 sm:text-base">
-                    Removal, ramp, tutors, tokens, or any role you can describe.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-border bg-surface-muted px-4 py-4 transition hover:border-accent/50 hover:bg-accent-muted/30 sm:rounded-2xl sm:px-6 sm:py-6">
-                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-accent sm:mb-4 sm:h-12 sm:w-12">
-                    <PaintBrushIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
-                  </div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted sm:text-sm">
-                    Art and flavor
-                  </p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-foreground sm:mt-2 sm:text-base">
-                    Dragons, angels, swords, landscapes, or other artwork subjects.
-                  </p>
-                </div>
-                <div className="rounded-xl border border-border bg-surface-muted px-4 py-4 transition hover:border-accent/50 hover:bg-accent-muted/30 sm:rounded-2xl sm:px-6 sm:py-6">
-                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-accent sm:mb-4 sm:h-12 sm:w-12">
-                    <QueueListIcon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
-                  </div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted sm:text-sm">
-                    Formats and rules
-                  </p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-foreground sm:mt-2 sm:text-base">
-                    Commander, Modern, Pauper, plus colors, keywords, and mechanics.
-                  </p>
-                </div>
-              </div>
-              <p className="mt-5 text-sm text-muted-soft">
-                Results are powered by Scryfall and updated in real time.
               </p>
             </div>
           </section>
@@ -414,7 +530,7 @@ export default function SearchPage() {
                   <br />
                   <span className="text-sm text-muted-soft">
                     A single, non-intrusive ad helps keep this site free. Please consider whitelisting{" "}
-                    <span className="font-medium text-muted">findthat.card</span> in your ad blocker.
+                    <span className="font-medium text-muted">findthatcard.net</span> in your ad blocker.
                   </span>
                 </p>
               </div>

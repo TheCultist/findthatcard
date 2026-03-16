@@ -35,7 +35,7 @@ export type SetFilter = {
 
 const SCRYFALL_SETS_URL = "https://api.scryfall.com/sets";
 const SCRYFALL_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthat.card)";
+  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 const SETS_FILE_PATH = path.join(getCacheDir(), "scryfall-sets.json");
 
 let setCache: ScryfallSetEntry[] | null = null;

@@ -9,6 +9,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1.0,
     },
     {
+      url: "https://www.findthatcard.net/search",
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 0.9,
+    },
+    {
       url: "https://www.findthatcard.net/about",
       lastModified: new Date(),
       changeFrequency: "monthly",

@@ -6,7 +6,13 @@ import ThemeToggle from "@/app/components/ThemeToggle";
 export const metadata: Metadata = {
   title: "About",
   description:
-    "Meet the creator behind Find That Card — a natural language search tool for Magic: The Gathering cards by Cardboard Cultist.",
+    "Meet Cardboard Cultist, creator of Find That Card — the free MTG card search that turns natural language into Scryfall queries. Commander, art tags, and more.",
+  openGraph: {
+    title: "About | Find That Card - MTG Card Search",
+    description:
+      "Meet Cardboard Cultist, creator of Find That Card — the free MTG card search that turns natural language into Scryfall queries.",
+    url: "https://www.findthatcard.net/about",
+  },
 };
 
 export default function AboutPage() {

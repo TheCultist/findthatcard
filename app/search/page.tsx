@@ -9,7 +9,7 @@ type SearchPageProps = {
 };
 
 const defaultDescription =
-  "Search Magic: The Gathering cards using natural language. Supports art and function tags from Scryfall Tagger.";
+  "Find MTG cards by describing them in plain English. Commander, Modern, Pauper. Art tags, function tags, natural language. Free — powered by Scryfall.";
 
 const buildMetadata = (query: string): Metadata => {
   const cleaned = query.trim();

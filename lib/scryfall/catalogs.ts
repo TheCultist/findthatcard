@@ -34,7 +34,7 @@ type CatalogCacheFile = {
 };
 
 const SCRYFALL_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthat.card)";
+  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 
 const CATALOGS_FILE_PATH = path.join(getCacheDir(), "scryfall-catalogs.json");
 
