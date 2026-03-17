@@ -1704,7 +1704,11 @@ function applyOracleIntentHeuristics(
       /\b(?:when(?:ever)?|if)\s+(?:a\s+|an\s+|another\s+|the\s+|any\s+)?([a-z][a-z-]*)\s+(?:enters?|leaves?)\b/i
     );
     const triggerType = typeMatch ? (typeMatch[1] ?? "").toLowerCase() : null;
-    const ignoredTypes = new Set(["permanent", "card", "it", "this", "that"]);
+    const ignoredTypes = new Set([
+      "permanent", "card", "it", "this", "that",
+      "they", "them", "their", "these", "those", "we", "us",
+      "you", "your", "all", "any",
+    ]);
     const cardType = triggerType && !ignoredTypes.has(triggerType) ? triggerType : null;
 
     // "etb-other-creature" covers cards that trigger when another/a creature enters.
@@ -1758,7 +1762,12 @@ function applyOracleIntentHeuristics(
       /\b(?:when(?:ever)?|if)\s+(?:a\s+|an\s+|another\s+|the\s+|any\s+)?([a-z][a-z-]*)\s+leaves?\b/i
     );
     const triggerType = typeMatch ? (typeMatch[1] ?? "").toLowerCase() : null;
-    const ignoredTypes = new Set(["permanent", "card", "it", "this", "that"]);
+    // Ignore generic pronouns and vague nouns — they don't add useful oracle text filters.
+    const ignoredTypes = new Set([
+      "permanent", "card", "it", "this", "that",
+      "they", "them", "their", "these", "those", "we", "us",
+      "you", "your", "all", "any",
+    ]);
     const cardType = triggerType && !ignoredTypes.has(triggerType) ? triggerType : null;
 
     // Dynamically look up the most specific "leaves-<zone>-trigger" tag from
@@ -1941,6 +1950,34 @@ function detectFunctionConceptClauses(
   const clauses: QueryClause[] = [];
   const strippedTerms: string[] = [];
   const lower = naturalQuery.toLowerCase();
+
+  // Artifact token creation — "make food", "create treasure", "produce clues", etc.
+  // These are token-creation patterns, NOT keyword grants. Emitting o:"food token" is
+  // more precise than o:food (which also matches sacrifice-food effects, etc.).
+  {
+    const ARTIFACT_TOKEN_TYPES: Record<string, string> = {
+      food: "food token",
+      treasure: "treasure token",
+      clue: "clue token",
+      blood: "blood token",
+      map: "map token",
+      powerstone: "powerstone token",
+    };
+    const CREATE_VERBS =
+      "make[sd]?|creates?|creating|produces?|producing|generates?|generating|get[sd]?|gain[sd]?";
+    for (const [tokenType, oraclePhrase] of Object.entries(ARTIFACT_TOKEN_TYPES)) {
+      const pat = new RegExp(
+        `\\b((?:${CREATE_VERBS})\\s+(?:(?:a|an|some|more|extra|free|additional)\\s+)*)${tokenType}s?\\b`,
+        "i"
+      );
+      const m = lower.match(pat);
+      if (!m) continue;
+      clauses.push({ value: `o:"${oraclePhrase}"`, source: "phase1:oracle" });
+      // Strip the full matched phrase (verb + optional article + token type word)
+      const phraseWords = m[0].toLowerCase().match(/[a-z]+/g) ?? [];
+      strippedTerms.push(...phraseWords, tokenType, `${tokenType}s`);
+    }
+  }
 
   // Cantrip — spells that replace themselves by drawing a card.
   // Must be checked before the draw-engine archetype to prevent over-broad draw tags.
@@ -3633,11 +3670,20 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       "(?:(?:your|all|each|every|other|others|target|a|an|any|friendly)\\s+)?(?:(?:creatures?|permanents?|things?|cards?|tokens?)\\s+)?";
 
     if (GRANT_VERBS.test(correctedQuery)) {
+      // These Scryfall catalog "keywords" are actually MTG token types — cards don't grant
+      // them to other cards, they CREATE tokens of that type.  Skip them here so that
+      // "make food" doesn't produce the spurious o:food; the artifact-token-creation block
+      // in detectFunctionConceptClauses handles these with the precise o:"food token" form.
+      const CREATION_ONLY_KEYWORDS = new Set([
+        "food", "treasure", "clue", "blood", "map", "powerstone",
+      ]);
       // Sort longest keywords first so multi-word variants ("first strike") win over "strike"
       const sortedKeywords = [...keywordList].sort((a, b) => b.length - a.length);
       const alreadyMatched = new Set<string>();
       for (const kw of sortedKeywords) {
         const kwLower = kw.toLowerCase();
+        // Skip token-type keywords — they are creation targets, not grantable abilities.
+        if (CREATION_ONLY_KEYWORDS.has(kwLower)) continue;
         // Skip if a longer keyword already covered this word (e.g. skip "strike" once "first strike" matched)
         if ([...alreadyMatched].some((m) => m.includes(kwLower))) continue;
 
