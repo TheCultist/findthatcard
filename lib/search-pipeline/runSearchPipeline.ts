@@ -4,8 +4,7 @@ import { parseNaturalQuery } from "@/lib/search-pipeline/phase1/parseNaturalQuer
 import { runPhase1_5, shouldRunPhase1_5 } from "@/lib/search-pipeline/phase1_5/structuredExtraction";
 import { resolveUnresolvedFragments } from "@/lib/search-pipeline/phase2/resolveUnresolvedFragments";
 import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
-import { resolveArtLikeCardsQuery, resolveSimilarCardsQuery } from "@/lib/search-pipeline/similar-cards";
-import { resolveSynergyQuery } from "@/lib/search-pipeline/synergy-cards";
+import { resolveIntentClauses } from "@/lib/search-pipeline/resolveIntentClauses";
 import {
   EFFECTIVE_MAX_QUERY_LENGTH,
   PREFER_BEST_PREFIX,
@@ -44,23 +43,6 @@ function logPipelineSummary(args: {
     lines.push(`  after Phase 3: "${args.afterPhase3}"`);
   }
   console.log(lines.join("\n"));
-}
-
-function dropContradictoryNameClauses(phase1: Awaited<ReturnType<typeof parseNaturalQuery>>, query: string): void {
-  const excluded = new Set<string>();
-  let match: RegExpExecArray | null;
-  const excludedNamePattern = /-name:"([^"]+)"/gi;
-  while ((match = excludedNamePattern.exec(query)) !== null) {
-    const name = (match[1] || "").trim().toLowerCase();
-    if (name) excluded.add(name);
-  }
-  if (excluded.size === 0) return;
-
-  phase1.mustClauses = phase1.mustClauses.filter((clause) => {
-    const m = /^\s*name:"([^"]+)"\s*$/i.exec(clause.value);
-    if (!m) return true;
-    return !excluded.has((m[1] || "").trim().toLowerCase());
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +159,7 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
   if (branches.length > 1) {
     const compoundResult = await runCompoundPipeline(naturalQuery, phase0, branches);
     if (compoundResult) return compoundResult;
-    // Falls through to single pipeline if compound was aborted (bypass intent in a branch).
+    // Falls through to single pipeline if compound was aborted (named-card intent in a branch).
   }
 
   const phase1 = await parseNaturalQuery(phase0.normalized);
@@ -185,45 +167,10 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
   // Propagate Phase 0 status into the IR so downstream logging can see it.
   phase1.debug.phase0Normalized = phase0.didNormalize;
 
-  // Resolve bypass intents: inject their output as a must-clause wrapped in
-  // parens so any extra user constraints (e.g. -t:instant) apply globally.
-  // The flow then continues to Phase 2/3 for fragment resolution + finalization.
-  if (phase1.intent === "similar-cards" && phase1.similarToCardName) {
-    const similarQuery = await resolveSimilarCardsQuery(phase1.similarToCardName);
-    if (similarQuery) {
-      dropContradictoryNameClauses(phase1, similarQuery);
-      phase1.mustClauses.unshift({ value: `(${similarQuery})`, source: "phase1:direct" });
-    } else {
-      phase1.mustClauses.unshift({ value: `name:"${phase1.similarToCardName}"`, source: "phase1:cardname" });
-    }
-  }
-
-  if (phase1.intent === "art-like-cards" && phase1.artLikeCardName) {
-    const artQuery = await resolveArtLikeCardsQuery(phase1.artLikeCardName);
-    if (artQuery) {
-      dropContradictoryNameClauses(phase1, artQuery);
-      phase1.mustClauses.unshift({ value: `(${artQuery})`, source: "phase1:direct" });
-    } else {
-      phase1.mustClauses.unshift({ value: `name:"${phase1.artLikeCardName}"`, source: "phase1:cardname" });
-    }
-  }
-
-  if (phase1.intent === "synergy-with-card" && phase1.synergyWithCardName) {
-    const synergyResult = await resolveSynergyQuery(phase1.synergyWithCardName);
-    if (synergyResult) {
-      dropContradictoryNameClauses(phase1, synergyResult.query);
-      // Inject the synergy query without extra wrapping parens — it is already sanitized.
-      phase1.mustClauses.unshift({ value: synergyResult.query, source: "phase1:direct" });
-      // Inject color identity only if the user hasn't already specified one explicitly.
-      const hasExplicitColorId = phase1.mustClauses.some((c) => /^id[:=<>]/.test(c.value));
-      if (synergyResult.colorIdentity && !hasExplicitColorId) {
-        phase1.mustClauses.push({ value: `id:${synergyResult.colorIdentity}`, source: "phase1:direct" });
-      }
-      phase1.debug.aiBatchCalls += 1;
-    } else {
-      phase1.mustClauses.unshift({ value: `name:"${phase1.synergyWithCardName}"`, source: "phase1:cardname" });
-    }
-  }
+  // Intent resolver — fetches card-specific Tagger/LLM data and injects it as
+  // a mustClause so the remaining phases (1.5, 2, 3) can apply any extra
+  // user constraints on top.  No-ops for search/commander intents.
+  await resolveIntentClauses(phase1);
 
   // Phase 1.5 — Structured AI extraction for unresolved numeric/rarity/year fragments.
   // Runs only when Phase 1 left fragments that carry concrete game-mechanic intent.
@@ -274,11 +221,13 @@ async function runCompoundPipeline(
   // Phase 1 for all branches (parallel)
   const phase1Results = await Promise.all(branches.map((b) => parseNaturalQuery(b)));
 
-  // If any branch detected a bypass intent, abort compound mode.
-  const hasBypass = phase1Results.some(
+  // If any branch carries a named-card intent (similar/art-like/synergy), abort
+  // compound mode — an intent resolver produces a self-contained query that
+  // cannot be OR-combined with other branches.
+  const hasNamedCardIntent = phase1Results.some(
     (p) => p.intent !== "search" && p.intent !== "commander-deck" && p.intent !== "commander-creature"
   );
-  if (hasBypass) return null;
+  if (hasNamedCardIntent) return null;
 
   // Phase 1.5 for all branches (parallel) — structured AI extraction
   await Promise.all(

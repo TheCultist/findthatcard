@@ -17,6 +17,7 @@ export type ClauseSource =
   | "phase1:is-flag"
   | "phase1:removal-target"
   | "phase1:direct"
+  | "phase1:intent"   // clauses injected by the intent resolver (similar-cards, art-like-cards, synergy-with-card)
   | "phase2:resolver"
   | "phase3:sanitize";
 

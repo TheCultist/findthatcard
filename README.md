@@ -57,7 +57,7 @@ Queries go through a five-phase pipeline before hitting Scryfall:
 
 5. **Phase 3 — Finalization**: Post-processing injects archetype tags, suppresses redundant type filters, adds game filters, and validates the assembled query.
 
-6. **Bypasses**: Queries detected as "find cards similar to X" or "cards with art like X" skip phases 1–3 and go through dedicated resolvers using Tagger GraphQL data.
+6. **Intent resolver**: When Phase 1 detects a named-card intent ("find cards similar to X", "art like X", "synergy with X"), `resolveIntentClauses.ts` fetches card-specific data (Tagger relationship graph, illustration tags, or an LLM synergy query) and injects the result as a `mustClause`. The query then continues through Phase 1.5, 2, and 3 — so any additional constraints the user appended (e.g. "…that aren't instants", "…in Modern") are still applied.
 
 ### Query Assembly
 
@@ -169,7 +169,8 @@ findthatcard/
 ├── lib/
 │   ├── search-pipeline/
 │   │   ├── types.ts                # IR types: SearchPipelineIR, QueryIntent, etc.
-│   │   ├── runSearchPipeline.ts    # Orchestrates Phase 0–1.5–2–3 + bypasses
+│   │   ├── runSearchPipeline.ts    # Orchestrates Phase 0–1.5–2–3 + intent resolver
+│   │   ├── resolveIntentClauses.ts # Intent resolver: similar/art-like/synergy named-card intents
 │   │   ├── assembleQuery.ts        # IR → Scryfall query string
 │   │   ├── similar-cards.ts        # Similar-card and art-like resolvers
 │   │   ├── phase0/normalizeQuery.ts
