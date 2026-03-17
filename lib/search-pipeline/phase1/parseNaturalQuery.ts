@@ -3324,7 +3324,11 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     const wantsCommanderCreature =
       /\b(?:a\s+)?(?:easy\s+)?commander\b|\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b|\bcan\s+be\s+commanders?\b|\bcommanders\b/i.test(
         naturalQuery
-      ) && !/\b(?:for|in)\s+commanders\b/i.test(naturalQuery);
+      ) &&
+      !/\b(?:for|in)\s+commanders\b/i.test(naturalQuery) &&
+      // Exclude mechanic phrases — "commander's tax/damage/ninjutsu/eminence" refers to
+      // game mechanics, not commander creatures.
+      !/\bcommander[''s]*\s+(?:tax|damage|ninjutsu|eminence|storm)\b/i.test(naturalQuery);
     if (wantsCommanderCreature) {
       mustClauses.push({ value: "is:commander", source: "phase1:commander" });
       strippedTerms.push("commander", "commanders");

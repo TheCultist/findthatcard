@@ -285,7 +285,10 @@ function normalizeCommanderIntent(naturalQuery: string, query: string): string {
     !multipleFormats &&
     /\b(commanders?|commander cards?|commander creatures?|can be commanders?)\b/i.test(lower) &&
     !wantsCommanderFormat &&
-    !myCommanderDeck;
+    !myCommanderDeck &&
+    // Exclude mechanic phrases — "commander's tax/damage/ninjutsu/eminence" refers to
+    // game mechanics, not commander creatures.
+    !/\bcommander[''s]*\s+(?:tax|damage|ninjutsu|eminence|storm)\b/i.test(lower);
 
   let updated = query;
 
