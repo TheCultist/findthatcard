@@ -36,23 +36,28 @@ A Magic: The Gathering card search tool that converts natural language queries i
 
 ### Search Pipeline
 
-Queries go through a multi-phase pipeline before hitting Scryfall:
+Queries go through a five-phase pipeline before hitting Scryfall:
 
-1. **Phase 0 — Normalization** *(optional)*: An LLM call detects structurally ambiguous queries (e.g., missing connectors like "and/or") and rewrites them into unambiguous form. Most queries skip this phase.
+1. **Phase 0 — Normalization** *(optional, LLM)*: Detects structurally ambiguous queries (e.g. missing connectors) and rewrites them. Most queries skip this phase entirely.
 
-2. **Phase 1 — Deterministic NLP Parser**: A large rule-based parser handles the majority of queries without any LLM calls. It extracts:
-   - Colors and color identities (including 2- and 3-color guild/shard/wedge names)
+2. **Phase 1 — Deterministic NLP Parser** *(no LLM)*: A frozen, rule-based parser handles the majority of queries without any AI calls. It extracts:
+   - Colors and color identities (including guild/shard/wedge/nephilim names)
    - Formats (Standard, Modern, Commander, Pauper, etc.)
    - Card types and subtypes (matched against live Scryfall catalog indexes)
    - MTG keyword abilities (Flying, Trample, etc.) with synonym expansion
    - Tagger function/art tags via strategy expansions
-   - Artist names, set names, and CMC filters
+   - Artist names, set names, and CMC/stat filters
+   - Named land cycles, IS-flags (MDFC, adventure, etc.), and explicit action verbs
 
-3. **Phase 2 — Fragment Resolver** *(LLM, optional)*: Any parts of the query that Phase 1 couldn't parse become "unresolved fragments" and are sent to an LLM with a focused resolver prompt. Results are merged back into the IR.
+   Phase 1 is **intentionally frozen** — new colloquial patterns are handled in Phase 1.5, not by expanding this parser.
 
-4. **Phase 3 — Finalization**: Post-processing injects archetype tags, suppresses redundant type filters, adds game filters, and validates the assembled query.
+3. **Phase 1.5 — Structured AI Extraction** *(LLM, optional)*: Runs only when concrete numeric, rarity, or year-phrase fragments remain after Phase 1. Unlike Phase 2, this phase asks the AI a **narrow, schema-constrained question** ("what are the exact stat/rarity/year values in this text?") and validates the output before injecting it as first-class IR clauses. This replaces the old approach of adding ever-more regex to Phase 1.
 
-5. **Bypasses**: Queries detected as "find cards similar to X" or "cards with art like X" skip the pipeline and go through dedicated resolvers that use Tagger GraphQL data.
+4. **Phase 2 — Fragment Resolver** *(LLM, optional)*: Any vibe/strategy/abstract fragments remaining after Phase 1.5 are sent to the AI with a focused resolver prompt. It answers "what Scryfall tags match this theme?" Results are merged back into the IR.
+
+5. **Phase 3 — Finalization**: Post-processing injects archetype tags, suppresses redundant type filters, adds game filters, and validates the assembled query.
+
+6. **Bypasses**: Queries detected as "find cards similar to X" or "cards with art like X" skip phases 1–3 and go through dedicated resolvers using Tagger GraphQL data.
 
 ### Query Assembly
 
@@ -164,11 +169,20 @@ findthatcard/
 ├── lib/
 │   ├── search-pipeline/
 │   │   ├── types.ts                # IR types: SearchPipelineIR, QueryIntent, etc.
-│   │   ├── runSearchPipeline.ts    # Orchestrates Phase 0–3 + bypasses
+│   │   ├── runSearchPipeline.ts    # Orchestrates Phase 0–1.5–2–3 + bypasses
 │   │   ├── assembleQuery.ts        # IR → Scryfall query string
 │   │   ├── similar-cards.ts        # Similar-card and art-like resolvers
 │   │   ├── phase0/normalizeQuery.ts
-│   │   ├── phase1/parseNaturalQuery.ts   # ~3000-line deterministic NLP parser
+│   │   ├── phase1/                 # Deterministic NLP parser (FROZEN — do not expand)
+│   │   │   ├── parseNaturalQuery.ts    # Main parser entry point
+│   │   │   ├── constants.ts            # Shared token lists and maps
+│   │   │   ├── resolveStats.ts         # Numeric stat filter resolution
+│   │   │   ├── resolveRarity.ts        # Rarity filter resolution
+│   │   │   ├── isFlags.ts              # Card face / layout IS-flag detection
+│   │   │   ├── landCycles.ts           # Named land cycle detection
+│   │   │   └── actionRules.ts          # Explicit MTG action verb detection
+│   │   ├── phase1_5/
+│   │   │   └── structuredExtraction.ts # AI structured extraction for stat/rarity/year
 │   │   ├── phase2/
 │   │   │   ├── buildResolverPrompt.ts
 │   │   │   └── resolveUnresolvedFragments.ts

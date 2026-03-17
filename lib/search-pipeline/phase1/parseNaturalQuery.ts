@@ -17,264 +17,29 @@ import { ensureTaggerTagCache, getTaggerTagCache } from "@/lib/tagger/cache";
 import { findFunctionTagBySegments } from "@/lib/tagger/context";
 import { escapeRegex, normalizeWhitespace, levenshteinDistance } from "@/lib/utils/text";
 import { ClauseSource, Phase1Result, QueryClause, QueryIntent, ResolverCategory, UnresolvedFragment } from "@/lib/search-pipeline/types";
+import {
+  FORMAT_TOKENS,
+  TYPE_TOKENS,
+  COLOR_IDENTITY,
+  SINGLE_COLOR_NAMES,
+  STOPWORDS,
+  WORD_TO_NUMBER,
+  COMPARISON_OP_PATTERNS,
+  RARITY_NAME_TO_CODE,
+} from "./constants";
+import { resolveNumericStatFilters, textToComparisonOp, wordOrDigitToNumber } from "./resolveStats";
+import { resolveRarityFilter } from "./resolveRarity";
+import { applyIsFlagRules } from "./isFlags";
+import { applyLandCycleRules } from "./landCycles";
+import { applyExplicitActionRules } from "./actionRules";
 
-const FORMAT_TOKENS = [
-  "standard",
-  "modern",
-  "legacy",
-  "vintage",
-  "pioneer",
-  "pauper",
-  "commander",
-  "brawl",
-] as const;
+// Constants and stat/rarity helpers are imported from dedicated modules above.
+// See phase1/constants.ts, phase1/resolveStats.ts, phase1/resolveRarity.ts.
 
-const TYPE_TOKENS = [
-  "creature",
-  "artifact",
-  "enchantment",
-  "instant",
-  "sorcery",
-  "planeswalker",
-  "land",
-  "battle",
-] as const;
-
-const COLOR_IDENTITY: Record<string, string> = {
-  white: "w",
-  blue: "u",
-  black: "b",
-  red: "r",
-  green: "g",
-  azorius: "wu",
-  dimir: "ub",
-  rakdos: "br",
-  gruul: "rg",
-  selesnya: "gw",
-  orzhov: "wb",
-  izzet: "ur",
-  golgari: "bg",
-  boros: "rw",
-  simic: "gu",
-  esper: "wub",
-  grixis: "ubr",
-  jund: "brg",
-  naya: "rgw",
-  bant: "guw",
-  abzan: "wbg",
-  jeskai: "urw",
-  sultai: "bug",
-  mardu: "brw",
-  temur: "urg",
-  // 4-color identities — nephilim names, popular commander names, and "non-X" shorthands
-  // WUBR (no green)
-  "yore-tiller": "wubr",
-  breya: "wubr",
-  "non-green": "wubr",
-  nongreen: "wubr",
-  // WUBG (no red)
-  "witch-maw": "wubg",
-  atraxa: "wubg",
-  "non-red": "wubg",
-  nonred: "wubg",
-  // WBRG (no blue)
-  "dune-brood": "wbrg",
-  saskia: "wbrg",
-  "non-blue": "wbrg",
-  nonblue: "wbrg",
-  // UBRG (no white)
-  "glint-eye": "ubrg",
-  yidris: "ubrg",
-  "non-white": "ubrg",
-  nonwhite: "ubrg",
-  // WURG (no black)
-  "ink-treader": "wurg",
-  kynaios: "wurg",
-  "non-black": "wurg",
-  nonblack: "wurg",
-  // 5-color
-  "5 color": "wubrg",
-  fivecolor: "wubrg",
-  fivecolors: "wubrg",
-  // Colorless — Scryfall uses "c" as the colorless identity indicator
-  colorless: "c",
-};
-
-const SINGLE_COLOR_NAMES = new Set(["white", "blue", "black", "red", "green", "colorless"]);
-
-const STOPWORDS = new Set([
-  "a",
-  "an",
-  "the",
-  "for",
-  "to",
-  "from",
-  "with",
-  "without",
-  "of",
-  "in",
-  "on",
-  "that",
-  "which",
-  "cards",
-  "card",
-  "best",
-  "good",
-  "great",
-  "strong",
-  "easy",
-  "simple",
-  "want",
-  "need",
-  "find",
-  "show",
-  "me",
-  "please",
-  "you",
-  "your",
-  "yours",
-  "it",
-  "its",
-  "when",
-  "this",
-  "these",
-  "those",
-  "they",
-  "them",
-  "their",
-  "set",
-  "sets",
-  "edition",
-  "editions",
-  "printing",
-  "printings",
-  "legal",
-  "illegal",
-  "playable",
-  "other",
-  "others",
-  "both",
-  "also",
-  "any",
-  "some",
-  "all",
-  "most",
-  "every",
-  "are",
-  "can",
-  "could",
-  "would",
-  "should",
-  "have",
-  "has",
-  "had",
-  "been",
-  "being",
-  "about",
-  "like",
-  "or",
-  "and",
-  "but",
-  "not",
-  "nor",
-  "yet",
-  "so",
-  "either",
-  "neither",
-  "versus",
-  "vs",
-  // Modal / auxiliary verbs missing from the original list.
-  // "will" is a Planeswalker subtype (Will Kenrith) and gets matched by the
-  // subtype catalog when it appears as an auxiliary verb ("that will make…").
-  "will",
-  "shall",
-  "did",
-  "does",
-  "do",
-  "might",
-  "may",
-  // Conversational social pronouns that carry no card-search meaning.
-  "everyone",
-  "someone",
-  "anybody",
-  "anybody",
-  "nobody",
-  "somebody",
-  "ourselves",
-  "themselves",
-  "myself",
-  "yourself",
-  // Common filler adjectives / adverbs in casual phrasing.
-  "really",
-  "super",
-  "very",
-  "totally",
-  "absolutely",
-  "pretty",
-  "quite",
-  "actually",
-  "basically",
-  "literally",
-  // Vibe / mood descriptors — describe desired game feel, not a Scryfall filter.
-  // "funny" in NL means "entertaining effect", NOT is:funny (Un-set/acorn cards).
-  "funny",
-  "fun",
-  "cool",
-  "hilarious",
-  "crazy",
-  "insane",
-  "wild",
-  "broken",
-  "busted",
-  "op",
-  "overpowered",
-  "underrated",
-  "underplayed",
-  "spicy",
-  "spice",
-  "unique",
-  "interesting",
-  "weird",
-  "strange",
-  "unusual",
-  "powerful",
-  "epic",
-  "awesome",
-]);
-
-const WORD_TO_NUMBER: Record<string, number> = {
-  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5,
-  six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
-  eleven: 11, twelve: 12,
-};
-
-const COMPARISON_OP_PATTERNS: Array<[RegExp, string]> = [
-  [/less\s+than|fewer\s+than|below/i, "<"],
-  [/more\s+than|greater\s+than|above|higher\s+than/i, ">"],
-  [/at\s+most|at\s+max(?:imum)?|or\s+(?:less|fewer)|up\s+to|no\s+more\s+than/i, "<="],
-  [/at\s+least|at\s+min(?:imum)?|or\s+(?:more|greater)|no\s+less\s+than/i, ">="],
-  [/equal(?:\s+to)?|exactly/i, "="],
-];
-
-function textToComparisonOp(text: string): string | null {
-  for (const [re, op] of COMPARISON_OP_PATTERNS) {
-    if (re.test(text)) return op;
-  }
-  return null;
-}
-
-function wordOrDigitToNumber(s: string): number | null {
-  const t = s.trim().toLowerCase();
-  if (/^\d+$/.test(t)) return parseInt(t, 10);
-  return WORD_TO_NUMBER[t] ?? null;
-}
-
-/**
- * Parses natural language numeric stat comparisons (mana value, power, toughness, loyalty)
- * and returns the corresponding Scryfall filter clauses.
- * Examples: "mana value less than 2" → mv<2, "3-drop" → mv=3, "power greater than 4" → pow>4
- */
-function resolveNumericStatFilters(naturalQuery: string): {
+// resolveNumericStatFilters moved to ./resolveStats — imported above
+// Placeholder so the old function body parse does not break downstream:
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _dead_resolveNumericStatFilters(naturalQuery: string): {
   clauses: QueryClause[];
   strippedTerms: string[];
 } {
@@ -518,13 +283,7 @@ function resolveNumericStatFilters(naturalQuery: string): {
   return { clauses, strippedTerms };
 }
 
-const RARITY_NAME_TO_CODE: Record<string, string> = {
-  common: "c",
-  uncommon: "u",
-  rare: "r",
-  mythic: "m",
-  "mythic rare": "m",
-};
+// RARITY_NAME_TO_CODE moved to ./constants
 
 /**
  * Parses natural-language rarity filters and returns Scryfall r: clauses.
@@ -536,7 +295,9 @@ const RARITY_NAME_TO_CODE: Record<string, string> = {
  *   "rarity mythic rare"       → r:m
  *   "rare+"                    → r>=r
  */
-function resolveRarityFilter(naturalQuery: string): {
+// resolveRarityFilter is now imported from ./resolveRarity
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _resolveRarityFilter_DELETED(naturalQuery: string): {
   clauses: QueryClause[];
   strippedTerms: string[];
 } {
@@ -3856,256 +3617,37 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   mustNotClauses.push(...aversionResult.mustNotClauses);
   strippedTerms.push(...aversionResult.strippedTerms);
 
-  // --- Explicit MTG action verb detection ---
-  // When the user names a specific game action (exile, destroy, counter, bounce),
-  // emit oracle text directly so the exact method is preserved. This prevents the
-  // verb fragment from reaching phase 2 where it collapses into a broad removal
-  // archetype that ignores the specific method the user asked for.
+  // --- Explicit MTG action verb detection (delegated to actionRules module) ---
   {
-    const EXPLICIT_ACTION_RULES: Array<{
-      detect: RegExp;
-      oracle: string[];
-      strip: string[];
-    }> = [
-      {
-        // "exile a creature", "that exiles target permanent", "to exile each artifact"
-        detect:
-          /\b(?:that\s+|to\s+|can\s+|will\s+|would\s+)?exiles?\s+(?:a\s+|an\s+|target\s+|each\s+|all\s+|any\s+)?(?:creature|permanent|artifact|enchantment|land|card|spell|token|planeswalker)s?\b/i,
-        oracle: ["o:exile"],
-        strip: ["exile", "exiles"],
-      },
-      {
-        // "destroy a creature", "that destroys target artifact"
-        detect:
-          /\b(?:that\s+|to\s+|can\s+|will\s+|would\s+)?destroys?\s+(?:a\s+|an\s+|target\s+|each\s+|all\s+|any\s+)?(?:creature|permanent|artifact|enchantment|land|card|token|planeswalker)s?\b/i,
-        oracle: ["o:destroy"],
-        strip: ["destroy", "destroys"],
-      },
-      {
-        // "counter a spell", "that counters target ability"
-        detect:
-          /\b(?:that\s+|to\s+|can\s+)?counters?\s+(?:a\s+|an?\s+|target\s+)?(?:spell|ability)s?\b/i,
-        oracle: ["o:counter"],
-        strip: ["counter", "counters"],
-      },
-      {
-        // "bounce a creature", "bounces target permanent"
-        detect:
-          /\bbounce[sd]?\s+(?:a\s+|an?\s+|target\s+|each\s+|all\s+|any\s+)?(?:creature|permanent|artifact|enchantment|land|token)s?\b/i,
-        oracle: ["o:return", "o:hand"],
-        strip: ["bounce", "bounces", "bounced"],
-      },
-    ];
-
-    for (const rule of EXPLICIT_ACTION_RULES) {
-      if (!rule.detect.test(naturalQuery)) continue;
-      for (const oracleValue of rule.oracle) {
-        if (!mustClauses.some((c) => c.value === oracleValue)) {
-          mustClauses.push({ value: oracleValue, source: "phase1:oracle" });
-        }
+    const actionResult = applyExplicitActionRules(naturalQuery);
+    for (const clause of actionResult.clauses) {
+      if (!mustClauses.some((c) => c.value === clause.value)) {
+        mustClauses.push(clause);
       }
-      strippedTerms.push(...rule.strip);
     }
+    strippedTerms.push(...actionResult.strippedTerms);
   }
 
-  // --- Card face / layout IS-flag detection ---
-  // Specific abbreviations and layout terms that map unambiguously to Scryfall
-  // is: flags. Handled deterministically so they never reach the AI as fragments.
+  // --- Card face / layout IS-flag detection (delegated to isFlags module) ---
   {
-    const IS_FLAG_RULES: Array<{
-      detect: RegExp;
-      flag: string;
-      strip: string[];
-    }> = [
-      {
-        // "mdfc", "modal double-faced", "double-faced modal"
-        detect: /\b(?:mdfc|modal\s+double[-\s]faced|double[-\s]faced\s+modal)\b/i,
-        flag: "is:mdfc",
-        strip: ["mdfc", "modal double-faced", "double faced modal", "modal", "double-faced", "double faced"],
-      },
-      {
-        // "tdfc", "transform double-faced", "transforming double-faced"
-        detect: /\b(?:tdfc|transform(?:ing)?\s+double[-\s]faced|double[-\s]faced\s+transform(?:ing)?)\b/i,
-        flag: "is:tdfc",
-        strip: ["tdfc", "transform double-faced", "transforming double-faced", "double faced transform"],
-      },
-      {
-        // "dfc", "double-faced card(s)" — generic, catches both tdfc and mdfc
-        // Disqualify when a more specific term (mdfc/tdfc) was already detected
-        detect: /\b(?:dfc|double[-\s]faced\s+cards?)\b/i,
-        flag: "is:dfc",
-        strip: ["dfc", "double-faced card", "double faced card", "double-faced cards", "double faced cards"],
-      },
-      {
-        // "meld card(s)", "is meld", "are meld"
-        detect: /\b(?:meld\s+cards?|(?:is|are)\s+(?:a\s+)?meld)\b/i,
-        flag: "is:meld",
-        strip: ["meld"],
-      },
-      {
-        // "split card(s)"
-        detect: /\bsplit\s+cards?\b/i,
-        flag: "is:split",
-        strip: ["split"],
-      },
-      {
-        // "universes beyond", "from universes beyond sets" — card property, not a set filter
-        detect: /\buniverses\s+beyond\b|\bfrom\s+universes\s+beyond\s+sets?\b/i,
-        flag: "is:universesbeyond",
-        strip: ["universes beyond", "from universes beyond sets", "from universes beyond set", "universes beyond sets"],
-      },
-      {
-        // "flip card(s)"
-        detect: /\bflip\s+cards?\b/i,
-        flag: "is:flip",
-        strip: ["flip"],
-      },
-      {
-        // "saga card(s)" — Scryfall uses t:saga but this ensures deterministic handling
-        detect: /\bsaga\s+cards?\b/i,
-        flag: "t:saga",
-        strip: ["saga"],
-      },
-      {
-        // Only trigger is:funny for explicit Un-set / silver-border / acorn requests.
-        // Generic vibe words like "funny" or "hilarious" are handled by STOPWORDS
-        // so they don't become unresolved fragments — they describe desired game feel,
-        // not a request for literally silver-bordered / acorn cards.
-        detect: /\b(?:silver[-\s]border(?:ed)?|acorn\s+cards?|un[-\s]?sets?(?:\s+cards?)?|un-?glued|un-?hinged|un-?stable|un-?finityy?|undone)\b/i,
-        flag: "is:funny",
-        strip: ["silver border", "silver-border", "silver bordered", "acorn", "un-set", "unset", "unglued", "un-glued", "unhinged", "un-hinged", "unstable", "un-stable", "unfinity", "un-finity"],
-      },
-    ];
-
-    // Track which flags were already emitted so more-specific rules win over generic ones
-    const emittedIsFlags = new Set<string>();
-    for (const rule of IS_FLAG_RULES) {
-      if (!rule.detect.test(naturalQuery)) continue;
-      // Skip is:dfc if is:mdfc or is:tdfc was already emitted (more specific wins)
-      if (rule.flag === "is:dfc" && (emittedIsFlags.has("is:mdfc") || emittedIsFlags.has("is:tdfc"))) {
-        continue;
+    const isFlagResult = applyIsFlagRules(naturalQuery);
+    for (const clause of isFlagResult.clauses) {
+      if (!mustClauses.some((c) => c.value === clause.value)) {
+        mustClauses.push(clause);
       }
-      if (!mustClauses.some((c) => c.value === rule.flag)) {
-        mustClauses.push({ value: rule.flag, source: "phase1:is-flag" });
-      }
-      emittedIsFlags.add(rule.flag);
-      strippedTerms.push(...rule.strip);
     }
+    strippedTerms.push(...isFlagResult.strippedTerms);
   }
 
-  // --- Named land cycle detection ---
-  // Specific MTG land cycle names and "N color land" patterns that map
-  // unambiguously to function: tags. Prevents the AI from mis-classifying
-  // e.g. "3 color lands" as function:color-count-matters.
+  // --- Named land cycle detection (delegated to landCycles module) ---
   {
-    const LAND_CYCLE_RULES: Array<{
-      detect: RegExp;
-      tags: string[];
-      strip: string[];
-    }> = [
-      {
-        // "triland(s)", "triome(s)", "tri-land(s)", "3 color land(s)", "three color land(s)"
-        detect: /\b(?:trilands?|triomes?|tri-lands?|(?:3|three)[-\s]?color(?:ed)?\s+lands?|lands?\s+(?:that\s+(?:produce|add|tap\s+for)\s+)?(?:three|3)\s+colors?)\b/i,
-        tags: ["function:triland"],
-        // Strip both compound phrases AND the individual residual tokens so that
-        // after type-detection removes "lands", the leftover "3 color" / "three color"
-        // doesn't survive as an unresolved fragment.
-        strip: [
-          "triland", "trilands", "triome", "triomes", "tri-land", "tri-lands",
-          "3 color lands", "3 color land", "three color lands", "three color land",
-          "3-color lands", "3-color land", "three-color lands", "three-color land",
-          "3", "three", "color", "colors", "colored", "colour", "colours", "coloured",
-        ],
-      },
-      {
-        // "dual land(s)", "original dual(s)", "ABU dual(s)" — the Power 9 era duals
-        detect: /\b(?:dual\s+lands?|original\s+duals?|abu\s+duals?|original\s+dual\s+lands?|abu\s+dual\s+lands?)\b/i,
-        tags: ["function:dual-land"],
-        strip: ["dual land", "dual lands", "original dual", "original duals", "abu dual", "abu duals", "original dual land", "original dual lands", "abu dual land", "abu dual lands"],
-      },
-      {
-        // "fetchland(s)", "fetch land(s)"
-        detect: /\b(?:fetchlands?|fetch\s+lands?)\b/i,
-        tags: ["function:fetchland"],
-        strip: ["fetchland", "fetchlands", "fetch land", "fetch lands"],
-      },
-      {
-        // "shockland(s)", "shock land(s)"
-        detect: /\b(?:shocklands?|shock\s+lands?)\b/i,
-        tags: ["function:shockland"],
-        strip: ["shockland", "shocklands", "shock land", "shock lands"],
-      },
-      {
-        // "painland(s)", "pain land(s)"
-        detect: /\b(?:painlands?|pain\s+lands?)\b/i,
-        tags: ["function:painland"],
-        strip: ["painland", "painlands", "pain land", "pain lands"],
-      },
-      {
-        // "filterland(s)", "filter land(s)"
-        detect: /\b(?:filterlands?|filter\s+lands?)\b/i,
-        tags: ["function:filterland"],
-        strip: ["filterland", "filterlands", "filter land", "filter lands"],
-      },
-      {
-        // "bounceland(s)", "bounce land(s)"
-        detect: /\b(?:bouncelands?|bounce\s+lands?)\b/i,
-        tags: ["function:bounceland"],
-        strip: ["bounceland", "bouncelands", "bounce land", "bounce lands"],
-      },
-      {
-        // "manland(s)", "man land(s)", "creatureland(s)", "creature land(s)"
-        detect: /\b(?:manlands?|man\s+lands?|creaturelands?|creature\s+lands?)\b/i,
-        tags: ["is:manland"],
-        strip: ["manland", "manlands", "man land", "man lands", "creatureland", "creaturelands", "creature land", "creature lands"],
-      },
-      {
-        // "checkland(s)", "check land(s)"
-        detect: /\b(?:checklands?|check\s+lands?)\b/i,
-        tags: ["function:cycle-checkland"],
-        strip: ["checkland", "checklands", "check land", "check lands"],
-      },
-      {
-        // "fastland(s)", "fast land(s)"
-        detect: /\b(?:fastlands?|fast\s+lands?)\b/i,
-        tags: ["function:cycle-fastland"],
-        strip: ["fastland", "fastlands", "fast land", "fast lands"],
-      },
-      {
-        // "tangoland(s)", "tango land(s)", "battle land(s)" (BFZ dual tap-lands)
-        detect: /\b(?:tangolands?|tango\s+lands?|battle\s+lands?)\b/i,
-        tags: ["function:cycle-tangoland"],
-        strip: ["tangoland", "tangolands", "tango land", "tango lands", "battle land", "battle lands"],
-      },
-      {
-        // "scryland(s)", "scry land(s)"
-        detect: /\b(?:scrylands?|scry\s+lands?)\b/i,
-        tags: ["function:cycle-scryland"],
-        strip: ["scryland", "scrylands", "scry land", "scry lands"],
-      },
-      {
-        // "canopyland(s)", "canopy land(s)"
-        detect: /\b(?:canopylands?|canopy\s+lands?)\b/i,
-        tags: ["function:cycle-canopy-land"],
-        strip: ["canopyland", "canopylands", "canopy land", "canopy lands"],
-      },
-      {
-        // "slowland(s)", "slow land(s)"
-        detect: /\b(?:slowlands?|slow\s+lands?)\b/i,
-        tags: ["function:slowland"],
-        strip: ["slowland", "slowlands", "slow land", "slow lands"],
-      },
-    ];
-
-    for (const rule of LAND_CYCLE_RULES) {
-      if (!rule.detect.test(naturalQuery)) continue;
-      for (const tag of rule.tags) {
-        if (!mustClauses.some((c) => c.value === tag)) {
-          mustClauses.push({ value: tag, source: "phase1:is-flag" });
-        }
+    const landResult = applyLandCycleRules(naturalQuery);
+    for (const clause of landResult.clauses) {
+      if (!mustClauses.some((c) => c.value === clause.value)) {
+        mustClauses.push(clause);
       }
-      strippedTerms.push(...rule.strip);
     }
+    strippedTerms.push(...landResult.strippedTerms);
   }
 
   // Post-pass: detect card names in remaining text (handles "named/called X"

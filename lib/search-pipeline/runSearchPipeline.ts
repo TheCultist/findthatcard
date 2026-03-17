@@ -1,6 +1,7 @@
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
 import { normalizeQuery } from "@/lib/search-pipeline/phase0/normalizeQuery";
 import { parseNaturalQuery } from "@/lib/search-pipeline/phase1/parseNaturalQuery";
+import { runPhase1_5, shouldRunPhase1_5 } from "@/lib/search-pipeline/phase1_5/structuredExtraction";
 import { resolveUnresolvedFragments } from "@/lib/search-pipeline/phase2/resolveUnresolvedFragments";
 import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
 import { resolveArtLikeCardsQuery, resolveSimilarCardsQuery } from "@/lib/search-pipeline/similar-cards";
@@ -20,6 +21,7 @@ function logPipelineSummary(args: {
   original: string;
   afterPhase0?: string;
   afterPhase1?: string;
+  afterPhase1_5?: string;
   afterPhase2?: string;
   afterPhase3?: string;
 }): void {
@@ -31,6 +33,9 @@ function logPipelineSummary(args: {
   }
   if (args.afterPhase1 !== undefined) {
     lines.push(`  after Phase 1: "${args.afterPhase1}"`);
+  }
+  if (args.afterPhase1_5 !== undefined) {
+    lines.push(`  after Phase 1.5: "${args.afterPhase1_5}"`);
   }
   if (args.afterPhase2 !== undefined) {
     lines.push(`  after Phase 2: "${args.afterPhase2}"`);
@@ -220,6 +225,13 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
     }
   }
 
+  // Phase 1.5 — Structured AI extraction for unresolved numeric/rarity/year fragments.
+  // Runs only when Phase 1 left fragments that carry concrete game-mechanic intent.
+  if (shouldRunPhase1_5(phase1)) {
+    await runPhase1_5(phase1);
+    phase1.debug.aiBatchCalls += 1;
+  }
+
   const phase2 = await resolveUnresolvedFragments(phase1);
   const phase3 = await finalizeQuery(phase2.ir);
 
@@ -230,6 +242,8 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
     afterPhase2: assembleQueryFromIR(phase2.ir),
     afterPhase3: phase3.queryForScryfall,
   });
+  // Note: Phase 1.5 snapshot is not logged separately because it mutates phase1 in-place;
+  // the afterPhase2 line already reflects any clauses it added.
 
   return {
     queryForScryfall: phase3.queryForScryfall,
@@ -265,6 +279,16 @@ async function runCompoundPipeline(
     (p) => p.intent !== "search" && p.intent !== "commander-deck" && p.intent !== "commander-creature"
   );
   if (hasBypass) return null;
+
+  // Phase 1.5 for all branches (parallel) — structured AI extraction
+  await Promise.all(
+    phase1Results.map(async (p1) => {
+      if (shouldRunPhase1_5(p1)) {
+        await runPhase1_5(p1);
+        p1.debug.aiBatchCalls += 1;
+      }
+    })
+  );
 
   // Phase 2 for all branches (parallel)
   const phase2Results = await Promise.all(
