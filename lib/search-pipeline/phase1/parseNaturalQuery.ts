@@ -835,6 +835,14 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   //          "equip a creature" → "creature" (not t:creature)
   capture(/\benchant(?:s|ed|ing)?\s+(?:a\s+|an\s+|target\s+|each\s+|another\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,1})\b/gi);
   capture(/\bequip(?:s|ped|ping)?\s+(?:a\s+|an\s+|target\s+|each\s+|another\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,1})\b/gi);
+
+  // 11. "play/cast [type] from [zone]" — the type being played is the target, not the card type
+  //     to search for.
+  //     e.g. "play lands from the graveyard" → "lands" (not t:land)
+  //          "let you play spells from exile" → "spells" (not t:spell)
+  capture(/\b(?:plays?|cast(?:s|ed|ing)?)\s+(?:(?:a|an|any|all|your|additional|extra)\s+)*([a-z][a-z-]*)\s+(?:(?:card[sd]?|token[sd]?)\s+)?from\b/gi);
+  // "let/allow you (to) play/cast [type] from [zone]"
+  capture(/\blets?\s+(?:you|players?|them|it)\s+(?:(?:also|still|even)\s+)?(?:plays?|cast(?:s|ed)?)\s+(?:(?:a|an|any|all|your|additional|extra)\s+)*([a-z][a-z-]*)\s+(?:(?:card[sd]?)\s+)?from\b/gi);
   capture(/\battach(?:es|ed|ing)?\s+to\s+(?:a\s+|an\s+|target\s+|each\s+|another\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,1})\b/gi);
 
   // 9. Library search targets — the card type being FETCHED is an object of the action,
@@ -1795,6 +1803,44 @@ function applyOracleIntentHeuristics(
     if (zone) strippedTerms.push(zone);
     if (cardType) strippedTerms.push(cardType, `${cardType}s`);
     return;
+  }
+
+  // --- "Play/cast [type] from [zone]" detection ---
+  // Handles queries like "cards that let you play lands from the graveyard",
+  // "play spells from exile", "cast instants from your library".
+  // The type word (lands/spells/cards) is the object being played, NOT the card type
+  // of the search target — semantic role tokens above already prevent t:land etc.,
+  // but this block emits the correct function tag or oracle text for the search.
+  {
+    const PLAY_FROM_ZONE_RE =
+      /\b(?:(?:lets?\s+(?:you|players?|them|it)\s+(?:(?:also|still|even)\s+)?)?(?:plays?|cast(?:s|ed)?)\s+(?:(?:a|an|any|all|your|additional|extra)\s+)*)(lands?|spells?|cards?)\s+(?:card[sd]?\s+)?from\s+(?:(?:your|the)\s+)?(graveyard|exile|library)\b/i;
+    const pfzMatch = naturalQuery.match(PLAY_FROM_ZONE_RE);
+    if (pfzMatch) {
+      const typeWord = (pfzMatch[1] || "").toLowerCase().trim();
+      const zoneWord = (pfzMatch[2] || "graveyard").toLowerCase();
+      const baseType = typeWord.replace(/s$/, "");
+
+      if ((typeWord === "land" || typeWord === "lands") && zoneWord === "graveyard") {
+        // Prefer the tagger tag for Crucible/Ramunap-style land-from-graveyard effects
+        const tag = findFunctionTagBySegments(["land", "graveyard"]);
+        mustClauses.push({
+          value: tag ? `function:${tag}` : 'o:"from your graveyard"',
+          source: tag ? "phase1:function" : "phase1:oracle",
+        });
+      } else if (zoneWord === "exile") {
+        mustClauses.push({ value: 'o:"from exile"', source: "phase1:oracle" });
+      } else {
+        mustClauses.push({ value: `o:"from your ${zoneWord}"`, source: "phase1:oracle" });
+      }
+
+      strippedTerms.push(
+        "play", "plays", "playing", "cast", "casts", "casting",
+        "let", "lets", "allow", "allows",
+        baseType, `${baseType}s`,
+        "from", zoneWord,
+      );
+      return;
+    }
   }
 
 }
