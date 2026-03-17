@@ -46,7 +46,10 @@ const FORMAT_NAMES = [
 
 function normalizeFormatFunctionTags(query: string): string {
   return FORMAT_NAMES.reduce((acc, format) => {
-    const pattern = new RegExp(`(^|\\s|\\()(-)?function:${format}\\b`, "gi");
+    // Use (?![-\w]) instead of \b to prevent incorrectly matching compound tagger tags
+    // whose prefix is a format name, e.g. function:commander-tax-evasion would be
+    // truncated to f:commander-tax-evasion by \b matching at the hyphen.
+    const pattern = new RegExp(`(^|\\s|\\()(-)?function:${format}(?![-\\w])`, "gi");
     return acc.replace(pattern, (_match, prefix, negation) => {
       const negated = negation ? "-" : "";
       return `${prefix}${negated}f:${format}`;

@@ -1846,6 +1846,22 @@ function detectFunctionConceptClauses(
     strippedTerms.push("mana dork", "mana dorks", "mana-dork", "mana-dorks");
   }
 
+  // Commander tax evasion — reduce, avoid, ignore, or reset the commander tax.
+  // Phrases like "cheat commander's tax", "avoid commander tax", "reduce commander tax",
+  // "ignore the tax", "eminence effects that ignore commander tax", etc.
+  // Emitting function:commander-tax-evasion directly prevents Phase 2 from falling back
+  // to the overly broad function:cheat-into-play.
+  if (
+    /\bcommander[''s]*\s+tax\b|\btax(?:es)?\s+(?:on\s+)?(?:my\s+)?commander\b/i.test(lower) ||
+    /\b(?:cheat|avoid|bypass|ignore|reduce|reset|waive|skip|evade)\s+(?:the\s+)?(?:commander[''s]*\s+)?tax\b/i.test(lower)
+  ) {
+    clauses.push({ value: "function:commander-tax-evasion", source: "phase1:function" });
+    strippedTerms.push(
+      "commander", "tax", "taxes", "cheat", "avoid", "bypass", "ignore",
+      "reduce", "reset", "waive", "skip", "evade",
+    );
+  }
+
   // Anthem — effects that buff all your creatures (e.g. Glorious Anthem).
   // Also catches colloquial phrasings: "creature buffs", "pump effects", "boost spells".
   if (/\banthems?\b|\bcreature\s+buffs?\b|\bbuffs?\s+(?:all\s+)?(?:your\s+)?creatures?\b|\bpump\s+(?:spells?|effects?|cards?)\b|\bboost\s+(?:spells?|effects?|cards?|creatures?)\b/i.test(lower)) {
