@@ -657,7 +657,10 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   {
     name: "mill",
     description: "Put cards from libraries into graveyards",
-    detect: /\b(mill(?:s|ed|ing)?)\b/i,
+    // (?<!:) prevents matching "mill" inside Scryfall filter syntax (kw:mill, o:mill, function:mill-*).
+    // When Phase 1 already emits kw:mill, Phase 3 should not also inject function:mill-* tags
+    // since both AND'd together make the query unnecessarily restrictive.
+    detect: /(?<!:)\b(mill(?:s|ed|ing)?)\b/i,
     disqualify: /\b(windmill|sawmill|treadmill)\b/i,
     defaultTags: ["mill", "mill-opponent", "mill-any"],
     qualifiers: [

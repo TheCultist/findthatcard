@@ -309,6 +309,29 @@ function resolveNumericStatFilters(naturalQuery: string): {
     if (op !== null && num !== null) emitIfNew("mv", op, num, m[0]);
   }
 
+  // "[mv alias] [num] or [num] [or [num]...]" — enumerated equality list of specific values
+  // e.g. "mana value 4 or 5" → (mv=4 or mv=5), "cmc 2, 3, or 4" → (mv=2 or mv=3 or mv=4)
+  // Must run BEFORE mvNumOp and mvEqNum so the full phrase is stripped first, preventing
+  // mvEqNum from matching just "[mv alias] 4" and leaving "or 5" as a dangling fragment.
+  const mvEnumListPat = new RegExp(
+    `\\b(${MV_ALIASES})\\s+(${NUM_PAT})((?:\\s*(?:,\\s*(?:or\\s+|and\\s+)?|(?:or|and)\\s+)${NUM_PAT})+)\\b`,
+    "gi"
+  );
+  for (const m of lower.matchAll(mvEnumListPat)) {
+    const fullNumsText = (m[2] ?? "") + (m[3] ?? "");
+    const numTokenRe = new RegExp(`\\b(${NUM_PAT})\\b`, "gi");
+    const nums = [...fullNumsText.matchAll(numTokenRe)]
+      .map((nm) => wordOrDigitToNumber(nm[1] ?? ""))
+      .filter((n): n is number => n !== null);
+    if (nums.length >= 2) {
+      const orGroup = `(${nums.map((n) => `mv=${n}`).join(" or ")})`;
+      if (!clauses.some((c) => c.value === orGroup)) {
+        clauses.push({ value: orGroup, source: "phase1:stat" });
+      }
+      strippedTerms.push(m[0].trim());
+    }
+  }
+
   // "[mv alias] [num] or more/less" — e.g. "mana value 10 or more", "cmc 5 or less"
   // Must run before mvEqNum so the full phrase is stripped, preventing mvEqNum from
   // matching just "[mv alias] [num]" and emitting a conflicting mv= clause.
@@ -1756,10 +1779,12 @@ function applyOracleIntentHeuristics(
   // e.g. "whenever an instant leaves your graveyard"
   //      "when a creature leaves the battlefield"
   //      "cards that trigger when a permanent leaves"
+  //      "leaves graveyard"  ← bare implied trigger (no "when/whenever")
+  //      "leaves the battlefield"
   // Use the specific tagger function tag when the zone matches, otherwise
   // fall back to oracle text so the intent is never silently lost.
   const LEAVE_ZONE_TRIGGER =
-    /\b(?:when(?:ever)?|if)\b.{0,40}\bleaves?\b/i;
+    /\b(?:when(?:ever)?|if)\b.{0,40}\bleaves?\b|\bleaves?\b(?:\s+(?:the|your|a|an|my)\s+)?\s*(?:graveyard|battlefield|library|deck|hand|exile|command\s+zone)\b/i;
   if (LEAVE_ZONE_TRIGGER.test(naturalQuery)) {
     const zoneMatch = naturalQuery.match(
       /\b(?:graveyard|battlefield|library|deck|hand|exile|command zone)\b/i
