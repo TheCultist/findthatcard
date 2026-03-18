@@ -1374,6 +1374,17 @@ function applyOracleIntentHeuristics(
     return;
   }
 
+  // --- Standalone ETB fallback ---
+  // None of the ETB+X combination checks above matched, but the query still has ETB intent.
+  // e.g. "phyrexian creature enters the battlefield" = Phyrexian creatures with ETB abilities.
+  // Emit o:"~ enters" (modern oracle text for self-ETB triggers) and strip ETB_TERMS so they
+  // don't become a rogue fragment that Phase 2 resolves to o:enters o:battlefield.
+  if (hasEtbIntent) {
+    mustClauses.push({ value: 'o:"~ enters"', source: "phase1:oracle" });
+    strippedTerms.push(...ETB_TERMS);
+    return;
+  }
+
   // --- Mana rocks ---
   // Only fire for explicit "mana rock(s)" or "mana-generating artifact" phrasing.
   // "artifact ramp" / "artifact mana" are intentionally excluded: the user may want
