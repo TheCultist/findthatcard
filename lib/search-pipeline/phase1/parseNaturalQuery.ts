@@ -627,6 +627,28 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   capture(/\b(?:plays?|cast(?:s|ed|ing)?)\s+(?:(?:a|an|any|all|your|additional|extra)\s+)*([a-z][a-z-]*)\s+(?:(?:card[sd]?|token[sd]?)\s+)?from\b/gi);
   // "let/allow you (to) play/cast [type] from [zone]"
   capture(/\blets?\s+(?:you|players?|them|it)\s+(?:(?:also|still|even)\s+)?(?:plays?|cast(?:s|ed)?)\s+(?:(?:a|an|any|all|your|additional|extra)\s+)*([a-z][a-z-]*)\s+(?:(?:card[sd]?)\s+)?from\b/gi);
+
+  // 12. "to [action-verb] [type]" and "[action-verb]ing [type]" — the type is the object
+  //     of the action (what is being acted upon), NOT the card type of the search target.
+  //     e.g. "ways to sacrifice lands" → "lands" (not t:land)
+  //          "to destroy artifacts" → "artifacts" (not t:artifact)
+  //          "sacrificing creatures" → "creature" (not t:creature)
+  //     Pattern 2 above already handles "that [verb] [type]"; this covers infinitive / gerund forms.
+  const OBJ_ACTION_VERBS =
+    "sacrifice[sd]?|sacrificing|destroy(?:s|ed|ing)?|exile[sd]?|exiling|" +
+    "bounce[sd]?|bouncing|kill(?:s|ed|ing)?|discard(?:s|ed|ing)?|" +
+    "counter(?:s|ed|ing)?|tap(?:s|ped|ping)?|untap(?:s|ped|ping)?|" +
+    "return(?:s|ed|ing)?|remove[sd]?|removing";
+  // "to [verb] [type]" — infinitive construction: "ways to sacrifice lands"
+  capture(new RegExp(
+    `\\bto\\s+(?:${OBJ_ACTION_VERBS})\\s+(?:(?:a|an|all|each|any|your|target|the|my|those|these)\\s+)*([a-z][a-z-]*)`,
+    "gi"
+  ));
+  // "[verb]ing [type]" — gerund/progressive: "sacrificing creatures", "destroying artifacts"
+  capture(new RegExp(
+    `\\b(?:${OBJ_ACTION_VERBS})\\s+(?:(?:a|an|all|each|any|your|target|the|my|those|these)\\s+)*([a-z][a-z-]*)\\s+(?:for\\b|as\\s+(?:a\\s+)?cost|each\\b)`,
+    "gi"
+  ));
   capture(/\battach(?:es|ed|ing)?\s+to\s+(?:a\s+|an\s+|target\s+|each\s+|another\s+)?([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,1})\b/gi);
 
   // 9. Library search targets — the card type being FETCHED is an object of the action,
@@ -1167,6 +1189,23 @@ function applyOracleIntentHeuristics(
     mustClauses.push({ value: "o:draw", source: "phase1:oracle" });
     strippedTerms.push(...ETB_TERMS, "draw", "draws", "draw cards", "draw a card");
     return;
+  }
+
+  // --- Standalone draw trigger (no ETB required) ---
+  // "whenever you draw", "whenever a player draws", "whenever an opponent draws a card"
+  // e.g. "whenever you draw opponent mill" → o:"whenever you draw" + kw:mill (from resolveKeywordFilters)
+  // Does NOT use return — kw: detection runs separately in resolveKeywordFilters.
+  if (!hasEtbIntent && hasDrawIntent) {
+    const DRAW_TRIGGER_RE =
+      /\bwhen(?:ever)?\s+(?:you|a\s+player|an?\s+opponent|each\s+player)\s+draws?\b/i;
+    const dtMatch = naturalQuery.match(DRAW_TRIGGER_RE);
+    if (dtMatch) {
+      const subjectPart = (dtMatch[0].match(/\b(you|a\s+player|an?\s+opponent|each\s+player)\b/i) ?? [])[1];
+      const subject = (subjectPart ?? "you").toLowerCase().replace(/\s+/g, " ").trim();
+      mustClauses.push({ value: `o:"whenever ${subject} draw"`, source: "phase1:oracle" });
+      strippedTerms.push("whenever", "draw", "draws");
+      // Don't return — allow other detections (e.g. kw:mill) to still fire.
+    }
   }
 
   // --- ETB + mana production ---
@@ -1782,6 +1821,41 @@ function detectFunctionConceptClauses(
   const clauses: QueryClause[] = [];
   const strippedTerms: string[] = [];
   const lower = naturalQuery.toLowerCase();
+
+  // Typed sacrifice outlet — "sacrifice [type]" → function:sacrifice-outlet-[type]
+  // e.g. "ways to sacrifice lands" → function:sacrifice-outlet-land
+  //      "sacrifice a creature for value" → function:sacrifice-outlet-creature
+  // Stripping the verb + type prevents strategy:Sacrifice from re-expanding to the
+  // generic (function:sacrifice-outlet or function:synergy-sacrifice) tags in Phase 3.
+  {
+    const SAC_OUTLET_TYPES: Record<string, string> = {
+      land: "sacrifice-outlet-land",
+      lands: "sacrifice-outlet-land",
+      creature: "sacrifice-outlet-creature",
+      creatures: "sacrifice-outlet-creature",
+      artifact: "sacrifice-outlet-artifact",
+      artifacts: "sacrifice-outlet-artifact",
+      enchantment: "sacrifice-outlet-enchantment",
+      enchantments: "sacrifice-outlet-enchantment",
+      permanent: "sacrifice-outlet-permanent",
+      permanents: "sacrifice-outlet-permanent",
+      planeswalker: "sacrifice-outlet-planeswalker",
+      planeswalkers: "sacrifice-outlet-planeswalker",
+      token: "sacrifice-outlet-token",
+      tokens: "sacrifice-outlet-token",
+    };
+    const sacPat =
+      /\b(?:sacrifice|sac(?:rificing)?)\s+(?:(?:a|an|all|each|any|your|target|the|my)\s+)?([a-z][a-z-]*)/i;
+    const sacMatch = lower.match(sacPat);
+    if (sacMatch) {
+      const typeWord = (sacMatch[1] ?? "").toLowerCase();
+      const sacTag = SAC_OUTLET_TYPES[typeWord];
+      if (sacTag) {
+        clauses.push({ value: `function:${sacTag}`, source: "phase1:function" });
+        strippedTerms.push("sacrifice", "sac", "sacrificing", typeWord);
+      }
+    }
+  }
 
   // Artifact token creation — "make food", "create treasure", "produce clues", etc.
   // These are token-creation patterns, NOT keyword grants. Emitting o:"food token" is
@@ -3589,6 +3663,27 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
         if (matches) strippedTerms.push(...matches.map((m) => m.toLowerCase()));
       }
     }
+    // For "mill": also strip the agent subject when matched via the "[subject] mills" pattern
+    // e.g. "opponents mill" → strip "opponents" so it doesn't survive as a rogue fragment
+    if (kw === "mill") {
+      // Strip the agent/object of mill so it doesn't survive as a rogue fragment.
+      // Covers both "[subject] mills?" ("opponents mill") and
+      // "mills? [object]" ("mill opponents") word orders that Phase 0 may produce.
+      const agentBefore = correctedQuery.match(
+        /\b(opponents?|players?|they|enemy|enemies|each\s+(?:player|opponent))\s+mills?\b/i
+      );
+      if (agentBefore) {
+        const words = (agentBefore[1] ?? "").toLowerCase().split(/\s+/);
+        strippedTerms.push(...words, "mills");
+      }
+      const agentAfter = correctedQuery.match(
+        /\bmills?\s+(opponents?|players?|their\s+library|each\s+(?:player|opponent))\b/i
+      );
+      if (agentAfter) {
+        const words = (agentAfter[1] ?? "").toLowerCase().split(/\s+/);
+        strippedTerms.push(...words);
+      }
+    }
     if (isTermNegated(naturalQuery, kw)) {
       mustNotClauses.push({
         value: `kw:${/\s/.test(kw) ? `"${kw}"` : kw}`,
@@ -3607,13 +3702,27 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     )
   );
 
-  const strategyResult = detectStrategyClauses(correctedQuery);
-  mustClauses.push(...strategyResult.clauses);
-  strippedTerms.push(...strategyResult.strippedTerms);
-
+  // detectFunctionConceptClauses runs FIRST so its specific typed detections can
+  // mask their keywords from detectStrategyClauses. Without this ordering,
+  // "sacrifice lands" would emit both function:sacrifice-outlet-land (specific) AND
+  // strategy:Sacrifice (generic) because both scan the same raw text independently.
+  // By masking strippedTerms from the specific detector out of correctedQuery before
+  // running the generic strategy detector, we prevent the overlap at the source.
   const functionConceptResult = detectFunctionConceptClauses(naturalQuery);
   mustClauses.push(...functionConceptResult.clauses);
   strippedTerms.push(...functionConceptResult.strippedTerms);
+
+  // Build a strategy-masked query: remove any terms already claimed by
+  // detectFunctionConceptClauses so detectStrategyClauses doesn't also match them.
+  let strategyMaskedQuery = correctedQuery;
+  for (const term of functionConceptResult.strippedTerms) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    strategyMaskedQuery = strategyMaskedQuery.replace(new RegExp(`\\b${escaped}\\b`, "gi"), " ");
+  }
+
+  const strategyResult = detectStrategyClauses(strategyMaskedQuery);
+  mustClauses.push(...strategyResult.clauses);
+  strippedTerms.push(...strategyResult.strippedTerms);
 
   const statResult = resolveNumericStatFilters(naturalQuery);
   mustClauses.push(...statResult.clauses);

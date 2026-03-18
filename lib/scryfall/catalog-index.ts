@@ -231,6 +231,9 @@ const SUBTYPE_FUZZY_BLOCKLIST = new Set([
   "pump", "pumps",
   // "boost" → common MTG jargon for power/toughness increases, not a subtype
   "boost", "boosts",
+  // "mill" / "mills" → fuzzy-matches "wills" (plural of Will, a planeswalker type, levenshtein 1)
+  // Mill is an MTG keyword action (kw:mill), not a card subtype.
+  "mill", "mills", "milling",
 ]);
 
 export function fuzzyMatchSubtype(

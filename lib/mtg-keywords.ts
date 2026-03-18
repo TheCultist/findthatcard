@@ -497,6 +497,17 @@ function hasKeywordPositiveIntent(
     return true;
   if (new RegExp(`\\b${kwEscaped(kwLower)}s?\\s+deck\\b`, "i").test(lower))
     return true;
+  // Mill used as a verb by a player — "[opponent/player/they/you] mills [cards?]"
+  // e.g. "opponent mills", "whenever you draw, opponent mills", "they mill three cards"
+  // "mills X" alone (without a preceding subject) also counts as positive mill intent.
+  if (kwLower === "mill") {
+    if (
+      /\b(?:opponents?|players?|they|enemy|enemies|each\s+(?:player|opponent)|you|we)\s+mills?\b/i.test(lower) ||
+      /\bmills?\s+(?:\d+\s+)?(?:card[sd]?\b|their\s+library\b)/i.test(lower)
+    ) {
+      return true;
+    }
+  }
   // Synergy intent: "work well with X", "synergize with X" - add kw: to OR chain with function tags
   if (
     new RegExp(

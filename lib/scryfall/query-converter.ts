@@ -543,6 +543,9 @@ type ArchetypeEntry = {
   defaultTags: string[];
   qualifiers?: ArchetypeQualifier[];
   strayPattern?: RegExp;
+  /** If the assembled Scryfall query already contains this kw:X token, skip injecting
+   *  function: tags — Phase 1 already expressed the intent more precisely. */
+  skipIfKw?: string;
 };
 
 const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
@@ -663,10 +666,10 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   {
     name: "mill",
     description: "Put cards from libraries into graveyards",
-    // (?<!:) prevents matching "mill" inside Scryfall filter syntax (kw:mill, o:mill, function:mill-*).
-    // When Phase 1 already emits kw:mill, Phase 3 should not also inject function:mill-* tags
-    // since both AND'd together make the query unnecessarily restrictive.
-    detect: /(?<!:)\b(mill(?:s|ed|ing)?)\b/i,
+    // detect runs on the natural query. skipIfKw ensures we don't inject function:mill-* tags
+    // when Phase 1 already emitted kw:mill — they would AND together and over-restrict results.
+    detect: /\b(mill(?:s|ed|ing)?)\b/i,
+    skipIfKw: "mill",
     disqualify: /\b(windmill|sawmill|treadmill)\b/i,
     defaultTags: ["mill", "mill-opponent", "mill-any"],
     qualifiers: [
@@ -1128,6 +1131,9 @@ function normalizeArchetypeIntents(
   for (const archetype of ARCHETYPE_REGISTRY) {
     if (!archetype.detect.test(lower)) continue;
     if (archetype.disqualify?.test(lower)) continue;
+    // Skip when Phase 1 already expressed the intent as kw:X — injecting function: tags on
+    // top would AND them together and make the query unnecessarily restrictive.
+    if (archetype.skipIfKw && new RegExp(`(?:^|\\s)kw:${archetype.skipIfKw}\\b`, "i").test(updated)) continue;
 
     let desiredTags = archetype.defaultTags;
 
