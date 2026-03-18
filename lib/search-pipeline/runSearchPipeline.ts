@@ -63,6 +63,14 @@ const EMBEDDED_OR_PATTERN =
   /\bor\s+(?:more|less|fewer|greater|higher|better|worse|above|below)\b/gi;
 
 /**
+ * MTG color names (mono + named multi-color pairs/shards/wedges).
+ * Used to detect "red, white, or blue" style color-list ORs that should NOT
+ * be treated as compound query split points.
+ */
+const COLOR_NAMES_RE =
+  /\b(?:white|blue|black|red|green|colorless|azorius|dimir|rakdos|gruul|selesnya|orzhov|izzet|golgari|boros|simic|esper|grixis|jund|naya|bant|abzan|jeskai|sultai|mardu|temur|four.?color|five.?color|wubrg|mono.?(?:white|blue|black|red|green))\b/i;
+
+/**
  * Queries containing trigger / conditional keywords describe a triggered ability
  * (e.g. "whenever a creature enters or leaves the battlefield").  The ORs inside
  * such sentences connect parts of a single trigger description, not independent
@@ -106,6 +114,22 @@ export function splitCompoundQuery(query: string): string[] {
   while ((em = embeddedRe.exec(lower)) !== null) {
     embeddedRanges.push([em.index, em.index + em[0].length]);
   }
+
+  // 1b. Also embed color-name "or" connectors: "red, white, or blue" is a color list,
+  //     not two independent search intents.  Mark any "or" where both the word
+  //     immediately before AND immediately after it are color names.
+  const colorOrRe = /[,;]?\s*\bor\b\s*/gi;
+  let co: RegExpExecArray | null;
+  while ((co = colorOrRe.exec(lower)) !== null) {
+    const before = lower.slice(0, co.index).trimEnd();
+    const after = lower.slice(co.index + co[0].length).trimStart();
+    const wordBefore = (before.match(/\b\w[\w-]*$/) ?? [""])[0];
+    const wordAfter = (after.match(/^\b\w[\w-]*/) ?? [""])[0];
+    if (COLOR_NAMES_RE.test(wordBefore) && COLOR_NAMES_RE.test(wordAfter)) {
+      embeddedRanges.push([co.index, co.index + co[0].length]);
+    }
+  }
+
   const isEmbedded = (pos: number) =>
     embeddedRanges.some(([s, e]) => pos >= s && pos < e);
 

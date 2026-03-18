@@ -14,7 +14,7 @@ import { isScryfallQuery } from "@/lib/scryfall/query-converter";
 import { resolveSetFilters } from "@/lib/scryfall/sets";
 import { resolveStrategyName, STRATEGY_ORACLETAGS } from "@/lib/strategies/oracletagStrategies";
 import { ensureTaggerTagCache, getTaggerTagCache } from "@/lib/tagger/cache";
-import { findFunctionTagBySegments } from "@/lib/tagger/context";
+import { findArtTagBySegments, findFunctionTagBySegments } from "@/lib/tagger/context";
 import { escapeRegex, normalizeWhitespace, levenshteinDistance } from "@/lib/utils/text";
 import { ClauseSource, Phase1Result, QueryClause, QueryIntent, ResolverCategory, UnresolvedFragment } from "@/lib/search-pipeline/types";
 import {
@@ -3502,6 +3502,38 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   // one broad OR chain by phase2.
   {
     const lowerQuery = naturalQuery.toLowerCase();
+    // --- General-purpose "X themed" → art:X detection ---
+    // Extracts the theme word(s) from patterns like "space themed", "gothic-themed",
+    // "sci-fi themed", then validates against the art tag catalog via findArtTagBySegments.
+    // No hardcoding needed — any theme the catalog recognises is automatically handled.
+    //
+    // Pattern: optional leading adjective(s) + "theme(d)" at the end, OR
+    //          "themed?" as a standalone qualifier before the card type.
+    // Examples:
+    //   "space themed cards"        → art:space
+    //   "gothic-themed creatures"   → art:goth  (if "goth" is the catalog match)
+    //   "sci-fi themed blue cards"  → art:space (if that is the best catalog match)
+    //   "horror themed"             → art:horror
+    const THEME_RE = /\b([a-z][a-z0-9]*(?:[- ][a-z][a-z0-9]*){0,2})[- ]themed?\b/gi;
+    let themeMatch: RegExpExecArray | null;
+    while ((themeMatch = THEME_RE.exec(lowerQuery)) !== null) {
+      const rawTheme = themeMatch[1].toLowerCase().trim();
+      // Split multi-word themes into segments for catalog lookup
+      const segments = rawTheme.split(/[- ]+/).filter(Boolean);
+      const artTag = findArtTagBySegments(segments);
+      if (!artTag) continue;
+
+      const clauseValue = `art:${artTag}`;
+      if (!mustClauses.some((c) => c.value.toLowerCase() === clauseValue.toLowerCase())) {
+        mustClauses.push({ value: clauseValue, source: "phase1:art" });
+      }
+      // Strip the theme words and the "themed"/"theme" suffix so they don't become fragments
+      strippedTerms.push(...segments, "themed", "theme");
+    }
+
+    // --- Legacy explicit-art-descriptor detection (goth / woman / bust) ---
+    // These don't use a "themed" suffix — the user describes the art directly
+    // ("gothic art", "cards depicting women", "featuring cleavage").
     const hasArtDescriptorContext =
       /\bcards?\s+with\b|\bart\b|\bdepict(?:s|ed|ing)?\b|\bfeatur(?:e|es|ed|ing)\b|\bshow(?:s|ing|n)?\b|\bpictured\b/i.test(
         lowerQuery
@@ -3525,26 +3557,11 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
       }
 
       strippedTerms.push(
-        "goth",
-        "gothic",
-        "girl",
-        "girls",
-        "woman",
-        "women",
-        "female",
-        "tit",
-        "tits",
-        "titties",
-        "boob",
-        "boobs",
-        "breast",
-        "breasts",
-        "bust",
-        "busty",
-        "cleavage",
-        "chest",
-        "big",
-        "large"
+        "goth", "gothic",
+        "girl", "girls", "woman", "women", "female",
+        "tit", "tits", "titties", "boob", "boobs",
+        "breast", "breasts", "bust", "busty", "cleavage", "chest",
+        "big", "large"
       );
     }
   }

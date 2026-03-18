@@ -262,6 +262,31 @@ function scoreTagMatch(tag: string, keywords: string[]): number {
 }
 
 /**
+ * Finds an art tag whose hyphen-separated segments contain ALL of the
+ * provided segments (case-insensitive).  Returns the shortest match so e.g.
+ * ["space"] resolves to "space" (if it exists) before "spaceship" or "space-godzilla".
+ *
+ * Returns null when the cache is not yet loaded or no tag matches.
+ */
+export function findArtTagBySegments(segments: string[]): string | null {
+  const cache = getTaggerTagCache();
+  if (!cache) return null;
+  const artTags = cache.get("art");
+  if (!artTags) return null;
+
+  const lower = segments.map((s) => s.toLowerCase());
+  const matches: string[] = [];
+  for (const tag of artTags) {
+    const tagSegs = tag.toLowerCase().split("-");
+    if (lower.every((s) => tagSegs.includes(s))) {
+      matches.push(tag);
+    }
+  }
+  if (matches.length === 0) return null;
+  return matches.sort((a, b) => a.split("-").length - b.split("-").length)[0];
+}
+
+/**
  * Finds a function tag whose hyphen-separated segments contain ALL of the
  * provided segments (case-insensitive).  Returns the shortest match (fewest
  * extra segments) so e.g. ["leaves","graveyard"] resolves to
