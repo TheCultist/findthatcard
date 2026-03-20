@@ -70,6 +70,33 @@ const EMBEDDED_OR_PATTERN =
 const COLOR_NAMES_RE =
   /\b(?:white|blue|black|red|green|colorless|azorius|dimir|rakdos|gruul|selesnya|orzhov|izzet|golgari|boros|simic|esper|grixis|jund|naya|bant|abzan|jeskai|sultai|mardu|temur|four.?color|five.?color|wubrg|mono.?(?:white|blue|black|red|green))\b/i;
 
+/** Card-type words on both sides of "or" → type list, not compound split (e.g. "artifacts or enchantments"). */
+const CARD_TYPE_LIST_WORDS = new Set([
+  "artifact",
+  "artifacts",
+  "enchantment",
+  "enchantments",
+  "creature",
+  "creatures",
+  "land",
+  "lands",
+  "instant",
+  "instants",
+  "sorcery",
+  "sorceries",
+  "planeswalker",
+  "planeswalkers",
+  "battle",
+  "battles",
+  "equipment",
+  "token",
+  "tokens",
+  "vehicle",
+  "vehicles",
+  "permanent",
+  "permanents",
+]);
+
 /**
  * Queries containing trigger / conditional keywords describe a triggered ability
  * (e.g. "whenever a creature enters or leaves the battlefield").  The ORs inside
@@ -125,7 +152,11 @@ export function splitCompoundQuery(query: string): string[] {
     const after = lower.slice(co.index + co[0].length).trimStart();
     const wordBefore = (before.match(/\b\w[\w-]*$/) ?? [""])[0];
     const wordAfter = (after.match(/^\b\w[\w-]*/) ?? [""])[0];
+    const wb = wordBefore.toLowerCase();
+    const wa = wordAfter.toLowerCase();
     if (COLOR_NAMES_RE.test(wordBefore) && COLOR_NAMES_RE.test(wordAfter)) {
+      embeddedRanges.push([co.index, co.index + co[0].length]);
+    } else if (CARD_TYPE_LIST_WORDS.has(wb) && CARD_TYPE_LIST_WORDS.has(wa)) {
       embeddedRanges.push([co.index, co.index + co[0].length]);
     }
   }

@@ -14,7 +14,11 @@ import { isScryfallQuery } from "@/lib/scryfall/query-converter";
 import { resolveSetFilters } from "@/lib/scryfall/sets";
 import { resolveStrategyName, STRATEGY_ORACLETAGS } from "@/lib/strategies/oracletagStrategies";
 import { ensureTaggerTagCache, getTaggerTagCache } from "@/lib/tagger/cache";
-import { findArtTagBySegments, findFunctionTagBySegments } from "@/lib/tagger/context";
+import {
+  findArtTagBySegments,
+  findFunctionTagBySegments,
+  findGrantFunctionTagsForKeywordSlug,
+} from "@/lib/tagger/context";
 import { escapeRegex, normalizeWhitespace, levenshteinDistance } from "@/lib/utils/text";
 import { ClauseSource, Phase1Result, QueryClause, QueryIntent, ResolverCategory, UnresolvedFragment } from "@/lib/search-pipeline/types";
 import {
@@ -1774,6 +1778,9 @@ const FUZZY_KEYWORD_CORRECTION_BLOCKLIST = new Set([
   // anatomy / art subjects near keywords
   "skull",    // 1 edit from "skulk"
   "skulls",   // 1 edit from "skulks"
+  // "strike" / "strikes" → "strive" (spiking keyword); breaks "first/double strike"
+  "strike",
+  "strikes",
 ]);
 
 function applyFuzzyKeywordCorrections(
@@ -3022,9 +3029,12 @@ function detectSynergyWithCardQuery(naturalQuery: string): BypassDetectResult {
       const candidate = words.slice(0, len).join(" ");
       const canonical = lookupCardName(candidate);
       if (canonical) {
-        // Pass all words (not just words.slice(0, len)) so trailing context words
-        // like "deck" are also stripped and don't leak into unresolved fragments.
-        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], words, canonical) };
+        // Only pass words that belong to the resolved card name.  The capture group is
+        // greedy ([\s\S]+), so tail words like "that are not instants" would otherwise be
+        // folded into strippedTerms → semanticRoleTokens and suppress legitimate t: filters.
+        // Trailing "deck" is excluded from the greedy capture by dedicated `\s+deck\b` patterns.
+        const consumedWords = words.slice(0, len);
+        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], consumedWords, canonical) };
       }
     }
 
@@ -3038,7 +3048,7 @@ function detectSynergyWithCardQuery(naturalQuery: string): BypassDetectResult {
       const prefixCandidate = nameWords.join(" ");
       const canonical = lookupCardNameByPrefix(prefixCandidate);
       if (canonical) {
-        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], words, canonical) };
+        return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], nameWords, canonical) };
       }
     }
   }
@@ -3172,6 +3182,94 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     for (const word of prePassResult.reservedWords) {
       semanticRoleTokens.add(word);   // prevents TYPE_TOKENS from grabbing them
       strippedTerms.push(word);        // prevents catalog subtypes from grabbing them
+    }
+  }
+
+  // Keyword list + fuzzy corrections + grant/give detection must run BEFORE the catalog
+  // subtype loop.  Otherwise a word like "strike" in "give double strike" is misclaimed as
+  // a card subtype and stripped, and the grant regex never sees "double strike".
+  await ensureTaggerTagCache();
+  const keywordList = await getMtgKeywordList();
+  const { correctedQuery, matchedTypos } = applyFuzzyKeywordCorrections(
+    naturalQuery,
+    keywordList
+  );
+  strippedTerms.push(...matchedTypos);
+
+  // --- Generic grant/give/make <keyword> detection ---
+  {
+    const KEYWORD_GRANT_FUNCTION_TAG_FALLBACK: Readonly<Record<string, string>> = {
+      indestructible: "function:gives-indestructible",
+      hexproof: "function:gives-hexproof",
+      haste: "function:gives-haste",
+      protection: "function:gives-protection",
+      flying: "function:gives-flying",
+      trample: "function:gives-trample",
+      vigilance: "function:gives-vigilance",
+      lifelink: "function:gives-lifelink",
+      deathtouch: "function:gives-deathtouch",
+      reach: "function:gives-reach",
+      menace: "function:gives-menace",
+      prowess: "function:gives-prowess",
+      flash: "function:gives-flash",
+      ward: "function:gives-ward",
+      shroud: "function:gives-shroud",
+      shadow: "function:gives-shadow",
+      "first strike": "function:gives-first-strike",
+      "double strike": "function:gives-double-strike",
+    };
+
+    const GRANT_VERBS =
+      /\b(?:give[sd]?|giving|grant[sd]?|granting|make[sd]?|making)\b/i;
+    const RECIPIENT_OPT =
+      "(?:(?:your|all|each|every|other|others|target|a|an|any|friendly)\\s+)?(?:(?:creatures?|permanents?|things?|cards?|tokens?)\\s+)?";
+
+    if (GRANT_VERBS.test(correctedQuery)) {
+      const CREATION_ONLY_KEYWORDS = new Set([
+        "food", "treasure", "clue", "blood", "map", "powerstone",
+      ]);
+      const sortedKeywords = [...keywordList].sort((a, b) => b.length - a.length);
+      const alreadyMatched = new Set<string>();
+      for (const kw of sortedKeywords) {
+        const kwLower = kw.toLowerCase();
+        if (CREATION_ONLY_KEYWORDS.has(kwLower)) continue;
+        if ([...alreadyMatched].some((m) => m.includes(kwLower))) continue;
+
+        const kwEscape = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+        const pattern = new RegExp(
+          `\\b(?:give[sd]?|giving|grant[sd]?|granting|make[sd]?|making)\\s+${RECIPIENT_OPT}${kwEscape}s?\\b`,
+          "i"
+        );
+        const match = pattern.exec(correctedQuery);
+        if (!match) continue;
+
+        const slug = kwLower.replace(/\s+/g, "-");
+        const grantTags = findGrantFunctionTagsForKeywordSlug(slug);
+        const legacy = KEYWORD_GRANT_FUNCTION_TAG_FALLBACK[kwLower];
+
+        let clauseValue: string;
+        let clauseSource: ClauseSource;
+        if (grantTags.length > 0) {
+          const parts = grantTags.map((t) => `function:${t}`);
+          clauseValue = parts.length === 1 ? parts[0] : `(${parts.join(" or ")})`;
+          clauseSource = "phase1:function";
+        } else if (legacy) {
+          clauseValue = legacy;
+          clauseSource = "phase1:function";
+        } else {
+          clauseValue = `o:${/\s/.test(kw) ? `"${kw}"` : kwLower}`;
+          clauseSource = "phase1:oracle";
+        }
+
+        if (!mustClauses.some((c) => c.value === clauseValue)) {
+          mustClauses.push({ value: clauseValue, source: clauseSource });
+        }
+
+        const matchedPhrase = match[0].toLowerCase();
+        const phraseWords = matchedPhrase.match(/[a-z]+/g) || [];
+        strippedTerms.push(...phraseWords);
+        alreadyMatched.add(kwLower);
+      }
     }
   }
 
@@ -3574,96 +3672,6 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
         "breast", "breasts", "bust", "busty", "cleavage", "chest",
         "big", "large"
       );
-    }
-  }
-
-  const keywordList = await getMtgKeywordList();
-  const { correctedQuery, matchedTypos } = applyFuzzyKeywordCorrections(
-    naturalQuery,
-    keywordList
-  );
-  strippedTerms.push(...matchedTypos);
-
-  // --- Generic grant/give/make <keyword> detection ---
-  // "give your creatures flying", "grant all permanents indestructible", "make others hexproof"
-  // Runs against correctedQuery so typos ("indestrucible") are already normalised.
-  // For each MTG keyword, if a grant verb immediately precedes an optional recipient and the
-  // keyword itself, emit the most precise tag available:
-  //   - function:<keyword> when a dedicated tagger "granter" tag exists (most precise — only
-  //     matches cards that grant the keyword, not cards that merely have it themselves)
-  //   - o:<keyword> as fallback for keywords without a dedicated granter function tag
-  {
-    // Keywords that have a dedicated Scryfall tagger granter function tag (gives-<slug>).
-    // These are strictly more precise than oracle text: they match cards that grant the
-    // ability to others, not cards that merely have it themselves.
-    // All entries confirmed present in data/tagger-tags.json.
-    const KEYWORD_GRANT_FUNCTION_TAG: Readonly<Record<string, string>> = {
-      indestructible: "function:gives-indestructible",
-      hexproof: "function:gives-hexproof",
-      haste: "function:gives-haste",
-      protection: "function:gives-protection",
-      flying: "function:gives-flying",
-      trample: "function:gives-trample",
-      vigilance: "function:gives-vigilance",
-      lifelink: "function:gives-lifelink",
-      deathtouch: "function:gives-deathtouch",
-      reach: "function:gives-reach",
-      menace: "function:gives-menace",
-      prowess: "function:gives-prowess",
-      flash: "function:gives-flash",
-      ward: "function:gives-ward",
-      shroud: "function:gives-shroud",
-      shadow: "function:gives-shadow",
-      "first strike": "function:gives-first-strike",
-      "double strike": "function:gives-double-strike",
-    };
-
-    const GRANT_VERBS =
-      /\b(?:give[sd]?|giving|grant[sd]?|granting|make[sd]?|making)\b/i;
-    const RECIPIENT_OPT =
-      "(?:(?:your|all|each|every|other|others|target|a|an|any|friendly)\\s+)?(?:(?:creatures?|permanents?|things?|cards?|tokens?)\\s+)?";
-
-    if (GRANT_VERBS.test(correctedQuery)) {
-      // These Scryfall catalog "keywords" are actually MTG token types — cards don't grant
-      // them to other cards, they CREATE tokens of that type.  Skip them here so that
-      // "make food" doesn't produce the spurious o:food; the artifact-token-creation block
-      // in detectFunctionConceptClauses handles these with the precise o:"food token" form.
-      const CREATION_ONLY_KEYWORDS = new Set([
-        "food", "treasure", "clue", "blood", "map", "powerstone",
-      ]);
-      // Sort longest keywords first so multi-word variants ("first strike") win over "strike"
-      const sortedKeywords = [...keywordList].sort((a, b) => b.length - a.length);
-      const alreadyMatched = new Set<string>();
-      for (const kw of sortedKeywords) {
-        const kwLower = kw.toLowerCase();
-        // Skip token-type keywords — they are creation targets, not grantable abilities.
-        if (CREATION_ONLY_KEYWORDS.has(kwLower)) continue;
-        // Skip if a longer keyword already covered this word (e.g. skip "strike" once "first strike" matched)
-        if ([...alreadyMatched].some((m) => m.includes(kwLower))) continue;
-
-        const kwEscape = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-        const pattern = new RegExp(
-          `\\b(?:give[sd]?|giving|grant[sd]?|granting|make[sd]?|making)\\s+${RECIPIENT_OPT}${kwEscape}s?\\b`,
-          "i"
-        );
-        const match = pattern.exec(correctedQuery);
-        if (!match) continue;
-
-        const functionTag = KEYWORD_GRANT_FUNCTION_TAG[kwLower];
-        const clauseValue = functionTag ?? `o:${/\s/.test(kw) ? `"${kw}"` : kwLower}`;
-        const clauseSource: ClauseSource = functionTag ? "phase1:function" : "phase1:oracle";
-        if (!mustClauses.some((c) => c.value === clauseValue)) {
-          mustClauses.push({ value: clauseValue, source: clauseSource });
-        }
-
-        // Strip the entire matched phrase (grant verb + recipient + keyword) so it doesn't
-        // survive as an unresolved fragment that Phase 2 might misinterpret (e.g., "make others"
-        // being resolved as function:grows-others).
-        const matchedPhrase = match[0].toLowerCase();
-        const phraseWords = matchedPhrase.match(/[a-z]+/g) || [];
-        strippedTerms.push(...phraseWords);
-        alreadyMatched.add(kwLower);
-      }
     }
   }
 

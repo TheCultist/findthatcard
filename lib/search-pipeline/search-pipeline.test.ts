@@ -1397,15 +1397,33 @@ async function run() {
   await testPhase1BigManaCreaturesInJundColors();
   // "cheap" / "low mana" must emit mv<=3, not reach Phase 2
   await testPhase1CheapLowManaEmitsMvFilter();
+  await testPhase1GrantDoubleStrikeDeterministic();
   testSplitCompoundCommaOr();
   testSplitCompoundBareOrAfterEmbedded();
   testSplitCompoundDoesNotSplitSimpleTypeOr();
   testSplitCompoundDoesNotSplitColorOr();
+  testSplitCompoundDoesNotSplitTypeListOr();
   testSplitCompoundDoesNotSplitEmbeddedOrMore();
   testSplitCompoundThreeBranches();
   await testCompoundPipelineEndToEnd();
   await testCompoundBypassIntentFallsBack();
   console.log("search-pipeline tests passed");
+}
+
+async function testPhase1GrantDoubleStrikeDeterministic() {
+  const q =
+    "blue, red, and black artifacts or enchantments that give double strike";
+  const parsed = await parseNaturalQuery(q);
+  const mustValues = parsed.mustClauses.map((c) => c.value);
+  const hasGrant = mustValues.some((v) =>
+    /function:gives-double-strike\b/.test(v)
+  );
+  assert.ok(hasGrant, `expected function:gives-double-strike in mustClauses; got: ${mustValues.join(", ")}`);
+  assert.ok(
+    !parsed.unresolvedFragments.some((f) => /give|double|strike/i.test(f.text)),
+    `grant phrase should not leak as fragments: ${JSON.stringify(parsed.unresolvedFragments)}`
+  );
+  console.log("[PASS] phase1: 'give double strike' uses deterministic grant tags (before subtype steal)");
 }
 
 async function testCardsWithSubtype() {
@@ -1860,6 +1878,15 @@ function testSplitCompoundDoesNotSplitColorOr() {
   const result = splitCompoundQuery("red or blue creatures");
   assert.equal(result.length, 1, `expected 1 branch (no split); got ${result.length}: ${JSON.stringify(result)}`);
   console.log("[PASS] splitCompoundQuery: 'red or blue creatures' does not split");
+}
+
+function testSplitCompoundDoesNotSplitTypeListOr() {
+  // "artifacts or enchantments" is a card-type list, not two independent compound branches.
+  const result = splitCompoundQuery(
+    "blue, red, and black artifacts or enchantments that give double strike"
+  );
+  assert.equal(result.length, 1, `expected 1 branch (no split); got ${result.length}: ${JSON.stringify(result)}`);
+  console.log("[PASS] splitCompoundQuery: 'artifacts or enchantments' type list does not split");
 }
 
 function testSplitCompoundDoesNotSplitEmbeddedOrMore() {

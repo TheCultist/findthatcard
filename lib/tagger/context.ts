@@ -287,6 +287,36 @@ export function findArtTagBySegments(segments: string[]): string | null {
 }
 
 /**
+ * All function tags that represent granting an MTG keyword to other permanents/creatures,
+ * for a given keyword hyphen-slug (e.g. "double-strike" from the keyword name "Double strike").
+ * Deterministic, catalog-driven — no hardcoded per-keyword lists. Sorted alphabetically.
+ */
+export function findGrantFunctionTagsForKeywordSlug(slug: string): string[] {
+  const cache = getTaggerTagCache();
+  if (!cache) return [];
+  const fnSet = cache.get("function");
+  if (!fnSet) return [];
+
+  const s = slug.toLowerCase().replace(/\s+/g, "-");
+  if (!s) return [];
+
+  const grantish =
+    /^(gives|grant|grants|creature-gives|permanent-gives|aura-gives|equipment-gives)-/;
+  const exclude =
+    /^(gains|hate|removes|synergy|removal|seek|tutor|counter|tapper|reanimate)-/;
+
+  const out: string[] = [];
+  for (const tag of fnSet) {
+    const t = tag.toLowerCase();
+    if (!t.includes(s)) continue;
+    if (exclude.test(t)) continue;
+    if (!grantish.test(t)) continue;
+    out.push(tag);
+  }
+  return [...new Set(out)].sort((a, b) => a.localeCompare(b));
+}
+
+/**
  * Finds a function tag whose hyphen-separated segments contain ALL of the
  * provided segments (case-insensitive).  Returns the shortest match (fewest
  * extra segments) so e.g. ["leaves","graveyard"] resolves to

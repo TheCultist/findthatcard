@@ -65,7 +65,7 @@ const finalizeCases: FinalizeTestCase[] = [
     name: "adds tutor-to-battlefield tag when requested",
     naturalQuery: "tutor a land onto the battlefield",
     rawQuery: "function:tutor",
-    expected: "function:tutor-land",
+    expected: "function:tutor-land function:tutor-to-battlefield",
     tagContext: {
       art: [],
       function: ["tutor-land", "tutor-to-battlefield"],
