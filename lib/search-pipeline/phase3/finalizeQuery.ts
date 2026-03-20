@@ -268,7 +268,7 @@ function prependPreferBest(value: string): string {
   return `${PREFER_BEST_PREFIX}${value}`.trim();
 }
 
-function removeInvalidTagsFromQuery(
+export function removeInvalidTagsFromQuery(
   query: string,
   invalidTags: Array<{ type: "art" | "function"; tag: string }>
 ): string {
@@ -276,7 +276,12 @@ function removeInvalidTagsFromQuery(
   for (const invalid of invalidTags) {
     const operators = invalid.type === "art" ? "(?:art|atag|arttag)" : "(?:function|otag|oracletag)";
     const escapedTag = invalid.tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const pattern = new RegExp(`\\s*-?${operators}:(?:"${escapedTag}"|${escapedTag})\\b`, "gi");
+    // Require a true token boundary: do not match `function:storm` inside `function:storm-like`
+    // when stripping a shorter invalid tag like `storm`.
+    const pattern = new RegExp(
+      `\\s*-?${operators}:(?:"${escapedTag}"|${escapedTag})(?![a-z0-9-])\\b`,
+      "gi"
+    );
     updated = updated.replace(pattern, " ");
   }
   // Clean up orphaned OR operators left inside groups after tag removal:

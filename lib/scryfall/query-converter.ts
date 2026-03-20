@@ -548,6 +548,52 @@ type ArchetypeEntry = {
   skipIfKw?: string;
 };
 
+/**
+ * Canonical Scryfall function tags for the **hate-magnet** (“you become the archenemy”) archetype:
+ * group slug, extra turns, mass LD, lockdown, storm-style wins, taxes, infect, etc.
+ *
+ * Single source of truth for:
+ * - The `hate-magnet` registry entry’s `defaultTags`
+ * - Phase 1 / other code that needs the full set or a **subset** via {@link hateMagnetFunctionTagsExcluding}
+ */
+export const HATE_MAGNET_FUNCTION_TAGS = [
+  "group-slug",
+  "extra-turn",
+  "mass-land-denial",
+  "lockdown",
+  "lockdown-permanent",
+  "storm",
+  "storm-like",
+  "tax",
+  "cast-tax",
+  "infect",
+] as const;
+
+export type HateMagnetFunctionTag = (typeof HATE_MAGNET_FUNCTION_TAGS)[number];
+
+/**
+ * Hate-magnet tags minus any omitted names (case-insensitive). Order matches {@link HATE_MAGNET_FUNCTION_TAGS}.
+ *
+ * - **`omit` omitted or empty** → returns **all** hate-magnet tags (e.g. “don’t be the archenemy” with no subset kept).
+ * - **`omit: "extra-turn"`** → every tag except extra turns (e.g. “extra turns but not stax”).
+ * - **Multiple omits** → `hateMagnetFunctionTagsExcluding(["extra-turn", "storm"])`, etc.
+ */
+export function hateMagnetFunctionTagsExcluding(
+  omit?: string | readonly string[]
+): string[] {
+  const omitList =
+    omit === undefined
+      ? []
+      : typeof omit === "string"
+        ? [omit]
+        : [...omit];
+  if (omitList.length === 0) {
+    return [...HATE_MAGNET_FUNCTION_TAGS];
+  }
+  const omitSet = new Set(omitList.map((t) => t.toLowerCase()));
+  return HATE_MAGNET_FUNCTION_TAGS.filter((t) => !omitSet.has(t.toLowerCase()));
+}
+
 const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   {
     name: "removal",
@@ -926,18 +972,7 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     name: "hate-magnet",
     description: "Cards that make you the archenemy: group slug, stax, extra turns, land destruction, lockdown, storm, or infect strategies that antagonise the whole table",
     detect: /\b(?:archenemy\s+(?:card|effect|magnet|effect)|make\s+(?:everyone|all\s+(?:players?|opponents?))\s+(?:hate|target|attack)\s+(?:you|me)|paint\s+a\s+target\s+on\s+(?:your|my)\s+back|everyone\s+hates?\s+(?:you|me)|become\s+(?:the\s+)?archenemy|table\s+(?:archenemy|target|hate)|make\s+(?:people|opponents?|players?)\s+hate\s+(?:you|me)|cards?\s+(?:that\s+)?(?:everyone|people|opponents?)\s+hates?|most\s+hated\s+cards?|most\s+annoying\s+cards?)\b/i,
-    defaultTags: [
-      "group-slug",
-      "extra-turn",
-      "mass-land-denial",
-      "lockdown",
-      "lockdown-permanent",
-      "storm",
-      "storm-like",
-      "tax",
-      "cast-tax",
-      "infect",
-    ],
+    defaultTags: [...HATE_MAGNET_FUNCTION_TAGS],
     strayPattern: /\bfunction:(group-slug|extra-turn|mass-land-denial|lockdown(?:-[a-z0-9-]+)?|storm(?:-[a-z0-9-]+)?|tax|cast-tax|infect)\b/gi,
   },
   // ── Hate archetypes ────────────────────────────────────────────────────────
@@ -1526,13 +1561,15 @@ function normalizeBounceCounterspellOr(naturalQuery: string, query: string): str
 
 function normalizeOrphanedOr(query: string): string {
   let updated = query;
-  // Remove empty OR branches inside parentheses.
+  // Remove empty OR branches inside parentheses (case-insensitive "or").
   updated = updated.replace(/\(\s*OR\s+([^)]+)\)/gi, "($1)");
   updated = updated.replace(/\(\s*([^)]+)\s+OR\s*\)/gi, "($1)");
-  // Drop parentheses that only contain ORs.
+  // Drop parentheses that only contain ORs, e.g. rogue "(or)" from empty OR-merge slots.
   updated = updated.replace(/\(\s*(?:OR\s*)+\)/gi, "");
+  updated = updated.replace(/\(\s*or\s*\)/gi, "");
   // Collapse repeated OR tokens that can be introduced by removals.
   updated = updated.replace(/\bOR(?:\s+OR)+\b/gi, "OR");
+  updated = updated.replace(/\bor(?:\s+or)+\b/gi, "or");
   return normalizeWhitespace(updated);
 }
 
@@ -1823,6 +1860,8 @@ export function finalizeScryfallQuery(args: {
   normalizedQuery = stripSubjectiveQualifierTags(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeLeadingStrayToken(normalizedQuery);
   normalizedQuery = dedupeTokens(normalizedQuery);
+  // Second pass: dedupeTokens preserves "(", "or", ")" triples; strip empty (or) groups again.
+  normalizedQuery = normalizeOrphanedOr(normalizedQuery);
 
   if (!normalizedQuery) {
     throw new Error("Failed to generate Scryfall query (empty response)");

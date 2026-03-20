@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import type { TaggerTagContext } from "@/lib/tagger/context";
 import {
+  HATE_MAGNET_FUNCTION_TAGS,
   finalizeScryfallQuery,
+  hateMagnetFunctionTagsExcluding,
   isScryfallQuery,
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
@@ -27,6 +29,14 @@ const finalizeCases: FinalizeTestCase[] = [
     naturalQuery: "red dragons",
     rawQuery: "c:r t:dragon",
     expected: "c:r t:dragon",
+  },
+  {
+    name: "strips rogue parenthetical (or) between function groups",
+    naturalQuery: "zz",
+    rawQuery:
+      "f:commander (function:boardwipe or function:wrath-of-god) (or) (function:removal-exile or function:removal-destroy) game:paper",
+    expected:
+      "f:commander (function:boardwipe or function:wrath-of-god) (function:removal-exile or function:removal-destroy) game:paper",
   },
   {
     name: "appends and expands strategy tags",
@@ -283,6 +293,31 @@ function runIsQueryTests() {
   return passed;
 }
 
+function runHateMagnetTagHelperTests() {
+  let passed = 0;
+  try {
+    const full = hateMagnetFunctionTagsExcluding();
+    assert.deepEqual(full, [...HATE_MAGNET_FUNCTION_TAGS]);
+    const withoutExtraTurn = hateMagnetFunctionTagsExcluding("extra-turn");
+    assert.ok(!withoutExtraTurn.includes("extra-turn"));
+    assert.equal(
+      withoutExtraTurn.length,
+      HATE_MAGNET_FUNCTION_TAGS.length - 1,
+      "excluding one tag should shorten list by 1"
+    );
+    const withoutTwo = hateMagnetFunctionTagsExcluding(["extra-turn", "storm"]);
+    assert.ok(!withoutTwo.includes("extra-turn") && !withoutTwo.includes("storm"));
+    assert.equal(withoutTwo.length, HATE_MAGNET_FUNCTION_TAGS.length - 2);
+    console.log("[PASS] hateMagnetFunctionTagsExcluding: full set, single omit, multi omit");
+    passed += 1;
+  } catch (error) {
+    console.error("[FAIL] hateMagnetFunctionTagsExcluding tests");
+    console.error(error);
+    throw error;
+  }
+  return passed;
+}
+
 function runTruncateTests() {
   let passed = 0;
   try {
@@ -305,7 +340,10 @@ function runTruncateTests() {
 
 function run() {
   const passed =
-    runFinalizeTests() + runIsQueryTests() + runTruncateTests();
+    runFinalizeTests() +
+    runIsQueryTests() +
+    runHateMagnetTagHelperTests() +
+    runTruncateTests();
   console.log(`query-converter tests passed (${passed} total)`);
 }
 

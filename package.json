@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test:queries": "tsx lib/scryfall/query-converter.test.ts && tsx lib/search-pipeline/search-pipeline.test.ts"
+    "test:queries": "tsx lib/scryfall/query-converter.test.ts && tsx lib/search-pipeline/search-pipeline.test.ts",
+    "search:qa": "tsx scripts/search-qabot.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

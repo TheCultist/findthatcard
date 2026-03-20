@@ -3,6 +3,7 @@
  * Switch providers with: AI_PROVIDER=openai (default) | AI_PROVIDER=claude
  *
  * OpenAI env vars: OPENAI_API_KEY, OPENAI_MODEL (default: gpt-4.1-mini)
+ * Optional: OPENAI_REASONING_EFFORT=low|medium|high for reasoning-capable models only (Responses API).
  * Claude env vars:  ANTHROPIC_API_KEY, CLAUDE_MODEL (default: claude-3-5-haiku-20241022)
  */
 import OpenAI from "openai";
@@ -47,15 +48,27 @@ function getOpenAIClient(): OpenAI {
   return openaiClient;
 }
 
+function parseReasoningEffort():
+  | { effort: "low" | "medium" | "high" }
+  | undefined {
+  const raw = process.env.OPENAI_REASONING_EFFORT?.trim().toLowerCase();
+  if (raw === "low" || raw === "medium" || raw === "high") {
+    return { effort: raw };
+  }
+  return undefined;
+}
+
 async function callOpenAI(params: AIRequestParams): Promise<AIResponse> {
   const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
   const input: Array<{ role: "system" | "user"; content: string }> = [];
   if (params.system) input.push({ role: "system", content: params.system });
   input.push({ role: "user", content: params.user });
 
+  const reasoning = parseReasoningEffort();
+
   const response = await getOpenAIClient().responses.create({
     model,
-    reasoning: { effort: "low" },
+    ...(reasoning ? { reasoning } : {}),
     input,
     max_output_tokens: params.max_output_tokens,
   });

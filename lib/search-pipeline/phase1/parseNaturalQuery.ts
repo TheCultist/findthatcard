@@ -10,7 +10,7 @@ import {
   lookupCardNameByPrefix,
   hasCardNameIndex,
 } from "@/lib/scryfall/catalog-index";
-import { isScryfallQuery } from "@/lib/scryfall/query-converter";
+import { hateMagnetFunctionTagsExcluding, isScryfallQuery } from "@/lib/scryfall/query-converter";
 import { resolveSetFilters } from "@/lib/scryfall/sets";
 import { resolveStrategyName, STRATEGY_ORACLETAGS } from "@/lib/strategies/oracletagStrategies";
 import { ensureTaggerTagCache, getTaggerTagCache } from "@/lib/tagger/cache";
@@ -1835,9 +1835,10 @@ function applyFuzzyKeywordCorrections(
  */
 function detectFunctionConceptClauses(
   naturalQuery: string
-): { clauses: QueryClause[]; strippedTerms: string[] } {
+): { clauses: QueryClause[]; strippedTerms: string[]; mustNotClauses: QueryClause[] } {
   const clauses: QueryClause[] = [];
   const strippedTerms: string[] = [];
+  const mustNotClauses: QueryClause[] = [];
   const lower = naturalQuery.toLowerCase();
 
   // Typed sacrifice outlet — "sacrifice [type]" → function:sacrifice-outlet-[type]
@@ -1972,7 +1973,42 @@ function detectFunctionConceptClauses(
     strippedTerms.push("lord", "lords", "tribal lord", "tribal lords");
   }
 
-  return { clauses, strippedTerms };
+  // Extra turns + “not archenemy / antisocial” — Phase 1 handles this so Phase 2 does not
+  // collapse into hate-magnet (OR of extra-turn + group-slug + stax, etc.).
+  {
+    const mentionsExtraTurn = /\bextra\s+turns?\b/i.test(lower);
+    const rejectsExtraTurn =
+      /\b(?:no|not|without|neither|avoid|skip|ban)\s+extra\s+turns?\b/i.test(lower);
+    const hasExtraTurn = mentionsExtraTurn && !rejectsExtraTurn;
+
+    if (hasExtraTurn) {
+      clauses.push({ value: "function:extra-turn", source: "phase1:function" });
+      strippedTerms.push("extra", "turn", "turns");
+      if (/\bspells?\b/i.test(lower)) {
+        clauses.push({ value: "(t:instant or t:sorcery)", source: "phase1:type" });
+        strippedTerms.push("spell", "spells");
+      }
+    }
+
+    const negatedTablePolitics =
+      /\b(?:that\s+)?(?:aren'?t|isn'?t|are\s+not|is\s+not)\s+(?:completely\s+)?(?:antisocial|(?:the|an)\s+archenemy)\b/i.test(
+        naturalQuery
+      ) ||
+      /\bnot\s+completely\s+(?:antisocial|archenemy)\b/i.test(lower) ||
+      /\b(?:without|avoid)\s+(?:being\s+)?(?:completely\s+)?(?:antisocial|(?:the|an)\s+archenemy)\b/i.test(
+        lower
+      );
+
+    if (negatedTablePolitics) {
+      const tagsToReject = hateMagnetFunctionTagsExcluding(hasExtraTurn ? "extra-turn" : []);
+      for (const tag of tagsToReject) {
+        mustNotClauses.push({ value: `function:${tag}`, source: "phase1:function" });
+      }
+      strippedTerms.push("antisocial", "archenemy", "completely", "arent", "aren't", "isnt", "isn't");
+    }
+  }
+
+  return { clauses, strippedTerms, mustNotClauses };
 }
 
 function detectStrategyClauses(
@@ -2846,6 +2882,18 @@ const CARD_NAME_CONTEXT_STOPS = new Set([
   "which", "that", "where", "when", "if", "to",
 ]);
 
+/**
+ * Phrases like "for my commander deck" capture only "commander" — that is format
+ * context, not synergy with whatever card has the shortest name starting with "commander"
+ * (e.g. Commander Eesha from prefix lookup).
+ */
+const GENERIC_COMMANDER_DECK_DESCRIPTORS = new Set([
+  "commander",
+  "commanders",
+  "cedh",
+  "edh",
+]);
+
 function detectArtLikeCardQuery(naturalQuery: string): BypassDetectResult {
   if (!hasCardNameIndex()) return null;
 
@@ -3024,6 +3072,13 @@ function detectSynergyWithCardQuery(naturalQuery: string): BypassDetectResult {
       .trim()
       .split(/\s+/)
       .filter(Boolean);
+
+    if (
+      words.length > 0 &&
+      words.every((w) => GENERIC_COMMANDER_DECK_DESCRIPTORS.has(w))
+    ) {
+      continue;
+    }
 
     for (let len = Math.min(words.length, 8); len >= 1; len--) {
       const candidate = words.slice(0, len).join(" ");
@@ -3746,6 +3801,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   // running the generic strategy detector, we prevent the overlap at the source.
   const functionConceptResult = detectFunctionConceptClauses(naturalQuery);
   mustClauses.push(...functionConceptResult.clauses);
+  mustNotClauses.push(...functionConceptResult.mustNotClauses);
   strippedTerms.push(...functionConceptResult.strippedTerms);
 
   // Build a strategy-masked query: remove any terms already claimed by
@@ -3822,6 +3878,16 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     const postPassResult = detectCardNamePostPass(naturalQuery, strippedTerms);
     mustClauses.push(...postPassResult.clauses);
     strippedTerms.push(...postPassResult.extraStripped);
+  }
+
+  // Commander power-level asides ("not cEDH", "not competitive EDH") are not expressible
+  // as Scryfall filters. "not" is a stopword in unresolved-fragment chunks, so the tail
+  // becomes "— cedh" and Phase 2 mis-tags (e.g. t:dack, function:shares-name-with-a-format).
+  {
+    const q = naturalQuery.toLowerCase();
+    if (/\bnot\s+(?:cedh|competitive\s+edh)\b/.test(q)) {
+      strippedTerms.push("not", "cedh", "edh", "competitive");
+    }
   }
 
   const { unresolvedFragments, noiseTokens } = buildUnresolvedFragments(

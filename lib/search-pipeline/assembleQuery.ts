@@ -112,17 +112,18 @@ export function assembleQueryFromIR(ir: SearchPipelineIR): string {
   let orGroupTags: string[] = [];
 
   const flushOrGroup = () => {
-    if (orGroupTags.length === 0) return;
-    if (orGroupTags.length === 1) {
-      phase2Parts.push(orGroupTags[0]);
+    const filtered = orGroupTags.map((t) => t.trim()).filter((t) => t.length > 0);
+    orGroupTags = [];
+    if (filtered.length === 0) return;
+    if (filtered.length === 1) {
+      phase2Parts.push(filtered[0]);
     } else {
       // Flatten into one big OR chain: ((A or B) or (C or D)) → (A or B or C or D)
-      const inner = orGroupTags
+      const inner = filtered
         .map((t) => t.replace(/^\((.+)\)$/, "$1"))
         .join(" or ");
       phase2Parts.push(`(${inner})`);
     }
-    orGroupTags = [];
   };
 
   for (const unresolved of ir.unresolvedFragments) {
@@ -138,7 +139,11 @@ export function assembleQueryFromIR(ir: SearchPipelineIR): string {
       if (!unresolved.orConnected) flushOrGroup();
       continue;
     }
-    const joinedEmitted = emitted.join(" ");
+    const joinedEmitted = emitted.join(" ").trim();
+    if (!joinedEmitted) {
+      if (!unresolved.orConnected) flushOrGroup();
+      continue;
+    }
     if (unresolved.orConnected && orGroupTags.length > 0) {
       orGroupTags.push(joinedEmitted);
     } else {

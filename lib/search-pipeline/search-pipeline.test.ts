@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
 import { shouldNormalize, validateResponse } from "@/lib/search-pipeline/phase0/normalizeQuery";
 import { parseNaturalQuery } from "@/lib/search-pipeline/phase1/parseNaturalQuery";
-import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
+import { finalizeQuery, removeInvalidTagsFromQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
 import { runSearchPipeline, splitCompoundQuery } from "@/lib/search-pipeline/runSearchPipeline";
 import { SearchPipelineIR } from "@/lib/search-pipeline/types";
 
@@ -1356,6 +1356,8 @@ async function run() {
   await testPhase1SynergyWithCardDetectsIntent();
   await testPhase1SynergyWithCardVariants();
   await testPhase1SynergyWithCardDoesNotFalsePositive();
+  await testPhase1CommanderDeckNotSynergyWithCommanderPrefixCard();
+  await testPhase1StripsNotCedhPowerLevelAside();
   await testPhase1SynergyWithCardPreservesExtraConstraints();
   await testPhase1SimilarToCardPreservesExtraConstraints();
   // Rarity filter tests
@@ -1375,6 +1377,9 @@ async function run() {
   // Function concept clauses
   await testPhase1CantripsMapToFunctionCantrip();
   await testPhase1LootingMapsFunctionLoot();
+  await testPhase1PoliteExtraTurnsNotAntisocialCommander();
+  await testPhase1NegatedTablePoliticsWithoutExtraTurnExcludesFullHateMagnet();
+  testRemoveInvalidTagsDoesNotStripHyphenatedFunctionTags();
   // Scaling oracle text heuristics
   await testPhase1ManaForEachSpell();
   await testPhase1ForEachArtifactScaling();
@@ -1477,6 +1482,52 @@ async function testPhase1SynergyWithCardDoesNotFalsePositive() {
     `"artifact synergies" should NOT match synergy-with-card intent (got: ${parsed.intent})`
   );
   console.log("[PASS] phase1: 'artifact synergies' does not false-positive as synergy-with-card");
+}
+
+async function testPhase1CommanderDeckNotSynergyWithCommanderPrefixCard() {
+  // Regression: "for my commander deck" must not resolve prefix "commander" → "Commander Eesha"
+  // (see search QA board-wipe template).
+  const queries = [
+    "mass removal for my commander deck",
+    "I need a reset button — mass removal for my commander deck",
+  ];
+  for (const q of queries) {
+    const parsed = await parseNaturalQuery(q);
+    assert.notEqual(
+      parsed.intent,
+      "synergy-with-card",
+      `"${q}" must not be synergy-with-card (got synergyWithCardName=${JSON.stringify(parsed.synergyWithCardName)})`
+    );
+    assert.ok(
+      !parsed.synergyWithCardName?.toLowerCase().includes("eesha"),
+      `"${q}" must not set synergyWithCardName to Commander Eesha; got: ${parsed.synergyWithCardName}`
+    );
+    const nameClauses = parsed.mustClauses
+      .filter((c) => /^name:/i.test(c.value))
+      .map((c) => c.value.toLowerCase());
+    assert.ok(
+      !nameClauses.some((v) => v.includes("eesha")),
+      `"${q}" must not emit name: Commander Eesha in phase1; got: ${nameClauses.join(", ")}`
+    );
+  }
+  console.log(
+    "[PASS] phase1: '…for my commander deck' is not synergy-with-card / Commander Eesha"
+  );
+}
+
+async function testPhase1StripsNotCedhPowerLevelAside() {
+  const parsed = await parseNaturalQuery("board wipes in commander — not cEDH");
+  assert.ok(
+    parsed.unresolvedFragments.every(
+      (f) => !/\bcedh\b/i.test(f.text) && !/c\s*e\s*d\s*h/i.test(f.text)
+    ),
+    `cEDH aside should not leak to Phase 2; fragments: ${JSON.stringify(parsed.unresolvedFragments)}`
+  );
+  assert.ok(
+    !parsed.mustClauses.some((c) => /\bt:\s*dack\b/i.test(c.value)),
+    `unexpected t:dack from cEDH noise; must: ${parsed.mustClauses.map((c) => c.value).join(", ")}`
+  );
+  console.log("[PASS] phase1: 'not cEDH' power-level aside stripped (no bogus fragments)");
 }
 
 async function testPhase1SynergyWithCardPreservesExtraConstraints() {
@@ -1686,6 +1737,66 @@ async function testPhase1LootingMapsFunctionLoot() {
     `expected function:loot; got: ${mustValues.join(", ")}`
   );
   console.log("[PASS] phase1: 'looting' → function:loot");
+}
+
+async function testPhase1PoliteExtraTurnsNotAntisocialCommander() {
+  const q = "extra turn spells that aren't completely antisocial for commander";
+  const parsed = await parseNaturalQuery(q);
+  const must = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  const mustNot = parsed.mustNotClauses.map((c) => c.value.toLowerCase());
+
+  assert.ok(must.includes("f:commander"), `expected f:commander; got: ${must.join(", ")}`);
+  assert.ok(must.includes("function:extra-turn"), `expected function:extra-turn; got: ${must.join(", ")}`);
+  assert.ok(
+    must.some((v) => v === "(t:instant or t:sorcery)"),
+    `expected (t:instant or t:sorcery); got: ${must.join(", ")}`
+  );
+  assert.ok(
+    mustNot.includes("function:tax"),
+    `expected function:tax in mustNot; got: ${mustNot.join(", ")}`
+  );
+  assert.ok(
+    mustNot.includes("function:group-slug"),
+    `expected function:group-slug in mustNot; got: ${mustNot.join(", ")}`
+  );
+  assert.ok(
+    !mustNot.some((v) => v.includes("extra-turn")),
+    `mustNot must not exclude extra-turn; got: ${mustNot.join(", ")}`
+  );
+  assert.equal(
+    parsed.unresolvedFragments.length,
+    0,
+    `no Phase 2 fragments expected; got: ${JSON.stringify(parsed.unresolvedFragments)}`
+  );
+  console.log(
+    "[PASS] phase1: polite extra-turn commander → function:extra-turn + spell types + antisocial exclusions"
+  );
+}
+
+async function testPhase1NegatedTablePoliticsWithoutExtraTurnExcludesFullHateMagnet() {
+  const parsed = await parseNaturalQuery("green ramp for commander that isn't antisocial");
+  const mustNot = parsed.mustNotClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustNot.includes("function:extra-turn"),
+    `without extra-turn intent, negated antisocial should still exclude extra-turn; got: ${mustNot.join(", ")}`
+  );
+  assert.ok(
+    mustNot.includes("function:tax"),
+    `expected function:tax in mustNot; got: ${mustNot.join(", ")}`
+  );
+  assert.ok(
+    !parsed.mustClauses.some((c) => /function:extra-turn/i.test(c.value)),
+    "must not emit function:extra-turn when the query does not ask for extra turns"
+  );
+  console.log("[PASS] phase1: negated antisocial without extra-turn → mustNot entire hate-magnet tag set");
+}
+
+function testRemoveInvalidTagsDoesNotStripHyphenatedFunctionTags() {
+  const before = "f:commander (function:storm-like or function:tax)";
+  const after = removeInvalidTagsFromQuery(before, [{ type: "function", tag: "storm" }]);
+  assert.match(after, /function:storm-like/i, `expected storm-like to remain; got: ${after}`);
+  assert.doesNotMatch(after, /\bor\s+-like\b/i, `orphan -like should not appear; got: ${after}`);
+  console.log("[PASS] phase3: stripping invalid function:storm leaves function:storm-like intact");
 }
 
 async function testPhase1ManaForEachSpell() {
