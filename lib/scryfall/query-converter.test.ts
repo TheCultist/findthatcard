@@ -31,6 +31,24 @@ const finalizeCases: FinalizeTestCase[] = [
     expected: "c:r t:dragon",
   },
   {
+    name: "strips o:casual (playgroup meta, not oracle search axis)",
+    naturalQuery: "zz",
+    rawQuery: "o:casual t:creature",
+    expected: "t:creature",
+  },
+  {
+    name: "strips o:fun and o:play when query is casual playgroup talk",
+    naturalQuery: "casual commander pod zz",
+    rawQuery: "o:casual o:fun o:play t:creature",
+    expected: "t:creature is:commander",
+  },
+  {
+    name: "strips o:combo and o:\"combo with\" for colloquial synergy phrasing",
+    naturalQuery: "untap shenanigans stuff that combos with mana dorks zz",
+    rawQuery: "o:untap o:combo o:\"combo with\" t:creature",
+    expected: "o:untap t:creature",
+  },
+  {
     name: "strips rogue parenthetical (or) between function groups",
     naturalQuery: "zz",
     rawQuery:

@@ -243,6 +243,179 @@ async function removeUnknownTypeFilters(scryfallQuery: string): Promise<string> 
   }).replace(/\s{2,}/g, " ").trim();
 }
 
+let planeswalkerSubtypeSetPromise: Promise<Set<string>> | null = null;
+
+async function getPlaneswalkerSubtypeSet(): Promise<Set<string>> {
+  if (!planeswalkerSubtypeSetPromise) {
+    planeswalkerSubtypeSetPromise = (async () => {
+      const values = await getCatalog("planeswalker-types");
+      return new Set(values.map((v) => v.toLowerCase().trim()).filter(Boolean));
+    })();
+  }
+  return planeswalkerSubtypeSetPromise;
+}
+
+/**
+ * True when the query requires creature-type cards (positive t:creature / type:creature).
+ * Negated -t:creature is ignored — that branch is "not creatures", not a creature search.
+ */
+function hasPositiveCreatureTypeFilter(query: string): boolean {
+  const re = /(^|[\s(])(?:t|type):creature\b/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(query)) !== null) {
+    const tIdx = m.index + m[1].length;
+    if (tIdx > 0 && query[tIdx - 1] === "-") continue;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Phase 2 can emit t:<planeswalker subtype> (e.g. t:dack) from noisy fragments. Combined with
+ * t:creature from Phase 1, Scryfall returns 0 hits — no card is both a creature and a
+ * planeswalker subtype. Strip PW-only subtypes when a positive creature filter is present.
+ */
+async function stripPlaneswalkerSubtypesWhenCreatureRequired(
+  scryfallQuery: string
+): Promise<string> {
+  if (!hasPositiveCreatureTypeFilter(scryfallQuery)) return scryfallQuery;
+
+  const pwSubtypes = await getPlaneswalkerSubtypeSet();
+  let result = scryfallQuery;
+  for (const pw of pwSubtypes) {
+    if (pw.length < 2) continue;
+    const escaped = pw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    result = result.replace(
+      new RegExp(`\\s*\\b(?:t|type):${escaped}\\b`, "gi"),
+      " "
+    );
+  }
+  return result.replace(/\s{2,}/g, " ").trim();
+}
+
+/**
+ * True when the Scryfall query already constrains mana value (mv/cmc comparisons).
+ * Used by {@link stripMvBoundRedundantFunctionTags} — not every redundant tag needs an mv bound;
+ * each rule decides when it applies.
+ */
+function hasManaValueComparisonInQuery(scryfallQuery: string): boolean {
+  return /\b(?:mv|cmc)(?:<=|>=|<|>|=)\s*\d+\b/i.test(scryfallQuery);
+}
+
+/**
+ * Phase 2 sometimes maps colloquial words to Tagger function tags whose *meaning* overlaps
+ * what Phase 1 already expressed as `mv`/`cmc` bounds. Stripping blindly would break queries
+ * where the user actually asked for that mechanical axis — each rule carries an
+ * "explicit intent" predicate as a safeguard.
+ *
+ * Add a row here when QA finds another `function:*` that collides with mv/cmc filters;
+ * keep one-off hacks out of the resolver.
+ */
+type MvBoundRedundantFunctionTagRule = {
+  /** Slug after `function:` (e.g. `cheaper-than-mv`). */
+  tag: string;
+  /** If true, keep the tag even when an mv/cmc bound is present. */
+  userExplicitlyWantsFeature: (naturalQuery: string) => boolean;
+};
+
+/**
+ * User explicitly wants the Tagger "cheaper than MV" mechanic (pay less than printed
+ * mana value / cost reduction), not colloquial "cheap" meaning low mana cost.
+ *
+ * When this is true, we must NOT strip function:cheaper-than-mv even if mv<= is present.
+ */
+function explicitlyWantsCheaperThanMvMechanic(naturalQuery: string): boolean {
+  const q = naturalQuery.toLowerCase();
+  // Colloquial "under N mana" — NOT the mechanic (do not preserve the tag for this).
+  if (/\bcheaper\s+than\s+\d+\s*(?:mana|mv|cmc)?\b/i.test(q)) {
+    return false;
+  }
+  // Possessor + "mana" must allow a space ("their mana value", not "theirmana").
+  const poss = "(?:its|their|the|my)";
+  const manaMvCmc = "(?:mana\\s+value|converted\\s+mana(?:\\s+cost)?|mana\\s+cost|mv|cmc)";
+  return (
+    new RegExp(`\\bcheaper\\s+than\\s+${poss}\\s+${manaMvCmc}\\b`, "i").test(q) ||
+    /\bcheaper\s+than\s+mv\b/i.test(q) ||
+    new RegExp(`\\bpay\\s+less\\s+than\\s+${poss}\\s+${manaMvCmc}\\b`, "i").test(q) ||
+    new RegExp(`\\bcost(?:s|ing)?\\s+less\\s+than\\s+${poss}\\s+${manaMvCmc}\\b`, "i").test(q) ||
+    new RegExp(`\\bcast\\s+for\\s+less\\s+than\\s+${poss}\\s+${manaMvCmc}\\b`, "i").test(q) ||
+    new RegExp(
+      `\\bcards?\\s+that\\s+cost\\s+less\\s+than\\s+${poss}\\s+${manaMvCmc}\\b`,
+      "i"
+    ).test(q) ||
+    /\bspells?\s+that\s+cost\s+less\s+than\s+(?:their|its|the|my)\b/i.test(q) ||
+    /\bcost\s+reduction\b/i.test(q) ||
+    /\breduces?\s+(?:the\s+)?(?:mana\s+)?cost\s+(?:of|to|for)\b/i.test(q) ||
+    /\balternate\s+cost\b/i.test(q) ||
+    /\bproportional\s+discount\b/i.test(q)
+  );
+}
+
+const MV_BOUND_REDUNDANT_FUNCTION_TAG_RULES: MvBoundRedundantFunctionTagRule[] = [
+  {
+    tag: "cheaper-than-mv",
+    userExplicitlyWantsFeature: explicitlyWantsCheaperThanMvMechanic,
+  },
+];
+
+function stripMvBoundRedundantFunctionTags(
+  naturalQuery: string,
+  scryfallQuery: string
+): string {
+  if (!hasManaValueComparisonInQuery(scryfallQuery)) return scryfallQuery;
+
+  let result = scryfallQuery;
+  for (const rule of MV_BOUND_REDUNDANT_FUNCTION_TAG_RULES) {
+    const escaped = rule.tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (!new RegExp(`\\bfunction:${escaped}\\b`, "i").test(result)) continue;
+    if (rule.userExplicitlyWantsFeature(naturalQuery)) continue;
+    result = result
+      .replace(new RegExp(`\\s*\\bfunction:${escaped}\\b`, "gi"), " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+  return result;
+}
+
+/**
+ * OGW **Support** keyword (`kw:support`) vs colloquial "support cards" / "tribal support"
+ * (deck role). Phase 2 often mis-emit kw:support; combined with f:commander + function
+ * OR-chains it can yield **zero** Scryfall hits.
+ */
+function explicitlyWantsSupportKeywordMechanic(naturalQuery: string): boolean {
+  const q = naturalQuery.toLowerCase();
+  return (
+    /\bsupport\s+\d+\b/.test(q) ||
+    /\bsupport\s+keyword\b/.test(q) ||
+    /\bkeyword\s+support\b/.test(q) ||
+    /\bmechanic\s+support\b/.test(q) ||
+    /\bogw\s+support\b/.test(q)
+  );
+}
+
+function isDeckbuildingSupportColloquialism(naturalQuery: string): boolean {
+  const q = naturalQuery.toLowerCase();
+  return (
+    /\bsupport\s+cards?\b/.test(q) ||
+    /\b(?:tribal|deck|archetype|commander)\s+support\b/.test(q) ||
+    /\bsupport\s+pieces?\b/.test(q) ||
+    /\bsupport\s+for\s+(?:a|an|my|the)\s+/i.test(q)
+  );
+}
+
+function stripMisleadingKwSupportForDeckbuilding(
+  naturalQuery: string,
+  scryfallQuery: string
+): string {
+  if (!/\bkw:support\b/i.test(scryfallQuery)) return scryfallQuery;
+  if (explicitlyWantsSupportKeywordMechanic(naturalQuery)) return scryfallQuery;
+  if (!isDeckbuildingSupportColloquialism(naturalQuery)) return scryfallQuery;
+  return scryfallQuery
+    .replace(/\s*\bkw:support\b/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function stripPreferBestPrefix(value: string): string {
   return value.replace(/^prefer:best\s+/i, "").trim();
 }
@@ -416,6 +589,9 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     query = removeDamageTargetTypeFilters(ir.naturalQuery, query);
     query = removeArchetypeTargetTypeFilters(ir.naturalQuery, query);
     query = await removeUnknownTypeFilters(query);
+    query = await stripPlaneswalkerSubtypesWhenCreatureRequired(query);
+    query = stripMvBoundRedundantFunctionTags(ir.naturalQuery, query);
+    query = stripMisleadingKwSupportForDeckbuilding(ir.naturalQuery, query);
     query = applyDefaultGameFilter(query);
     query = query.replace(/^\s*[iI]\s+/i, "").trim();
 

@@ -36,6 +36,7 @@ import { resolveRarityFilter } from "./resolveRarity";
 import { applyIsFlagRules } from "./isFlags";
 import { applyLandCycleRules } from "./landCycles";
 import { applyExplicitActionRules } from "./actionRules";
+import { maskSynergyWithComplements } from "./synergyPartnerMask";
 
 // Constants and stat/rarity helpers are imported from dedicated modules above.
 // See phase1/constants.ts, phase1/resolveStats.ts, phase1/resolveRarity.ts.
@@ -1008,6 +1009,8 @@ function applyOracleIntentHeuristics(
   mustClauses: QueryClause[],
   strippedTerms: string[]
 ): void {
+  const synergyMaskedQuery = maskSynergyWithComplements(naturalQuery);
+
   const ETB_TERMS = [
     "etb", "enters", "enter",
     "enters the battlefield", "enters the field",
@@ -1394,9 +1397,11 @@ function applyOracleIntentHeuristics(
   // "artifact ramp" / "artifact mana" are intentionally excluded: the user may want
   // any artifact that accelerates mana (including artifact creatures), not just
   // dedicated mana rocks. Those fall through to the general ramp archetype.
+  // Use synergyMaskedQuery so "synergize with mana rocks like Sol Ring" does not
+  // AND mana-rock tags with the synergy-with-card resolver.
   const hasManaRockIntent =
-    /\bmana\s+rocks?\b/i.test(naturalQuery) ||
-    /\bmana[-\s]generating\s+artifacts?\b/i.test(naturalQuery);
+    /\bmana\s+rocks?\b/i.test(synergyMaskedQuery) ||
+    /\bmana[-\s]generating\s+artifacts?\b/i.test(synergyMaskedQuery);
 
   if (hasManaRockIntent) {
     mustClauses.push({
@@ -1830,6 +1835,7 @@ function applyFuzzyKeywordCorrections(
  *   "blue counterspells"           → function:counterspell
  *   "green recursion spells"       → function:recursion
  *   "green mana dorks"             → function:mana-dork
+ *   "combos with mana dorks"       → (no mana-dork tag; partner is synergy context — see synergyPartnerMask)
  *   "white anthem effects"         → function:anthem
  *   "goblin lords"                 → function:lord
  */
@@ -1839,7 +1845,7 @@ function detectFunctionConceptClauses(
   const clauses: QueryClause[] = [];
   const strippedTerms: string[] = [];
   const mustNotClauses: QueryClause[] = [];
-  const lower = naturalQuery.toLowerCase();
+  const lower = maskSynergyWithComplements(naturalQuery).toLowerCase();
 
   // Typed sacrifice outlet — "sacrifice [type]" → function:sacrifice-outlet-[type]
   // e.g. "ways to sacrifice lands" → function:sacrifice-outlet-land
@@ -2894,6 +2900,47 @@ const GENERIC_COMMANDER_DECK_DESCRIPTORS = new Set([
   "edh",
 ]);
 
+/**
+ * When a bypass-intent capture group is not "CardName …" at word 0 — e.g.
+ * "mana rocks like Sol Ring" — the card name may appear after "like" or
+ * elsewhere. Scan all contiguous subsequences (length ≤ 8), prefer the
+ * longest `lookupCardName` hit, then (on ties) a match after the word "like".
+ */
+function findBestCardNameInCaptureWords(words: string[]): { canonical: string; consumedWords: string[] } | null {
+  if (words.length === 0) return null;
+  const likeIdx = words.indexOf("like");
+  type Cand = { canonical: string; start: number; len: number };
+  const cands: Cand[] = [];
+  const maxSpan = Math.min(8, words.length);
+  for (let start = 0; start < words.length; start++) {
+    for (let len = Math.min(maxSpan, words.length - start); len >= 1; len--) {
+      const candidate = words.slice(start, start + len).join(" ");
+      const canonical = lookupCardName(candidate);
+      if (canonical) {
+        cands.push({ canonical, start, len });
+      }
+    }
+  }
+  if (cands.length === 0) return null;
+  const maxLen = Math.max(...cands.map((c) => c.len));
+  const longest = cands.filter((c) => c.len === maxLen);
+  if (longest.length === 1) {
+    const c = longest[0];
+    return { canonical: c.canonical, consumedWords: words.slice(c.start, c.start + c.len) };
+  }
+  if (likeIdx >= 0) {
+    const afterLike = longest.filter((c) => c.start > likeIdx);
+    if (afterLike.length) {
+      afterLike.sort((a, b) => b.start - a.start);
+      const c = afterLike[0];
+      return { canonical: c.canonical, consumedWords: words.slice(c.start, c.start + c.len) };
+    }
+  }
+  longest.sort((a, b) => b.start - a.start);
+  const c = longest[0];
+  return { canonical: c.canonical, consumedWords: words.slice(c.start, c.start + c.len) };
+}
+
 function detectArtLikeCardQuery(naturalQuery: string): BypassDetectResult {
   if (!hasCardNameIndex()) return null;
 
@@ -2938,6 +2985,14 @@ function detectArtLikeCardQuery(naturalQuery: string): BypassDetectResult {
       if (canonical) {
         return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], nameWords, canonical) };
       }
+    }
+
+    const embeddedArt = findBestCardNameInCaptureWords(words);
+    if (embeddedArt) {
+      return {
+        cardName: embeddedArt.canonical,
+        strippedWords: buildBypassStrippedWords(match[0], match[1], embeddedArt.consumedWords, embeddedArt.canonical),
+      };
     }
   }
 
@@ -3027,6 +3082,14 @@ function detectSimilarToCardQuery(naturalQuery: string): BypassDetectResult {
         return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], nameWords, canonical) };
       }
     }
+
+    const embeddedSimilar = findBestCardNameInCaptureWords(words);
+    if (embeddedSimilar) {
+      return {
+        cardName: embeddedSimilar.canonical,
+        strippedWords: buildBypassStrippedWords(match[0], match[1], embeddedSimilar.consumedWords, embeddedSimilar.canonical),
+      };
+    }
   }
 
   return null;
@@ -3106,6 +3169,32 @@ function detectSynergyWithCardQuery(naturalQuery: string): BypassDetectResult {
         return { cardName: canonical, strippedWords: buildBypassStrippedWords(match[0], match[1], nameWords, canonical) };
       }
     }
+
+    const embeddedSynergy = findBestCardNameInCaptureWords(words);
+    if (embeddedSynergy) {
+      const baseStripped = buildBypassStrippedWords(
+        match[0],
+        match[1],
+        embeddedSynergy.consumedWords,
+        embeddedSynergy.canonical
+      );
+      const likeIdx = words.indexOf("like");
+      if (likeIdx > 0) {
+        // Drop category noise before "like" (e.g. "mana rocks like Sol Ring") but
+        // keep type words ("instants like …") for structural filters.
+        const beforeLike = words
+          .slice(0, likeIdx)
+          .filter((w) => w.length > 1 && !BYPASS_PRESERVED_TYPE_WORDS.has(w));
+        return {
+          cardName: embeddedSynergy.canonical,
+          strippedWords: [...new Set([...baseStripped, ...beforeLike])],
+        };
+      }
+      return {
+        cardName: embeddedSynergy.canonical,
+        strippedWords: baseStripped,
+      };
+    }
   }
 
   return null;
@@ -3114,7 +3203,7 @@ function detectSynergyWithCardQuery(naturalQuery: string): BypassDetectResult {
 export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Result> {
   const tokenizedQuery = tokenizeNaturalQuery(naturalQuery);
   const strippedTerms: string[] = [];
-  const synergySubjects = extractSynergySubjects(naturalQuery);
+  const synergySubjects = extractSynergySubjects(maskSynergyWithComplements(naturalQuery));
 
   if (isScryfallQuery(naturalQuery)) {
     return {
@@ -3230,13 +3319,26 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   // misidentified as creature types / subtypes.
   const prePassResult = cardNamePrePass(naturalQuery);
   if (prePassResult) {
-    mustClauses.push({
-      value: `name:"${prePassResult.canonical}"`,
-      source: "phase1:cardname",
-    });
-    for (const word of prePassResult.reservedWords) {
-      semanticRoleTokens.add(word);   // prevents TYPE_TOKENS from grabbing them
-      strippedTerms.push(word);        // prevents catalog subtypes from grabbing them
+    const bypassAnchorName =
+      bypassIntent === "synergy-with-card"
+        ? synergyWithCardName
+        : bypassIntent === "similar-cards"
+          ? similarToCardName
+          : bypassIntent === "art-like-cards"
+            ? artLikeCardName
+            : undefined;
+    const isDuplicateIntentAnchor =
+      bypassAnchorName &&
+      prePassResult.canonical.toLowerCase() === bypassAnchorName.toLowerCase();
+    if (!isDuplicateIntentAnchor) {
+      mustClauses.push({
+        value: `name:"${prePassResult.canonical}"`,
+        source: "phase1:cardname",
+      });
+      for (const word of prePassResult.reservedWords) {
+        semanticRoleTokens.add(word);   // prevents TYPE_TOKENS from grabbing them
+        strippedTerms.push(word);        // prevents catalog subtypes from grabbing them
+      }
     }
   }
 

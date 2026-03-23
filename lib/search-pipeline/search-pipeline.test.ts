@@ -108,6 +108,171 @@ async function testPhase3RemovesUnknownTypeFilters() {
   console.log("[PASS] phase3: removes unknown type filters like t:penguin");
 }
 
+async function testPhase3StripsPlaneswalkerSubtypeWhenCreatureRequired() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "cheap low-curve gruul creatures for kitchen-table commander",
+    intent: "commander-deck",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "f:commander", source: "phase1:commander" },
+      { value: "id:rg", source: "phase1:color" },
+      { value: "t:creature", source: "phase1:type" },
+      { value: "t:dack", source: "phase2:resolver" },
+      { value: "mv<=3", source: "phase1:stat" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
+  };
+  const finalized = await finalizeQuery(ir);
+  assert.ok(
+    !/\b(?:t|type):dack\b/i.test(finalized.queryForLogs),
+    `bogus PW subtype should be stripped with t:creature; got: ${finalized.queryForLogs}`
+  );
+  assert.ok(
+    /\b(?:t|type):creature\b/i.test(finalized.queryForLogs),
+    `should keep creature filter; got: ${finalized.queryForLogs}`
+  );
+  console.log("[PASS] phase3: strips planeswalker subtype tags when query requires creatures");
+}
+
+async function testPhase3StripsRedundantCheaperThanMvWhenMvBoundCoversCheap() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "cheap low-curve gruul creatures for kitchen-table commander",
+    intent: "commander-deck",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "f:commander", source: "phase1:commander" },
+      { value: "id:rg", source: "phase1:color" },
+      { value: "t:creature", source: "phase1:type" },
+      { value: "mv<=3", source: "phase1:stat" },
+      { value: "function:cheaper-than-mv", source: "phase2:resolver" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
+  };
+  const finalized = await finalizeQuery(ir);
+  assert.ok(
+    !/\bfunction:cheaper-than-mv\b/i.test(finalized.queryForLogs),
+    `colloquial cheap + mv<= should drop redundant cheaper-than-mv; got: ${finalized.queryForLogs}`
+  );
+  assert.ok(/\bmv<=3\b/i.test(finalized.queryForLogs), `expected mv bound kept; got: ${finalized.queryForLogs}`);
+  console.log("[PASS] phase3: strips function:cheaper-than-mv when mv bound already encodes cheap/low-curve");
+}
+
+async function testPhase3KeepsCheaperThanMvWhenUserExplicitlyAsksMechanic() {
+  const ir: SearchPipelineIR = {
+    naturalQuery:
+      "gruul commander creatures mv<=3 that cost less than their mana value",
+    intent: "commander-deck",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "f:commander", source: "phase1:commander" },
+      { value: "id:rg", source: "phase1:color" },
+      { value: "t:creature", source: "phase1:type" },
+      { value: "mv<=3", source: "phase1:stat" },
+      { value: "function:cheaper-than-mv", source: "phase2:resolver" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
+  };
+  const finalized = await finalizeQuery(ir);
+  assert.ok(
+    /\bfunction:cheaper-than-mv\b/i.test(finalized.queryForLogs),
+    `explicit cost-less-than-MV intent should keep tag; got: ${finalized.queryForLogs}`
+  );
+  console.log("[PASS] phase3: keeps function:cheaper-than-mv when user asks for that mechanic");
+}
+
+async function testPhase3KeepsCheaperThanMvWhenUserSaysCostReduction() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "mv<=3 gruul cost reduction creatures for commander",
+    intent: "commander-deck",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "f:commander", source: "phase1:commander" },
+      { value: "id:rg", source: "phase1:color" },
+      { value: "t:creature", source: "phase1:type" },
+      { value: "mv<=3", source: "phase1:stat" },
+      { value: "function:cheaper-than-mv", source: "phase2:resolver" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
+  };
+  const finalized = await finalizeQuery(ir);
+  assert.ok(
+    /\bfunction:cheaper-than-mv\b/i.test(finalized.queryForLogs),
+    `"cost reduction" should preserve cheaper-than-mv with mv bound; got: ${finalized.queryForLogs}`
+  );
+  console.log("[PASS] phase3: keeps function:cheaper-than-mv when user says cost reduction");
+}
+
+async function testPhase3StripsKwSupportForSupportCardsPhrase() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "support cards for a artifact creature tribal commander deck",
+    intent: "commander-deck",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "f:commander", source: "phase1:commander" },
+      { value: "t:artifact", source: "phase1:type" },
+      { value: "kw:support", source: "phase2:resolver" },
+      { value: "function:synergy-artifact-creature", source: "phase2:resolver" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
+  };
+  const finalized = await finalizeQuery(ir);
+  assert.ok(
+    !/\bkw:support\b/i.test(finalized.queryForLogs),
+    `"support cards" is deck role, not OGW Support keyword; got: ${finalized.queryForLogs}`
+  );
+  console.log("[PASS] phase3: strips kw:support when user means deckbuilding support, not the keyword");
+}
+
+async function testPhase3KeepsKwSupportForSupportKeywordMechanic() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "commander legal creatures with support 2",
+    intent: "commander-deck",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [
+      { value: "f:commander", source: "phase1:commander" },
+      { value: "t:creature", source: "phase1:type" },
+      { value: "kw:support", source: "phase2:resolver" },
+    ],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [],
+    resolvedFragments: [],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
+  };
+  const finalized = await finalizeQuery(ir);
+  assert.ok(
+    /\bkw:support\b/i.test(finalized.queryForLogs),
+    `explicit Support N should keep kw:support; got: ${finalized.queryForLogs}`
+  );
+  console.log("[PASS] phase3: keeps kw:support when user clearly means the Support keyword");
+}
+
 async function testPhase3PreservesAndedStandaloneArtTags() {
   const ir: SearchPipelineIR = {
     naturalQuery: "cards with big titties goth girls",
@@ -346,6 +511,48 @@ async function testPhase1MonocolorUsesExactIdentity() {
   assert.ok(mustValuesF.includes("c=u"), `should include c=u for mono-blue card color; got: ${mustValuesF.join(", ")}`);
 
   console.log("[PASS] phase1: color filter uses c: by default, id: for commander/identity contexts");
+}
+
+async function testPhase1SynergyPartnerMaskSkipsManaDorkFilter() {
+  const untapCombos = await parseNaturalQuery(
+    "untap shenanigans — stuff that combos with mana dorks for my commander deck"
+  );
+  const untapMust = untapCombos.mustClauses.map((c) => c.value).join(" ");
+  assert.ok(
+    !/\bfunction:mana-dork\b/i.test(untapMust),
+    `combos-with partner phrase should not AND function:mana-dork; got: ${untapMust}`
+  );
+
+  const directDorks = await parseNaturalQuery("green mana dorks");
+  const dorkMust = directDorks.mustClauses.map((c) => c.value).join(" ");
+  assert.ok(
+    /\bfunction:mana-dork\b/i.test(dorkMust),
+    `direct subject should still emit function:mana-dork; got: ${dorkMust}`
+  );
+
+  console.log(
+    "[PASS] phase1: synergyPartnerMask skips mana-dork in combos-with complement; keeps for direct dork query"
+  );
+}
+
+async function testPhase1SynergyWithCategoryLikeCardName() {
+  const parsed = await parseNaturalQuery("cards that synergize with mana rocks like Sol Ring");
+  assert.equal(parsed.intent, "synergy-with-card", `expected synergy-with-card, got: ${parsed.intent}`);
+  assert.equal(parsed.synergyWithCardName, "Sol Ring");
+  const mustValues = parsed.mustClauses.map((c) => c.value).join(" ");
+  assert.ok(
+    !/\bname:\s*"Sol Ring"/i.test(mustValues),
+    `must not AND name: anchor card; got: ${mustValues}`
+  );
+  assert.ok(
+    !/\bfunction:mana-rock\b/i.test(mustValues),
+    `category phrase must not add mana-rock function tags; got: ${mustValues}`
+  );
+  assert.ok(
+    !/\bfunction:mana-cost-matters\b/i.test(mustValues),
+    `must not spuriously match synergy-subject "mana" from truncated regex; got: ${mustValues}`
+  );
+  console.log("[PASS] phase1: synergize with [category] like [Card] → synergy-with-card, no bogus ANDs");
 }
 
 async function testPhase1FuzzyKeywordTypo() {
@@ -1286,6 +1493,12 @@ async function run() {
   await testPhase3DirectQueryAddsPreferBest();
   await testPhase3DirectQueryPassThrough();
   await testPhase3RemovesUnknownTypeFilters();
+  await testPhase3StripsPlaneswalkerSubtypeWhenCreatureRequired();
+  await testPhase3StripsRedundantCheaperThanMvWhenMvBoundCoversCheap();
+  await testPhase3KeepsCheaperThanMvWhenUserExplicitlyAsksMechanic();
+  await testPhase3KeepsCheaperThanMvWhenUserSaysCostReduction();
+  await testPhase3StripsKwSupportForSupportCardsPhrase();
+  await testPhase3KeepsKwSupportForSupportKeywordMechanic();
   await testPhase3PreservesAndedStandaloneArtTags();
   await testPipelineDirectEndToEnd();
   await testPipelineSimilarCardsDoesNotContradictNameExclusion();
@@ -1300,6 +1513,8 @@ async function run() {
   await testPhase1EnchantTargetNotCardType();
   await testPhase1FuzzyColorIdentityTypo();
   await testPhase1MonocolorUsesExactIdentity();
+  await testPhase1SynergyPartnerMaskSkipsManaDorkFilter();
+  await testPhase1SynergyWithCategoryLikeCardName();
   await testPhase1FuzzyKeywordTypo();
   await testPhase1FuzzyStrategyTypo();
   await testPhase1SynergyIntentUsesFunctionTagsForMentionedSubject();

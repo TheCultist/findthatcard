@@ -325,7 +325,9 @@ const TEMPLATES: Template[] = [
 ];
 
 type PipelineDebug = {
+  /** Phase 1 fragment buckets (assembly keys), not “still unresolved”. */
   unresolvedFragments: number;
+  resolvedFragments: number;
   aiBatchCalls: number;
   aiSequentialCalls: number;
   invalidTagsRemoved: number;
@@ -605,7 +607,7 @@ function writeReports(outBase: string, rows: ResultRow[], meta: { seed: number; 
       lines.push(`- **Error:** ${r.error ?? "—"}`);
       if (r.pipelineDebug) {
         lines.push(
-          `- **Pipeline:** unresolved=${r.pipelineDebug.unresolvedFragments} aiBatch=${r.pipelineDebug.aiBatchCalls} aiSeq=${r.pipelineDebug.aiSequentialCalls} invalidTags=${r.pipelineDebug.invalidTagsRemoved} phase0=${r.pipelineDebug.phase0Normalized}`
+          `- **Pipeline:** phase1Fragments=${r.pipelineDebug.unresolvedFragments} phase2Resolved=${r.pipelineDebug.resolvedFragments} aiBatch=${r.pipelineDebug.aiBatchCalls} aiSeq=${r.pipelineDebug.aiSequentialCalls} invalidTags=${r.pipelineDebug.invalidTagsRemoved} phase0=${r.pipelineDebug.phase0Normalized}`
         );
       }
       if (r.judge) {

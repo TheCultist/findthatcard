@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
         ? ` ~> "${pipelineResult.normalizedQuery}"`
         : "";
       console.log(
-        `[Search] Natural query "${body.naturalQuery}"${phase0Note} -> "${pipelineResult.queryForLogs}" (batch=${pipelineResult.debug.aiBatchCalls}, sequential=${pipelineResult.debug.aiSequentialCalls}, unresolved=${pipelineResult.debug.unresolvedFragments}, invalidRemoved=${pipelineResult.debug.invalidTagsRemoved}, normalized=${pipelineResult.debug.phase0Normalized})`
+        `[Search] Natural query "${body.naturalQuery}"${phase0Note} -> "${pipelineResult.queryForLogs}" (batch=${pipelineResult.debug.aiBatchCalls}, sequential=${pipelineResult.debug.aiSequentialCalls}, phase1Fragments=${pipelineResult.debug.unresolvedFragments}, phase2Resolved=${pipelineResult.debug.resolvedFragments}, invalidRemoved=${pipelineResult.debug.invalidTagsRemoved}, normalized=${pipelineResult.debug.phase0Normalized})`
       );
     } catch (conversionError) {
       console.error("Query conversion error:", conversionError);

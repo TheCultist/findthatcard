@@ -10,6 +10,7 @@ import {
   STRATEGY_ORACLETAGS,
 } from "@/lib/strategies/oracletagStrategies";
 import { hasCommanderDeckContext } from "@/lib/commander-context";
+import { maskSynergyWithComplements } from "@/lib/search-pipeline/phase1/synergyPartnerMask";
 import { escapeRegex } from "@/lib/utils/text";
 
 let openaiClient: OpenAI | null = null;
@@ -1160,7 +1161,7 @@ function normalizeArchetypeIntents(
     return query;
   }
 
-  const lower = naturalQuery.toLowerCase();
+  const lower = maskSynergyWithComplements(naturalQuery).toLowerCase();
   let updated = query;
 
   for (const archetype of ARCHETYPE_REGISTRY) {
@@ -1543,6 +1544,58 @@ function stripSubjectiveQualifierTags(
   return normalizeWhitespace(updated);
 }
 
+/**
+ * Phase 2 sometimes emits o:casual / o:fun / o:play when the user means table
+ * meta ("casual commander pod"), not oracle text. Those AND together and
+ * usually return zero hits. Strip them when the natural language is clearly
+ * playgroup / format talk; always strip o:casual (almost never a real search axis).
+ */
+function stripPlaygroupMetaOracleFilters(
+  naturalQuery: string,
+  query: string
+): string {
+  const playgroupTalk =
+    /\b(?:casual|cedh|kitchen\s*table|low\s*power|precon|pre-con)\b/i.test(
+      naturalQuery
+    ) &&
+    /\b(?:commander|edh|pod|meta|table|group)\b/i.test(naturalQuery);
+  let updated = query.replace(/\s*-?o:casual\b/gi, " ");
+  if (playgroupTalk) {
+    updated = updated.replace(/\s*-?o:fun\b/gi, " ");
+    updated = updated.replace(/\s*-?o:play\b/gi, " ");
+  }
+  return normalizeWhitespace(updated);
+}
+
+/**
+ * Phase 2 may emit o:combo / o:"combo with" when the user means synergy
+ * ("combos with mana dorks"), not oracle text containing the word "combo".
+ * Those AND with other o: filters and usually return zero hits.
+ */
+function stripColloquialComboOracleFilters(
+  naturalQuery: string,
+  query: string
+): string {
+  if (!/\bo:combo\b|o:"combo/i.test(query)) {
+    return query;
+  }
+  const synergyTalk =
+    /\bcombos?\s+with\b/i.test(naturalQuery) ||
+    /\b(?:stuff|things|cards)\s+that\s+.*\bcombo/i.test(naturalQuery) ||
+    /\bshenanigans\b/i.test(naturalQuery) ||
+    /\b(?:synergy|synergizes?|pairs?\s+with|works?\s+with)\b/i.test(
+      naturalQuery
+    );
+  if (!synergyTalk) {
+    return query;
+  }
+  let updated = query.replace(/\s*-?o:combo\b/gi, " ");
+  updated = updated.replace(/\s*-?o:"combo\s+with"/gi, " ");
+  updated = updated.replace(/\s*-?o:'combo\s+with'/gi, " ");
+  updated = updated.replace(/\s*-?o:"combos\s+with"/gi, " ");
+  return normalizeWhitespace(updated);
+}
+
 function normalizeBounceCounterspellOr(naturalQuery: string, query: string): string {
   const wantsBounce = /\bbounce\b/i.test(naturalQuery);
   const wantsCounter = /\bcounter\s*spells?\b|\bcounterspells?\b/i.test(naturalQuery);
@@ -1862,6 +1915,14 @@ export function finalizeScryfallQuery(args: {
     normalizedQuery
   );
   normalizedQuery = stripSubjectiveQualifierTags(naturalQuery, normalizedQuery);
+  normalizedQuery = stripPlaygroupMetaOracleFilters(
+    naturalQuery,
+    normalizedQuery
+  );
+  normalizedQuery = stripColloquialComboOracleFilters(
+    naturalQuery,
+    normalizedQuery
+  );
   normalizedQuery = normalizeLeadingStrayToken(normalizedQuery);
   normalizedQuery = dedupeTokens(normalizedQuery);
   // Second pass: dedupeTokens preserves "(", "or", ")" triples; strip empty (or) groups again.

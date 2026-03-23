@@ -36,6 +36,35 @@ function getFullTypeLine(card: ScryfallNamedCard): string {
   return card.type_line;
 }
 
+/**
+ * Cheap mana artifacts (Sol Ring, Signets, etc.) — used to add tighter prompt rules so
+ * the model does not emit three broad OR branches that each match thousands of cards.
+ */
+function isManaRockStyleCard(
+  card: ScryfallNamedCard,
+  oracleText: string,
+  functionTags: string[],
+): boolean {
+  const normalized = functionTags.map((t) => t.toLowerCase().replace(/\s+/g, "-"));
+  if (
+    normalized.some((t) =>
+      [
+        "mana-rock",
+        "manarock",
+        "utility-mana-rock",
+        "mana-rock-with-sets-mechanic",
+      ].some((needle) => t.includes(needle))
+    )
+  ) {
+    return true;
+  }
+  const tl = getFullTypeLine(card).toLowerCase();
+  if (!tl.includes("artifact")) return false;
+  if (typeof card.cmc === "number" && card.cmc > 3) return false;
+  const ot = oracleText.toLowerCase();
+  return /\{t\}[^\n]{0,40}\badd\s+\{/.test(ot);
+}
+
 type SynergyResponse = {
   scryfall_query: string;
   reasoning?: string;
@@ -50,6 +79,23 @@ function buildSynergyPrompt(
   const keywords = card.keywords.length > 0 ? card.keywords.join(", ") : "none";
   const slugifiedTags = functionTags.map((t) => t.replace(/\s+/g, "-"));
   const tagList = slugifiedTags.length > 0 ? slugifiedTags.join(", ") : "none";
+  const manaRock = isManaRockStyleCard(card, oracleText, functionTags);
+
+  const manaRockBlock = manaRock
+    ? [
+        "",
+        "CARD CLASS — mana rock / cheap mana artifact (taps for mana, low MV):",
+        "- Goal: cards that COMBINE with the extra mana or with cheap artifacts — not every artifact payoff in the game.",
+        "- **At most TWO top-level OR groups** (one OR between them). Never three OR branches — that routinely returns 1000+ cards.",
+        "- **Forbidden pattern:** do NOT OR together function:artifact-payoff, function:activated-ability, and o:\"whenever you activate\" (or similar triples of ultra-broad umbrella tags).",
+        "- Prefer ONE primary axis with tight filters, e.g.:",
+        "  • function:extra-untap or o:\"untap\" with mv<=3 or t:instant, OR",
+        "  • function:copy-spell OR function:copy-permanent with mv<=4, OR",
+        "  • artifact-matter payoffs AND t:creature or mv<=2, OR",
+        "  • cost reduction / affinity for artifacts with a concrete o:\"...\" phrase under 5 words.",
+        "- If you use o:\"...\", it must be a distinctive phrase (not a single generic verb).",
+      ].join("\n")
+    : "";
 
   return [
     "You are a Magic: The Gathering deck-building expert. Given a card, produce a Scryfall search query that finds cards which synergize with it.",
@@ -75,7 +121,8 @@ function buildSynergyPrompt(
     "Guidelines:",
     "- Think like a deck-builder: what other cards make this card shine? What does the deck around this card look like?",
     "- Use Scryfall syntax: o:\"text\" for oracle text, kw:keyword for keyword abilities, t:type for types, function:tag for Tagger function tags.",
-    "- Each function: tag alone matches 200–500+ cards. OR-ing 3+ tags easily exceeds 1000 results. Keep it tight:",
+    "- **Hard cap: at most TWO top-level OR branches** (one OR token: `A OR B`). Never `A OR B OR C` — that almost always returns 1000+ cards.",
+    "- Each function: tag alone matches 200–500+ cards. Keep it tight:",
     "  - Pick 1–2 function: tags for the card's PRIMARY synergy axis only.",
     "  - Narrow each group with a structural filter: kw:keyword, t:type, or mv>=N (e.g. function:topdeck-manipulation kw:surveil, or function:token-maker t:creature).",
     "  - Do NOT AND two function: tags together (near-zero results). Instead AND a function: tag with a type/keyword/mana-value filter.",
@@ -87,6 +134,7 @@ function buildSynergyPrompt(
     "- Keep the query under 400 characters.",
     "- Do NOT add format filters (f:commander, f:modern, etc.) — the user may add those separately.",
     "- Do NOT use name: filters for specific card names — find synergy by mechanics, not by listing known good cards.",
+    manaRockBlock,
     "",
     "Output JSON only (no markdown). Shape:",
     '{"scryfall_query":"...","reasoning":"one sentence explaining the synergy axes"}',
@@ -126,6 +174,9 @@ function sanitizeScryfallQuery(raw: string, cardName: string): string | null {
 
   query = query.replace(/\bf:\w+\b/gi, "").replace(/\s{2,}/g, " ").trim();
 
+  // Strip positive name: — prompt forbids; ANDing name: with -name: yields zero hits.
+  query = query.replace(/\bname:"[^"]*"/gi, "").replace(/\s{2,}/g, " ").trim();
+
   // Strip bare single-word oracle text fragments — they match too broadly.
   // o:"multi word phrase" is fine; o:singleword is not.
   query = query.replace(/\bo:"[^"]{1,15}"\b/g, (match) => {
@@ -164,6 +215,7 @@ function sanitizeScryfallQuery(raw: string, cardName: string): string | null {
 
 export const __testOnly = {
   sanitizeScryfallQuery,
+  isManaRockStyleCard,
 };
 
 export type SynergyQueryResult = {

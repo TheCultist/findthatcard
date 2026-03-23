@@ -198,7 +198,10 @@ export type SearchPipelineResult = {
   queryForLogs: string;
   normalizedQuery?: string;
   debug: {
+    /** Count of Phase 1 fragment buckets (same as `ir.unresolvedFragments.length`; assembly order keys, not “still unresolved”). */
     unresolvedFragments: number;
+    /** How many fragments Phase 2 attached tags/archetypes to (successful resolutions). */
+    resolvedFragments: number;
     aiBatchCalls: number;
     aiSequentialCalls: number;
     invalidTagsRemoved: number;
@@ -253,6 +256,7 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
     normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
     debug: {
       unresolvedFragments: phase2.ir.unresolvedFragments.length,
+      resolvedFragments: phase2.ir.resolvedFragments.length,
       aiBatchCalls: phase1.debug.aiBatchCalls + phase2.batchCalls,
       aiSequentialCalls: phase2.sequentialCalls,
       invalidTagsRemoved: phase3.removedInvalidTags.length,
@@ -330,6 +334,9 @@ async function runCompoundPipeline(
   const totalUnresolved = phase2Results.reduce(
     (s, p) => s + p.ir.unresolvedFragments.length, 0
   );
+  const totalResolved = phase2Results.reduce(
+    (s, p) => s + p.ir.resolvedFragments.length, 0
+  );
   const totalInvalid = phase3Results.reduce(
     (s, p) => s + p.removedInvalidTags.length, 0
   );
@@ -347,6 +354,7 @@ async function runCompoundPipeline(
     normalizedQuery: phase0.didNormalize ? phase0.normalized : undefined,
     debug: {
       unresolvedFragments: totalUnresolved,
+      resolvedFragments: totalResolved,
       aiBatchCalls: totalBatch,
       aiSequentialCalls: totalSeq,
       invalidTagsRemoved: totalInvalid,
