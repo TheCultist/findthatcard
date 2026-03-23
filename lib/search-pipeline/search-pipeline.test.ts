@@ -41,6 +41,36 @@ function testAssemblerBooleanComposition() {
   console.log("[PASS] assembler: composes must/should/must-not with resolved fragments");
 }
 
+function testAssemblerCastTriggerYouAndBurnUsesAndNotOr() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "dummy",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [{ text: "spell ping", category: "effect", orConnected: false }],
+    resolvedFragments: [
+      {
+        fragment: "spell ping",
+        tags: ["function:cast-trigger-you", "function:burn-player", 'o:"noncreature spell"'],
+        confidence: 0.9,
+        category: "effect",
+      },
+    ],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
+  };
+  const query = assembleQueryFromIR(ir);
+  assert.match(query, /function:cast-trigger-you\s+function:burn-player/i, `expected AND between tags; got: ${query}`);
+  assert.doesNotMatch(
+    query,
+    /\(function:cast-trigger-you\s+or\s+function:burn-player\)/i,
+    "cast-trigger + burn must not be OR-chained in one fragment"
+  );
+  console.log("[PASS] assembler: cast-trigger-you + opponent burn uses AND (space), not OR");
+}
+
 async function testPhase3DirectQueryAddsPreferBest() {
   const ir: SearchPipelineIR = {
     naturalQuery: "t:dragon",
@@ -1633,6 +1663,7 @@ async function run() {
 
   await testPhase1DirectQueryShortCircuit();
   testAssemblerBooleanComposition();
+  testAssemblerCastTriggerYouAndBurnUsesAndNotOr();
   testAssemblerSkipsArchetypeFragmentTags();
   testAssemblerEmitsRawTagsForNonArchetypeFragments();
   testAssemblerAndsArtConceptsPerFragment();

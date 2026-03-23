@@ -1,4 +1,14 @@
+import { OPPONENT_BURN_DAMAGE_FUNCTION_TAGS } from "@/lib/scryfall/query-converter";
 import { SearchPipelineIR } from "@/lib/search-pipeline/types";
+
+function isCastTriggerYouTag(token: string): boolean {
+  return /^function:cast-trigger-you$/i.test(token.trim());
+}
+
+function isOpponentBurnDamageFunctionTag(token: string): boolean {
+  const t = token.trim().toLowerCase();
+  return OPPONENT_BURN_DAMAGE_FUNCTION_TAGS.some((slug) => `function:${slug}` === t);
+}
 
 function dedupeTokens(tokens: string[]): string[] {
   const seen = new Set<string>();
@@ -84,7 +94,30 @@ function emitFragmentTags(tags: string[]): string[] {
   }
 
   // Grouped OR chains (function:, oracletag:, etc.)
-  for (const members of groups.values()) {
+  for (const [prefix, members] of groups.entries()) {
+    // Cast-on-you triggers + opponent burn are compositional: user wants cards that BOTH
+    // trigger on your casts AND burn opponents — Scryfall AND (space), not OR.
+    if (
+      prefix === "function:" &&
+      members.length >= 2 &&
+      members.some((m) => isCastTriggerYouTag(m)) &&
+      members.some((m) => isOpponentBurnDamageFunctionTag(m))
+    ) {
+      const cast = members.find((m) => isCastTriggerYouTag(m));
+      const burns = members.filter((m) => isOpponentBurnDamageFunctionTag(m));
+      const others = members.filter(
+        (m) => !isCastTriggerYouTag(m) && !isOpponentBurnDamageFunctionTag(m)
+      );
+      if (cast && burns.length > 0 && others.length === 0) {
+        const burnPart =
+          burns.length === 1
+            ? burns[0]
+            : `(${[...new Set(burns.map((b) => b.trim().toLowerCase()))].join(" or ")})`;
+        result.push(`${cast} ${burnPart}`.trim());
+        continue;
+      }
+    }
+
     if (members.length === 1) {
       result.push(members[0]);
     } else {

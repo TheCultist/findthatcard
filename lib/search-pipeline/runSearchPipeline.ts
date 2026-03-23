@@ -16,6 +16,11 @@ function isPipelineDebugEnabled(): boolean {
   return v === "true" || v === "1" || v === "yes";
 }
 
+/** Log a pipeline stage string — use JSON.stringify so embedded `o:"..."` does not break quoted display. */
+function dbgQ(value: string): string {
+  return JSON.stringify(value);
+}
+
 function logPipelineSummary(args: {
   original: string;
   afterPhase0?: string;
@@ -26,21 +31,21 @@ function logPipelineSummary(args: {
 }): void {
   if (!isPipelineDebugEnabled()) return;
   const lines: string[] = ["[Search Pipeline Debug] Summary:"];
-  lines.push(`  original: "${args.original}"`);
+  lines.push(`  original: ${dbgQ(args.original)}`);
   if (args.afterPhase0 !== undefined) {
-    lines.push(`  after Phase 0: "${args.afterPhase0}"`);
+    lines.push(`  after Phase 0: ${dbgQ(args.afterPhase0)}`);
   }
   if (args.afterPhase1 !== undefined) {
-    lines.push(`  after Phase 1: "${args.afterPhase1}"`);
+    lines.push(`  after Phase 1: ${dbgQ(args.afterPhase1)}`);
   }
   if (args.afterPhase1_5 !== undefined) {
-    lines.push(`  after Phase 1.5: "${args.afterPhase1_5}"`);
+    lines.push(`  after Phase 1.5: ${dbgQ(args.afterPhase1_5)}`);
   }
   if (args.afterPhase2 !== undefined) {
-    lines.push(`  after Phase 2: "${args.afterPhase2}"`);
+    lines.push(`  after Phase 2: ${dbgQ(args.afterPhase2)}`);
   }
   if (args.afterPhase3 !== undefined) {
-    lines.push(`  after Phase 3: "${args.afterPhase3}"`);
+    lines.push(`  after Phase 3: ${dbgQ(args.afterPhase3)}`);
   }
   console.log(lines.join("\n"));
 }
