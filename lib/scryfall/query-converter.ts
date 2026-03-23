@@ -1407,6 +1407,7 @@ const TOKEN_GENERATION_FUNCTION_TAGS = [
   "repeatable-creature-tokens",
   "repeatable-artifact-tokens",
   "repeatable-noncreature-tokens",
+  "young-pyromancer-ability",
   "create-multiple-tokens",
   "creates-token-of-a-card",
   "creates-oracle-token",
@@ -1461,6 +1462,7 @@ function normalizeTokenGenerationIntent(
       "repeatable-creature-tokens",
       "repeatable-artifact-tokens",
       "repeatable-noncreature-tokens",
+      "young-pyromancer-ability",
       "creates-token-of-a-card",
       "creates-oracle-token",
       "creates-card-token",
@@ -1471,6 +1473,7 @@ function normalizeTokenGenerationIntent(
       "repeatable-creature-tokens",
       "repeatable-noncreature-tokens",
       "create-land-tokens",
+      "young-pyromancer-ability",
       "creates-token-of-a-card",
       "creates-oracle-token",
       "creates-card-token",
@@ -1479,6 +1482,7 @@ function normalizeTokenGenerationIntent(
     tagsToExclude = new Set<TagName>([
       "repeatable-token-generator",
       "repeatable-creature-tokens",
+      "young-pyromancer-ability",
     ]);
   }
 
