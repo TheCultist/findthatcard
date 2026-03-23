@@ -27,8 +27,6 @@ import {
   COLOR_IDENTITY,
   SINGLE_COLOR_NAMES,
   STOPWORDS,
-  WORD_TO_NUMBER,
-  COMPARISON_OP_PATTERNS,
   RARITY_NAME_TO_CODE,
 } from "./constants";
 import { resolveNumericStatFilters, textToComparisonOp, wordOrDigitToNumber } from "./resolveStats";

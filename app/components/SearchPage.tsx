@@ -443,7 +443,12 @@ export default function SearchPage() {
                             <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">function:</code>{" "}
                             for card roles (e.g.{" "}
                             <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">function:removal</code>,{" "}
-                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">function:card-advantage</code>). You can also just describe the art or role in plain language — "cards with dragon artwork" or "removal spells" both work.
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">function:card-advantage</code>
+                            {'). You can also just describe the art or role in plain language — '}
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">cards with dragon artwork</code>
+                            {" or "}
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">removal spells</code>
+                            {" both work."}
                           </>
                         ),
                       },
@@ -454,7 +459,9 @@ export default function SearchPage() {
                             Yes. If your query looks like Scryfall syntax — e.g.{" "}
                             <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">t:creature c:r cmc&lt;=3</code>{" "}
                             or{" "}
-                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">name:"Sol Ring" game:paper</code>{" "}
+                            <code className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-xs text-foreground">
+                              name:&quot;Sol Ring&quot; game:paper
+                            </code>{" "}
                             — it is passed directly to Scryfall without any conversion. You can also edit the generated query after a natural language search.
                           </>
                         ),

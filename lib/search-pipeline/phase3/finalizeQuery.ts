@@ -5,6 +5,7 @@ import { Phase3Result, SearchPipelineIR } from "@/lib/search-pipeline/types";
 import { getCatalog } from "@/lib/scryfall/catalogs";
 import {
   EFFECTIVE_MAX_QUERY_LENGTH,
+  OPPONENT_BURN_DAMAGE_FUNCTION_TAGS,
   PREFER_BEST_PREFIX,
   finalizeScryfallQuery,
   lookupArchetypeTags,
@@ -416,6 +417,107 @@ function stripMisleadingKwSupportForDeckbuilding(
     .trim();
 }
 
+/**
+ * Phase 2 often maps "ping all opponents when [noncreature] spell" to archetype **group-slug**,
+ * which drops the spell-cast condition. Replace with **function:** tags + spell-type oracle
+ * (see {@link normalizeSpellCastPingOpponentsOracle}).
+ */
+function wantsSpellCastNoncreatureDamageOpponents(naturalQuery: string): boolean {
+  const q = naturalQuery.toLowerCase();
+  const hasSpellCast =
+    /\bspell\s+is\s+played\b/.test(q) ||
+    /\bspell\s+is\s+cast\b/.test(q) ||
+    /\bwhen(?:ever)?\s+you\s+cast\b/.test(q) ||
+    /\bwhen(?:ever)?\s+a\s+noncreature\s+spell\b/.test(q);
+  const hasNoncreature =
+    /\bnoncreature\s+spell\b/.test(q) || /\binstant\s+or\s+sorcery\b/.test(q);
+  const hasOpponentDamage =
+    /\b(?:ping|pings|pinging)\b/.test(q) ||
+    /\bdeal[st]?\s+[^\n]{0,40}\bdamage\b/i.test(q) ||
+    /\bdamage\b[^\n]{0,40}\bopponents?\b/i.test(q);
+  // Include common typo "oponents" (missing first p) — Phase 0 may not always run in tests.
+  const hasOpponents =
+    /\b(?:all\s+)?opponents?\b/.test(q) ||
+    /\boponents?\b/.test(q) ||
+    /\beach\s+opponent\b/.test(q);
+  return hasSpellCast && hasNoncreature && hasOpponentDamage && hasOpponents;
+}
+
+function stripMisleadingGroupSlugForSpellCastTriggers(
+  naturalQuery: string,
+  scryfallQuery: string
+): string {
+  if (!/\bfunction:group-slug\b/i.test(scryfallQuery)) return scryfallQuery;
+  if (!wantsSpellCastNoncreatureDamageOpponents(naturalQuery)) return scryfallQuery;
+
+  return scryfallQuery
+    .replace(/\s*\bfunction:group-slug\b/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/** Precompiled: any opponent-burn family tag present (see {@link OPPONENT_BURN_DAMAGE_FUNCTION_TAGS}). */
+const OPPONENT_BURN_TAG_PATTERN = new RegExp(
+  `\\bfunction:(?:${OPPONENT_BURN_DAMAGE_FUNCTION_TAGS.join("|")})\\b`,
+  "i"
+);
+
+function hasOpponentBurnFunctionTag(query: string): boolean {
+  return OPPONENT_BURN_TAG_PATTERN.test(query);
+}
+
+/**
+ * Prefer Tagger **function:** tags over oracle for cast + damage-to-opponents; keep **only**
+ * spell-type oracle (`noncreature spell` vs `instant or sorcery`) where Tagger has no exact
+ * substitute. `function:cast-trigger-you` covers "whenever you cast" phrasing; opponent burn
+ * tags cover damage / each opponent (oracle `o:damage` + `o:"each opponent"` are redundant
+ * once burn tags are present — see normalizeBurnIntent).
+ */
+function normalizeSpellCastPingOpponentsOracle(
+  naturalQuery: string,
+  scryfallQuery: string
+): string {
+  if (!wantsSpellCastNoncreatureDamageOpponents(naturalQuery)) return scryfallQuery;
+
+  const useNoncreatureSpellOracle = /\bnoncreature\s+spell\b/i.test(naturalQuery);
+
+  let q = scryfallQuery
+    .replace(/\s*\bo:opponent\b/gi, " ")
+    // Drop oracle anchors superseded by function tags (may come from Phase 2).
+    .replace(/\s*\bo:damage\b/gi, " ")
+    .replace(/\s*o:"each opponent"/gi, " ")
+    .replace(/\s*o:"whenever you cast"/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  if (useNoncreatureSpellOracle) {
+    q = q.replace(/\s*o:"instant or sorcery"/gi, " ").replace(/\s{2,}/g, " ").trim();
+  }
+
+  const spellTypeToken = useNoncreatureSpellOracle
+    ? 'o:"noncreature spell"'
+    : 'o:"instant or sorcery"';
+
+  if (
+    spellTypeToken === 'o:"noncreature spell"'
+      ? !/o:"noncreature spell"/i.test(q)
+      : !/o:"instant or sorcery"/i.test(q)
+  ) {
+    q = `${q} ${spellTypeToken}`.trim();
+  }
+
+  if (!/\bfunction:cast-trigger-you\b/i.test(q)) {
+    q = `${q} function:cast-trigger-you`.trim();
+  }
+
+  if (!hasOpponentBurnFunctionTag(q)) {
+    const orChain = OPPONENT_BURN_DAMAGE_FUNCTION_TAGS.map((t) => `function:${t}`).join(" or ");
+    q = `${q} (${orChain})`.trim();
+  }
+
+  return q.replace(/\s{2,}/g, " ").trim();
+}
+
 function stripPreferBestPrefix(value: string): string {
   return value.replace(/^prefer:best\s+/i, "").trim();
 }
@@ -592,6 +694,8 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     query = await stripPlaneswalkerSubtypesWhenCreatureRequired(query);
     query = stripMvBoundRedundantFunctionTags(ir.naturalQuery, query);
     query = stripMisleadingKwSupportForDeckbuilding(ir.naturalQuery, query);
+    query = stripMisleadingGroupSlugForSpellCastTriggers(ir.naturalQuery, query);
+    query = normalizeSpellCastPingOpponentsOracle(ir.naturalQuery, query);
     query = applyDefaultGameFilter(query);
     query = query.replace(/^\s*[iI]\s+/i, "").trim();
 

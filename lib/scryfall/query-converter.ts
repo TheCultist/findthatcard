@@ -435,21 +435,29 @@ function pickBurnFunctionTag(
 
 type DamageTarget = "opponent" | "creature" | "planeswalker" | "player" | "any" | "battle" | "general";
 
+/**
+ * Function tags for opponent- / player-target burn and direct life-loss (normalizeBurnIntent).
+ * Single source for `DAMAGE_TAG_FAMILIES.opponent` / `player` and Phase 3 spell-cast ping fixes.
+ */
+export const OPPONENT_BURN_DAMAGE_FUNCTION_TAGS = [
+  "burn-player",
+  "burn-player-each",
+  "burn-any",
+  "opponent-loses-life",
+  "life-drain",
+  "drain-life",
+  "lifegain-to-damage",
+] as const;
+
 const DAMAGE_TAG_FAMILIES: Record<DamageTarget, string[]> = {
-  opponent: [
-    "burn-player", "burn-player-each", "burn-any",
-    "opponent-loses-life", "life-drain", "drain-life", "lifegain-to-damage",
-  ],
+  opponent: [...OPPONENT_BURN_DAMAGE_FUNCTION_TAGS],
   creature: [
     "burn-creature", "burn-any", "removal-creature-burn", "removal-burn",
   ],
   planeswalker: [
     "burn-planeswalker", "burn-any", "removal-planeswalker-burn", "removal-burn",
   ],
-  player: [
-    "burn-player", "burn-player-each", "burn-any",
-    "opponent-loses-life", "life-drain", "drain-life", "lifegain-to-damage",
-  ],
+  player: [...OPPONENT_BURN_DAMAGE_FUNCTION_TAGS],
   battle: [
     "burn-battle", "burn-any", "removal-battle-burn", "removal-burn",
   ],

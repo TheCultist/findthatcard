@@ -273,6 +273,152 @@ async function testPhase3KeepsKwSupportForSupportKeywordMechanic() {
   console.log("[PASS] phase3: keeps kw:support when user clearly means the Support keyword");
 }
 
+async function testPhase3ReplacesGroupSlugWithOracleForSpellCastPingOpponents() {
+  const fragment =
+    "card that pings all oponents for damage when a noncreature spell is played";
+  const ir: SearchPipelineIR = {
+    naturalQuery: fragment,
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [{ text: fragment, category: "effect", orConnected: false }],
+    resolvedFragments: [
+      {
+        fragment,
+        tags: [],
+        confidence: 0.95,
+        category: "effect",
+        archetype: "group-slug",
+      },
+    ],
+    debug: {
+      strippedTerms: [],
+      aiBatchCalls: 0,
+      aiSequentialCalls: 0,
+      invalidTagsRemoved: 0,
+      phase0Normalized: false,
+    },
+  };
+  const finalized = await finalizeQuery(ir);
+  assert.ok(
+    !/\bfunction:group-slug\b/i.test(finalized.queryForLogs),
+    `spell-cast ping should drop group-slug; got: ${finalized.queryForLogs}`
+  );
+  assert.ok(
+    /\bfunction:cast-trigger-you\b/i.test(finalized.queryForLogs),
+    `expected cast-trigger-you function tag; got: ${finalized.queryForLogs}`
+  );
+  assert.ok(
+    /o:"noncreature spell"/i.test(finalized.queryForLogs),
+    `expected noncreature spell oracle (broader than I/S); got: ${finalized.queryForLogs}`
+  );
+  assert.ok(
+    /\bfunction:burn-player\b/i.test(finalized.queryForLogs),
+    `expected opponent burn function tag; got: ${finalized.queryForLogs}`
+  );
+  assert.ok(
+    !/\bo:damage\b/i.test(finalized.queryForLogs),
+    `should prefer burn function tags over o:damage; got: ${finalized.queryForLogs}`
+  );
+  assert.ok(
+    !/o:"instant or sorcery"/i.test(finalized.queryForLogs),
+    `noncreature spell intent must not narrow to instant/sorcery; got: ${finalized.queryForLogs}`
+  );
+  console.log(
+    "[PASS] phase3: replaces group-slug with cast-trigger + burn function tags when spell-cast + noncreature + ping opponents"
+  );
+}
+
+async function testPhase3NormalizesPhase2NoncreatureSpellOracleToDamageEachOpponent() {
+  const fragment = "ping opponents on noncreature spell";
+  const ir: SearchPipelineIR = {
+    naturalQuery: "cards that ping all opponents when a noncreature spell is played",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [{ text: fragment, category: "effect", orConnected: false }],
+    resolvedFragments: [
+      {
+        fragment,
+        tags: ['o:"whenever you cast"', 'o:"noncreature spell"', "o:opponent"],
+        confidence: 0.9,
+        category: "effect",
+      },
+    ],
+    debug: {
+      strippedTerms: [],
+      aiBatchCalls: 0,
+      aiSequentialCalls: 0,
+      invalidTagsRemoved: 0,
+      phase0Normalized: false,
+    },
+  };
+  const finalized = await finalizeQuery(ir);
+  assert.ok(
+    /o:"noncreature spell"/i.test(finalized.queryForLogs),
+    `expected noncreature spell oracle preserved; got: ${finalized.queryForLogs}`
+  );
+  assert.ok(
+    /\bfunction:cast-trigger-you\b/i.test(finalized.queryForLogs),
+    `expected cast-trigger-you function tag; got: ${finalized.queryForLogs}`
+  );
+  assert.ok(
+    /\bfunction:burn-player\b/i.test(finalized.queryForLogs),
+    `expected burn function tag; got: ${finalized.queryForLogs}`
+  );
+  assert.ok(
+    !/\bo:damage\b/i.test(finalized.queryForLogs),
+    `should prefer burn function tags over o:damage; got: ${finalized.queryForLogs}`
+  );
+  assert.ok(
+    !/o:"instant or sorcery"/i.test(finalized.queryForLogs),
+    `must not replace noncreature spell with I/S; got: ${finalized.queryForLogs}`
+  );
+  console.log("[PASS] phase3: normalizes Phase 2 noncreature spell to cast-trigger + burn function tags");
+}
+
+async function testPhase3KeepsGroupSlugWhenTablewideDamageWithoutSpellCast() {
+  const fragment = "deal damage to each opponent";
+  const ir: SearchPipelineIR = {
+    naturalQuery: "cards that deal damage to each opponent at once",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [{ text: fragment, category: "effect", orConnected: false }],
+    resolvedFragments: [
+      {
+        fragment,
+        tags: [],
+        confidence: 0.9,
+        category: "effect",
+        archetype: "group-slug",
+      },
+    ],
+    debug: {
+      strippedTerms: [],
+      aiBatchCalls: 0,
+      aiSequentialCalls: 0,
+      invalidTagsRemoved: 0,
+      phase0Normalized: false,
+    },
+  };
+  const finalized = await finalizeQuery(ir);
+  assert.ok(
+    /\bfunction:group-slug\b/i.test(finalized.queryForLogs),
+    `tablewide opponent damage without spell-cast trigger keeps group-slug; got: ${finalized.queryForLogs}`
+  );
+  console.log("[PASS] phase3: keeps group-slug when no spell-cast + noncreature condition");
+}
+
 async function testPhase3PreservesAndedStandaloneArtTags() {
   const ir: SearchPipelineIR = {
     naturalQuery: "cards with big titties goth girls",
@@ -1499,6 +1645,9 @@ async function run() {
   await testPhase3KeepsCheaperThanMvWhenUserSaysCostReduction();
   await testPhase3StripsKwSupportForSupportCardsPhrase();
   await testPhase3KeepsKwSupportForSupportKeywordMechanic();
+  await testPhase3ReplacesGroupSlugWithOracleForSpellCastPingOpponents();
+  await testPhase3NormalizesPhase2NoncreatureSpellOracleToDamageEachOpponent();
+  await testPhase3KeepsGroupSlugWhenTablewideDamageWithoutSpellCast();
   await testPhase3PreservesAndedStandaloneArtTags();
   await testPipelineDirectEndToEnd();
   await testPipelineSimilarCardsDoesNotContradictNameExclusion();
