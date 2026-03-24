@@ -3742,6 +3742,12 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
   }
   for (const filter of setFilters) {
     strippedTerms.push(filter.name.toLowerCase());
+    if (filter.source === "code") {
+      strippedTerms.push(filter.code.toLowerCase());
+    }
+    if (filter.stripHints?.length) {
+      strippedTerms.push(...filter.stripHints.map((h) => h.toLowerCase()));
+    }
     if (filter.negated) {
       mustNotClauses.push({ value: `set:${filter.code}`, source: "phase1:set" });
     } else {

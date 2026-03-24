@@ -854,6 +854,18 @@ async function testPhase1UniversesBeyondIsFlagNotSetFilter() {
   console.log("[PASS] phase1: universes beyond → is:universesbeyond t:creature, no set:slx (typo cratures → creature)");
 }
 
+async function testPhase1SetCodeAfterFrom() {
+  const parsed = await parseNaturalQuery("all spells that generate token from blb");
+  const should = parsed.shouldClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    should.includes("set:blb"),
+    `expected set:blb in shouldClauses; got: ${should.join(", ")}`
+  );
+  const assembled = assembleQueryFromIR(parsed);
+  assert.match(assembled, /\bset:blb\b/i, `assembled query should include set:blb; got: ${assembled}`);
+  console.log("[PASS] phase1: 'from blb' (Scryfall set code) → set:blb");
+}
+
 async function testPhase3DoesNotForceCommanderCreatureForFormatIntent() {
   const ir: SearchPipelineIR = {
     naturalQuery: "rakdos cards that make treasure tokens for commander",
@@ -1703,6 +1715,7 @@ async function run() {
   await testPhase1CommanderFromFranchiseSetsAvoidsNoise();
   await testPhase1CommanderFromLorwynAvoidsCommanderProductSetNoise();
   await testPhase1UniversesBeyondIsFlagNotSetFilter();
+  await testPhase1SetCodeAfterFrom();
   await testPhase3DoesNotForceCommanderCreatureForFormatIntent();
   await testPhase3LegalInMultipleFormatsKeepsFCommanderNoIsCommander();
   await testPhase3RemovesTreasureTypeForTokenGenerationIntent();

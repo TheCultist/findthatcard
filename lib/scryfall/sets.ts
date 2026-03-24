@@ -31,6 +31,8 @@ export type SetFilter = {
   name: string;
   negated: boolean;
   source: "name" | "code";
+  /** Extra words to strip from the NL query (e.g. "from" for "… from blb"). */
+  stripHints?: readonly string[];
 };
 
 const SCRYFALL_SETS_URL = "https://api.scryfall.com/sets";
@@ -623,6 +625,23 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
       name: byCode.get(candidate)?.name || candidate,
       negated,
       source: "code",
+    });
+  }
+
+  // Natural phrasing "from blb" / "from dmu" — set code without "set:" or the word "set".
+  const fromSetCodePattern = /\bfrom\s+([a-z0-9]{1,6})\b/gi;
+  while ((match = fromSetCodePattern.exec(naturalQuery)) !== null) {
+    const candidate = match[1]?.toLowerCase();
+    if (!candidate || !byCode.has(candidate)) {
+      continue;
+    }
+    const negated = detectNegation(normalizedQuery, candidate);
+    filters.set(candidate, {
+      code: candidate,
+      name: byCode.get(candidate)?.name || candidate,
+      negated,
+      source: "code",
+      stripHints: ["from"],
     });
   }
 
