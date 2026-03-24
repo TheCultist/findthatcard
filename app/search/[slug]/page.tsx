@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import SearchPage from "../../components/SearchPage";
+import { searchShareMetadata } from "../share-metadata";
 
 type SearchSlugPageProps = {
   params: Promise<{ slug: string }> | { slug: string };
@@ -10,11 +11,23 @@ const defaultDescription =
 
 const buildMetadata = (query: string, slug: string): Metadata => {
   const cleaned = query.trim();
+  const canonicalPath = cleaned
+    ? `/search/${encodeURIComponent(slug)}`
+    : "/search";
+  const share = searchShareMetadata(canonicalPath);
+
   if (!cleaned) {
     return {
       title: "Search",
       description: defaultDescription,
+      alternates: { canonical: "/search" },
       openGraph: {
+        ...share.openGraph,
+        title: "Find That Card - Search",
+        description: defaultDescription,
+      },
+      twitter: {
+        ...share.twitter,
         title: "Find That Card - Search",
         description: defaultDescription,
       },
@@ -26,13 +39,14 @@ const buildMetadata = (query: string, slug: string): Metadata => {
   return {
     title: `${cleaned} - Search`,
     description,
-    alternates: { canonical: `/search/${encodeURIComponent(slug)}` },
+    alternates: { canonical: canonicalPath },
     openGraph: {
+      ...share.openGraph,
       title: `${cleaned} - Find That Card`,
       description,
     },
     twitter: {
-      card: "summary",
+      ...share.twitter,
       title: `${cleaned} - Find That Card`,
       description,
     },

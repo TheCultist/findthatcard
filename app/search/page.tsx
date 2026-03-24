@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import SearchPage from "../components/SearchPage";
+import { searchShareMetadata } from "./share-metadata";
 
 type SearchPageProps = {
   searchParams?: Promise<{
@@ -13,12 +14,20 @@ const defaultDescription =
 
 const buildMetadata = (query: string): Metadata => {
   const cleaned = query.trim();
+  const share = searchShareMetadata("/");
+
   if (!cleaned) {
     return {
       title: "MTG Card Search",
       description: defaultDescription,
       alternates: { canonical: "/" },
       openGraph: {
+        ...share.openGraph,
+        title: "MTG Card Search — Find That Card",
+        description: defaultDescription,
+      },
+      twitter: {
+        ...share.twitter,
         title: "MTG Card Search — Find That Card",
         description: defaultDescription,
       },
@@ -27,17 +36,20 @@ const buildMetadata = (query: string): Metadata => {
 
   const description = `Search results for "${cleaned}" on Find That Card.`;
   const slug = cleaned.toLowerCase().replace(/\s+/g, "-");
+  const canonicalPath = `/search/${encodeURIComponent(slug)}`;
+  const shareWithCanonical = searchShareMetadata(canonicalPath);
 
   return {
     title: `${cleaned} - Search`,
     description,
-    alternates: { canonical: `/search/${encodeURIComponent(slug)}` },
+    alternates: { canonical: canonicalPath },
     openGraph: {
+      ...shareWithCanonical.openGraph,
       title: `${cleaned} - Find That Card`,
       description,
     },
     twitter: {
-      card: "summary",
+      ...shareWithCanonical.twitter,
       title: `${cleaned} - Find That Card`,
       description,
     },
