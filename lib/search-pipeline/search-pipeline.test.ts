@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
+import { fixMisclassifiedRampAsCostReduction } from "@/lib/search-pipeline/phase2/resolveUnresolvedFragments";
 import { shouldNormalize, validateResponse } from "@/lib/search-pipeline/phase0/normalizeQuery";
 import { parseNaturalQuery } from "@/lib/search-pipeline/phase1/parseNaturalQuery";
 import { finalizeQuery, removeInvalidTagsFromQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
@@ -39,6 +40,29 @@ function testAssemblerBooleanComposition() {
   const query = assembleQueryFromIR(ir);
   assert.equal(query, 'f:commander id:wu (set:blb OR set:one) -set:c20 o:"~ enters"');
   console.log("[PASS] assembler: composes must/should/must-not with resolved fragments");
+}
+
+function testFixMisclassifiedRampAsCostReduction() {
+  const fixed = fixMisclassifiedRampAsCostReduction({
+    fragment: "that make themselves cheaper",
+    category: "effect",
+    tags: [],
+    confidence: 0.9,
+    archetype: "ramp",
+  });
+  assert.equal(fixed.archetype, undefined);
+  assert.deepEqual(fixed.tags, ["function:cheaper-than-mv"]);
+
+  const unchanged = fixMisclassifiedRampAsCostReduction({
+    fragment: "mana ramp and land search",
+    category: "effect",
+    tags: [],
+    confidence: 0.9,
+    archetype: "ramp",
+  });
+  assert.equal(unchanged.archetype, "ramp");
+
+  console.log("[PASS] phase2: misclassified ramp → cheaper-than-mv for self-cost-reduction phrases");
 }
 
 function testAssemblerCastTriggerYouAndBurnUsesAndNotOr() {
@@ -1675,6 +1699,7 @@ async function run() {
 
   await testPhase1DirectQueryShortCircuit();
   testAssemblerBooleanComposition();
+  testFixMisclassifiedRampAsCostReduction();
   testAssemblerCastTriggerYouAndBurnUsesAndNotOr();
   testAssemblerSkipsArchetypeFragmentTags();
   testAssemblerEmitsRawTagsForNonArchetypeFragments();

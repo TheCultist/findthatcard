@@ -31,7 +31,7 @@ function formatArchetypeMenu(entries: ArchetypeMenuEntry[]): string {
     .join("\n");
 }
 
-const FEW_SHOT_EXAMPLES = `Examples:
+const FEW_SHOT_EXAMPLES = `
 {"results":[{"fragment":"make opponents pay to swing at me","archetype":"pillow-fort","qualifier":null,"tags":[],"confidence":0.9}]}
 {"results":[{"fragment":"etb draw effects","archetype":null,"qualifier":null,"tags":["o:\"~ enters\"","o:draw"],"confidence":0.85}]}
 {"results":[{"fragment":"give mana when enter","archetype":null,"qualifier":null,"tags":["o:\"~ enters\"","o:\"add\""],"confidence":0.85}]}
@@ -46,7 +46,8 @@ const FEW_SHOT_EXAMPLES = `Examples:
 {"results":[{"fragment":"gets bigger for each artifact you control","archetype":null,"qualifier":null,"tags":["o:\"+1/+1\"","o:\"for each\"","o:artifact"],"confidence":0.9}]}
 {"results":[{"fragment":"deals damage equal to the number of cards in hand","archetype":null,"qualifier":null,"tags":["o:\"equal to\"","o:\"cards in hand\""],"confidence":0.9}]}
 {"results":[{"fragment":"whenever you cast an instant or sorcery draw a card","archetype":null,"qualifier":null,"tags":["o:\"whenever you cast\"","o:\"instant or sorcery\"","o:draw"],"confidence":0.9}]}
-{"results":[{"fragment":"pings all opponents for damage when a noncreature spell is played","archetype":null,"qualifier":null,"tags":["function:cast-trigger-you","o:\"noncreature spell\"","function:burn-player"],"confidence":0.9}]}`;
+{"results":[{"fragment":"pings all opponents for damage when a noncreature spell is played","archetype":null,"qualifier":null,"tags":["function:cast-trigger-you","o:\"noncreature spell\"","function:burn-player"],"confidence":0.9}]}
+{"results":[{"fragment":"that make themselves cheaper","archetype":null,"qualifier":null,"tags":["function:cheaper-than-mv"],"confidence":0.9}]}`;
 
 export function buildResolverPrompt({
   category,
@@ -87,6 +88,7 @@ export function buildResolverPrompt({
     "- SPECIFIC CONDITIONS / TRIGGERS: When the fragment describes a specific trigger condition (enters, dies, attacks, taps, etc.) or a named effect unique to certain cards, use o: oracle text tags. Do NOT fall back to a broad function: tag that ignores the condition. Example: 'give mana when enters' → o:\"~ enters\" + o:\"add\", 'trigger when a land enters' → o:enters + o:land.",
     "- GROUP-SLUG vs SPELL-CAST DAMAGE: Archetype **group-slug** means informal table-wide damage/costs to **all opponents at once** with no extra condition. If the user ties damage/pings to **casting spells**, that is **NOT** group-slug — use archetype null and tags. For **noncreature spell** phrasing, use o:\"noncreature spell\" (covers instants/sorceries **and** artifacts, enchantments, planeswalkers, battles, etc.). **Do NOT** substitute o:\"instant or sorcery\" for noncreature spell — I/S is only a **subset** of noncreature spells. Only use o:\"instant or sorcery\" when the user explicitly asks for instants/sorceries. Prefer **function:cast-trigger-you** and **function:burn-player** (or related burn tags) over oracle for cast + damage — they are combined with **AND** (both required), not OR; avoid bare o:opponent alone (pulls non-damage payoffs).",
     "- SCALING / CONDITIONAL EFFECTS: When the fragment contains 'for each', 'for every', 'equal to the number of', 'per [noun]', 'proportional to', or any other quantitative scaling, you MUST use o: oracle text filters. NEVER map these to a broad function: tag AND NEVER classify them as any archetype (e.g. 'makes mana for each spell' is NOT archetype:ramp and is NOT function:ramp — it is o:\"add\" + o:\"for each\" + o:spell).",
+    "- COST REDUCTION vs MANA RAMP: Phrases like **make itself/themselves cheaper**, **cheaper to cast**, **cost reduction**, **reduce its cost**, **costs less to cast**, or **make your spells cheaper** mean the **card costs less mana to cast** (self-discount / affinity-style), NOT adding mana or accelerating lands. Use **function:cheaper-than-mv** with archetype null — NEVER archetype:ramp and NEVER function:ramp or function:mana-ramp. True ramp is **putting extra lands into play** or **adding mana from permanents** (mana dorks, rocks, land search) — not paying less for the same spell.",
     "- BROAD FUNCTION TAGS: Use function: tags only for broad, untriggered gameplay roles (e.g. 'counterspell effects', 'card draw engines', 'removal spells'). If the fragment is more specific than what a function tag captures, use o: instead.",
     "- When you emit a function: tag, do NOT also add o: oracle text for the same intent. The function: tag already covers that search space and adding oracle text will over-restrict results.",
     "- GRANT/GIVE KEYWORDS: When the fragment describes granting or giving a keyword ability (flying, hexproof, indestructible, lifelink, haste, trample, etc.) to other permanents, use o:<keyword> (e.g. o:indestructible, o:flying). Do NOT use function:grows-others or similar generic tags — use the specific keyword in an oracle text filter.",

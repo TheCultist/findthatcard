@@ -21,10 +21,18 @@ function fetchDefinitions(): Promise<Record<string, string>> {
   if (definitionsCache) return Promise.resolve(definitionsCache);
   if (!definitionsPromise) {
     definitionsPromise = fetch("/api/keyword-definitions")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((data: Record<string, string>) => {
         definitionsCache = data ?? {};
         return definitionsCache!;
+      })
+      .catch(() => {
+        definitionsPromise = null;
+        definitionsCache = {};
+        return {};
       });
   }
   return definitionsPromise;
@@ -43,7 +51,9 @@ export default function KeywordWithTooltip({ keyword, className = "" }: KeywordW
 
   useEffect(() => {
     if (definitions !== null) return;
-    fetchDefinitions().then(setDefinitions);
+    void fetchDefinitions()
+      .then(setDefinitions)
+      .catch(() => setDefinitions({}));
   }, [definitions]);
 
   const slug = keywordToSlug(keyword);

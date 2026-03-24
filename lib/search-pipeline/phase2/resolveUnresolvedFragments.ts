@@ -3,6 +3,35 @@ import { getTaggerTagContext } from "@/lib/tagger/context";
 import { buildResolverPrompt } from "@/lib/search-pipeline/phase2/buildResolverPrompt";
 import { Phase2Result, ResolvedFragment, ResolverCategory, SearchPipelineIR } from "../types";
 
+/**
+ * Phase 2 sometimes classifies self-cost-reduction ("make themselves cheaper") as archetype:ramp.
+ * Remap to function:cheaper-than-mv — not mana acceleration (lands / mana dorks / rocks).
+ */
+export function fixMisclassifiedRampAsCostReduction(entry: ResolvedFragment): ResolvedFragment {
+  if (entry.archetype !== "ramp") {
+    return entry;
+  }
+  const text = entry.fragment.toLowerCase();
+  const isCostReduction =
+    /\b(?:make|makes|making)\s+(?:itself|themselves|yourself)\s+cheaper\b/.test(text) ||
+    /\b(?:make|makes)\s+your\s+spells?\s+cheaper\b/.test(text) ||
+    /\b(?:cheap|cheaper)\s+to\s+cast\b/.test(text) ||
+    /\bcost\s+reduction\b/.test(text) ||
+    /\breduce(?:s|d)?\s+(?:its|their|the)\s+(?:mana\s+)?cost\b/.test(text) ||
+    /\bcost(?:s)?\s+less\s+to\s+cast\b/.test(text);
+
+  if (!isCostReduction) {
+    return entry;
+  }
+
+  return {
+    ...entry,
+    archetype: undefined,
+    qualifier: undefined,
+    tags: ["function:cheaper-than-mv"],
+  };
+}
+
 type ResolverResponseItem = {
   fragment?: string;
   tags?: string[];
@@ -217,6 +246,7 @@ export async function resolveUnresolvedFragments(ir: SearchPipelineIR): Promise<
   }
 
   const merged = [...firstPass, ...fallbackResults]
+    .map(fixMisclassifiedRampAsCostReduction)
     .filter((entry) => isResolvedByArchetypeOrTags(entry) && entry.confidence >= MIN_CONFIDENCE)
     .reduce<ResolvedFragment[]>((acc, current) => {
       const existing = acc.find((entry) => entry.fragment.toLowerCase() === current.fragment.toLowerCase());

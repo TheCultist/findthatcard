@@ -20,6 +20,7 @@ import CardCard from "@/app/components/CardCard";
 import AdBanner from "@/app/components/AdBanner";
 import QueryTokenPreview from "@/app/components/QueryTokenPreview";
 import { COLOR_NAMES } from "@/lib/query-tokens";
+import { formatErrorMessage } from "@/lib/utils/errors";
 import CardDetailPanel from "@/app/components/CardDetailPanel";
 import ThemeToggle from "@/app/components/ThemeToggle";
 import BugReportButton from "@/app/components/BugReportButton";
@@ -103,53 +104,65 @@ export default function SearchPage() {
         return;
       }
 
-      const shouldUpdateUrl = options.updateUrl ?? page === 1;
-      if (shouldUpdateUrl && page === 1) {
-        const nextUrl = buildSearchUrl(searchQuery);
-        const currentUrl = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`;
-        if (nextUrl !== currentUrl) {
-          router.push(nextUrl, { scroll: false });
-        }
-      }
-
-      setLoading(true);
-      setError(null);
-      if (page === 1) {
-        setResults(null);
-        setEditableQuery("");
-        setSourceQuery(searchQuery);
-      }
-
       try {
-        const response = await fetch("/api/search", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ naturalQuery: searchQuery, page }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          const errorData = data as ErrorResponse;
-          setError(errorData.error || "An error occurred");
-            if (errorData.scryfallQuery && page === 1) {
-            setEditableQuery(errorData.scryfallQuery);
+        const shouldUpdateUrl = options.updateUrl ?? page === 1;
+        if (shouldUpdateUrl && page === 1) {
+          const nextUrl = buildSearchUrl(searchQuery);
+          const currentUrl = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`;
+          if (nextUrl !== currentUrl) {
+            await Promise.resolve(router.push(nextUrl, { scroll: false })).catch((e) => {
+              console.warn("[Search] router.push failed:", e);
+            });
           }
-          return;
         }
 
-        setResults(data as SearchResponse);
-        setCurrentPage(data.page);
-        setPageInput(String(data.page));
+        setLoading(true);
+        setError(null);
         if (page === 1) {
-          setEditableQuery(data.scryfallQuery);
+          setResults(null);
+          setEditableQuery("");
+          setSourceQuery(searchQuery);
+        }
+
+        try {
+          const response = await fetch("/api/search", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ naturalQuery: searchQuery, page }),
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            const errorData = data as ErrorResponse;
+            setError(formatErrorMessage(errorData.error ?? "An error occurred"));
+            if (errorData.scryfallQuery && page === 1) {
+              setEditableQuery(errorData.scryfallQuery);
+            }
+            return;
+          }
+
+          setResults(data as SearchResponse);
+          setCurrentPage(data.page);
+          setPageInput(String(data.page));
+          if (page === 1) {
+            setEditableQuery(data.scryfallQuery);
+          }
+        } catch (err) {
+          const message =
+            err instanceof TypeError
+              ? "Failed to connect to the server. Please try again."
+              : formatErrorMessage(err);
+          setError(message);
+          console.error("Search error:", err);
+        } finally {
+          setLoading(false);
         }
       } catch (err) {
-        setError("Failed to connect to the server. Please try again.");
-        console.error("Search error:", err);
-      } finally {
+        console.error("[Search] handleSearch failed:", err);
+        setError(formatErrorMessage(err));
         setLoading(false);
       }
     },
@@ -173,7 +186,11 @@ export default function SearchPage() {
     setQuery(urlQuery);
     setCurrentPage(1);
     setPageInput("1");
-    handleSearch(urlQuery, 1, { updateUrl: false });
+    void handleSearch(urlQuery, 1, { updateUrl: false }).catch((err) => {
+      console.error("[Search] URL-driven search failed:", err);
+      setError(formatErrorMessage(err));
+      setLoading(false);
+    });
   }, [getQueryFromUrl, handleSearch]);
 
   useEffect(() => {
