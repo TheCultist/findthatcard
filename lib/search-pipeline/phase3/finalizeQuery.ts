@@ -640,6 +640,29 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
   // so the emptiness check must come after injection — the base alone can be empty when
   // the entire query meaning comes from Phase 2 archetypes (e.g. "deal damage to any target").
   let withArchetypeTags = injectArchetypeTagsFromResolvedFragments(ir, queryWithoutPrefer);
+
+  // Medallion/Monument-style fix: "discounts blue spells/creatures" means the card reduces
+  // casting costs for spells of that colour — not a self-discount and not a colour-identity filter.
+  // Phase 1 (frozen) emits id:[letter] from the colour word; Phase 2 emits function:discount-self.
+  // Map to oracle text matching actual card wording (e.g. Sapphire Medallion, Kefnet's Monument).
+  const MEDALLION_RE =
+    /discount(?:s|ing)?\s+(?:the\s+cost\s+of\s+)?(white|blue|black|red|green)\s+(creature|instant|sorcery|sorceries|spell)/i;
+  const medallionMatch = MEDALLION_RE.exec(ir.naturalQuery);
+  if (medallionMatch) {
+    const colorName = medallionMatch[1].toLowerCase();
+    const colorLetter = { white: "w", blue: "u", black: "b", red: "r", green: "g" }[colorName]!;
+    const colorCap = colorName[0].toUpperCase() + colorName.slice(1);
+    const spellType = medallionMatch[2].toLowerCase();
+    // "creature" → "creature spells"; "spell/sorcery/instant" → "[Color] spells"
+    const oracleSubject =
+      spellType === "creature" ? `${colorCap} creature spells` : `${colorCap} spells`;
+    withArchetypeTags = withArchetypeTags
+      .replace(new RegExp(`\\bid:${colorLetter}\\b`, "i"), "")
+      .replace(/function:discount-self/g, `o:"${oracleSubject}" o:"less to cast"`)
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
   if (!withArchetypeTags) {
     // Last-resort fallback: assemble o: oracle terms from any unresolved fragment text
     // so the pipeline never crashes with an empty query. This handles cases where
