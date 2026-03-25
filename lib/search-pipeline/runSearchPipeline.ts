@@ -1,4 +1,5 @@
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
+import { isPipelineDebugEnabled } from "@/lib/search-pipeline/debug";
 import { normalizeQuery } from "@/lib/search-pipeline/phase0/normalizeQuery";
 import { parseNaturalQuery } from "@/lib/search-pipeline/phase1/parseNaturalQuery";
 import { runPhase1_5, shouldRunPhase1_5 } from "@/lib/search-pipeline/phase1_5/structuredExtraction";
@@ -10,11 +11,6 @@ import {
   PREFER_BEST_PREFIX,
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
-
-function isPipelineDebugEnabled(): boolean {
-  const v = process.env.LOG_SEARCH_PIPELINE_DEBUG?.toLowerCase();
-  return v === "true" || v === "1" || v === "yes";
-}
 
 /** Log a pipeline stage string — use JSON.stringify so embedded `o:"..."` does not break quoted display. */
 function dbgQ(value: string): string {

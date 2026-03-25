@@ -641,6 +641,32 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
   // the entire query meaning comes from Phase 2 archetypes (e.g. "deal damage to any target").
   let withArchetypeTags = injectArchetypeTagsFromResolvedFragments(ir, queryWithoutPrefer);
 
+  // "set in/on [plane]" fix: when Phase 1 already produced set: filters for a plane name,
+  // function:shares-name-with-a-set is always wrong — that tag means the card's name literally
+  // contains a set name, which is unrelated to lore-location queries like "cards set on Ravnica".
+  if (/function:shares-name-with-a-set/.test(withArchetypeTags) && /\bset:[a-z0-9]+/i.test(withArchetypeTags)) {
+    withArchetypeTags = withArchetypeTags
+      .replace(/function:shares-name-with-a-set/g, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
+  // "cards set on/in [plane]" → art:[plane]
+  // "Set on" / "set in" means the card's story takes place there, which is best expressed as
+  // an art search. Phase 2 sees the bare plane name fragment and resolves it to o:[plane];
+  // replace that with art:[plane] which matches cards whose art depicts that location.
+  const SET_LOCATION_RE = /\bset\s+(?:on|in|at|within)\s+([a-z]+(?:\s+[a-z]+)?)\b/i;
+  const setLocationMatch = SET_LOCATION_RE.exec(ir.naturalQuery);
+  if (setLocationMatch) {
+    const plane = setLocationMatch[1].trim().toLowerCase();
+    // Replace the first word of the plane name (e.g. "ravnica" from "ravnica the city of guilds")
+    const planeFirstWord = plane.split(/\s+/)[0];
+    withArchetypeTags = withArchetypeTags
+      .replace(new RegExp(`\\bo:${planeFirstWord}\\b`, "i"), `art:${planeFirstWord}`)
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
   // Medallion/Monument-style fix: "discounts blue spells/creatures" means the card reduces
   // casting costs for spells of that colour — not a self-discount and not a colour-identity filter.
   // Phase 1 (frozen) emits id:[letter] from the colour word; Phase 2 emits function:discount-self.

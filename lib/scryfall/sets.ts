@@ -366,8 +366,11 @@ function addFranchiseSetFilters(
   byName: Array<{ normalized: string; entry: ScryfallSetEntry }>,
   filters: Map<string, SetFilter>
 ): void {
+  // "set" as a verb before a location preposition ("set on Ravnica", "set in Ixalan") is NOT a
+  // set-noun context — the phrase "cards set in Ravnica" should not be parsed as "[cards] set".
   const hasSetContext =
-    /\b(set|sets|edition|editions|printing|printings)\b/i.test(naturalQuery);
+    /\b(set|sets|edition|editions|printing|printings)\b/i.test(naturalQuery) &&
+    !/\bset\s+(?:on|in|at|within|upon|across|throughout)\b/i.test(naturalQuery);
   if (!hasSetContext) {
     return;
   }
@@ -461,7 +464,8 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
       naturalQuery
     );
   const hasSetContext =
-    /\b(set|sets|edition|editions|printing|printings)\b/i.test(naturalQuery);
+    /\b(set|sets|edition|editions|printing|printings)\b/i.test(naturalQuery) &&
+    !/\bset\s+(?:on|in|at|within|upon|across|throughout)\b/i.test(naturalQuery);
   const hasCommanderFromSetHint =
     /\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b/i.test(naturalQuery);
   const hasFranchiseSetHint =
@@ -611,7 +615,9 @@ export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter
 
   addFranchiseSetFilters(naturalQuery, normalizedQuery, byName, filters);
 
-  const codeContextPattern = /\b(set|edition|printing)\b/i.test(naturalQuery);
+  const codeContextPattern =
+    /\b(set|edition|printing)\b/i.test(naturalQuery) &&
+    !/\bset\s+(?:on|in|at|within|upon|across|throughout)\b/i.test(naturalQuery);
   const directCodePattern = /\b(?:set|edition)\s*[:#]?\s*([a-z0-9]{1,6})\b/gi;
   let match: RegExpExecArray | null;
   while ((match = directCodePattern.exec(naturalQuery)) !== null) {

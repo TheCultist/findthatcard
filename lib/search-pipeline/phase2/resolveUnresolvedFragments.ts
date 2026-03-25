@@ -1,4 +1,5 @@
 import { callAI } from "@/lib/ai-client";
+import { isAiPromptLoggingEnabled } from "@/lib/search-pipeline/debug";
 import { getTaggerTagContext } from "@/lib/tagger/context";
 import { buildResolverPrompt } from "@/lib/search-pipeline/phase2/buildResolverPrompt";
 import { Phase2Result, ResolvedFragment, ResolverCategory, SearchPipelineIR } from "../types";
@@ -46,16 +47,7 @@ type ResolverResponse = {
 
 const MIN_CONFIDENCE = 0.35;
 
-function shouldLogAiAgentPrompt(): boolean {
-  const configured = process.env.LOG_AI_AGENT_PROMPT?.toLowerCase();
-  if (configured === "true" || configured === "1") {
-    return true;
-  }
-  if (configured === "false" || configured === "0") {
-    return false;
-  }
-  return process.env.NODE_ENV !== "production";
-}
+const shouldLogAiAgentPrompt = isAiPromptLoggingEnabled;
 
 function logAiTokenUsage(
   category: ResolverCategory,

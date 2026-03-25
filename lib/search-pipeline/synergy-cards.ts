@@ -1,13 +1,9 @@
 import { callAI } from "@/lib/ai-client";
+import { isAiPromptLoggingEnabled } from "@/lib/search-pipeline/debug";
 import { fetchCardByName, ScryfallNamedCard } from "@/lib/scryfall/lookup";
 import { fetchTaggerCardData } from "@/lib/scryfall/tagger-graphql";
 
-function shouldLog(): boolean {
-  const configured = process.env.LOG_AI_AGENT_PROMPT?.toLowerCase();
-  if (configured === "true" || configured === "1") return true;
-  if (configured === "false" || configured === "0") return false;
-  return process.env.NODE_ENV !== "production";
-}
+const shouldLog = isAiPromptLoggingEnabled;
 
 const COLOR_MAP: Record<string, string> = {
   W: "white", U: "blue", B: "black", R: "red", G: "green",

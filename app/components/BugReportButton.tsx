@@ -131,7 +131,7 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
                 onClick={handleClose}
                 disabled={status === "loading"}
                 aria-label="Close"
-                className="rounded-md p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+                className="rounded-md p-1 text-muted transition-colors hover:bg-surface-muted hover:text-foreground"
               >
                 <XMarkIcon className="h-5 w-5" />
               </button>
@@ -140,21 +140,21 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
             {status === "success" ? (
               <div className="flex flex-col items-center gap-3 px-5 py-10 text-center">
                 <span className="text-3xl">✓</span>
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                <p className="text-sm font-medium text-foreground">
                   Report sent — thank you!
                 </p>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="px-5 py-4 space-y-4">
-                <div className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs dark:border-gray-700 dark:bg-gray-800/60">
+                <div className="space-y-2 rounded-lg border border-border bg-surface-muted p-3 text-xs">
                   <div>
-                    <span className="font-semibold text-gray-500 dark:text-gray-400">Your query: </span>
-                    <span className="text-gray-800 dark:text-gray-200">{userQuery}</span>
+                    <span className="font-semibold text-muted">Your query: </span>
+                    <span className="text-foreground">{userQuery}</span>
                   </div>
                   {scryfallQuery && (
                     <div>
-                      <span className="font-semibold text-gray-500 dark:text-gray-400">Scryfall query: </span>
-                      <span className="font-mono text-gray-800 dark:text-gray-200">{scryfallQuery}</span>
+                      <span className="font-semibold text-muted">Scryfall query: </span>
+                      <span className="font-mono text-foreground">{scryfallQuery}</span>
                     </div>
                   )}
                 </div>
@@ -174,26 +174,26 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
                     required
                     rows={4}
                     placeholder="What did you search for, and what did you expect vs. what you got?"
-                    className="w-full resize-none rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500 dark:focus:border-blue-400 dark:focus:ring-blue-400"
+                    className="w-full resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground placeholder-muted focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                   />
                 </div>
 
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-foreground">
                     Screenshot{" "}
-                    <span className="font-normal text-gray-400 dark:text-gray-500">(optional, max 2 MB)</span>
+                    <span className="font-normal text-muted">(optional, max 2 MB)</span>
                   </label>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                      className="flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-surface-muted"
                     >
                       <PaperClipIcon className="h-4 w-4" />
                       {file ? "Change file" : "Attach image"}
                     </button>
                     {file && (
-                      <span className="truncate text-xs text-gray-500 dark:text-gray-400 max-w-[200px]">
+                      <span className="truncate text-xs text-muted max-w-[200px]">
                         {file.name}
                       </span>
                     )}
@@ -221,14 +221,14 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
                     type="button"
                     onClick={handleClose}
                     disabled={status === "loading"}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+                    className="rounded-lg border border-border px-4 py-2 text-sm text-foreground transition-colors hover:bg-surface-muted disabled:opacity-50"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={status === "loading" || !description.trim()}
-                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
+                    className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {status === "loading" ? "Sending…" : "Send report"}
                   </button>

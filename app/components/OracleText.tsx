@@ -31,7 +31,7 @@ function OracleSegment({ text }: { text: string }) {
             );
           }
           return (
-            <span key={i} className="text-gray-500 dark:text-gray-400 font-mono text-xs">
+            <span key={i} className="text-muted font-mono text-xs">
               {part}
             </span>
           );
@@ -66,7 +66,7 @@ export default function OracleText({ text, className = "", italic = false }: Ora
       {paragraphs.map((para, i) => (
         <p
           key={i}
-          className={`text-sm leading-relaxed text-gray-800 dark:text-gray-200 ${italic ? "italic text-gray-600 dark:text-gray-400" : ""}`}
+          className={`text-sm leading-relaxed text-foreground ${italic ? "italic text-muted" : ""}`}
         >
           <OracleSegment text={para} />
         </p>

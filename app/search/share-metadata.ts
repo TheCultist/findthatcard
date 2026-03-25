@@ -28,3 +28,59 @@ export function searchShareMetadata(canonicalPath: string): Pick<
     },
   };
 }
+
+const DEFAULT_DESCRIPTION =
+  "Find MTG cards by describing them in plain English. Commander, Modern, Pauper. Art tags, function tags, natural language. Free — powered by Scryfall.";
+
+/**
+ * Builds Next.js Metadata for search routes.
+ *
+ * @param query  - The decoded natural-language query string (may be empty).
+ * @param slug   - The URL slug used to derive the canonical path (optional;
+ *                 when omitted the canonical falls back to "/search" or "/").
+ */
+export function buildSearchMetadata(query: string, slug?: string): Metadata {
+  const cleaned = query.trim();
+
+  if (!cleaned) {
+    const canonicalPath = slug ? "/search" : "/";
+    const share = searchShareMetadata(canonicalPath);
+    return {
+      title: "MTG Card Search",
+      description: DEFAULT_DESCRIPTION,
+      alternates: { canonical: canonicalPath },
+      openGraph: {
+        ...share.openGraph,
+        title: "MTG Card Search — Find That Card",
+        description: DEFAULT_DESCRIPTION,
+      },
+      twitter: {
+        ...share.twitter,
+        title: "MTG Card Search — Find That Card",
+        description: DEFAULT_DESCRIPTION,
+      },
+    };
+  }
+
+  const resolvedSlug =
+    slug ?? cleaned.toLowerCase().replace(/\s+/g, "-");
+  const canonicalPath = `/search/${encodeURIComponent(resolvedSlug)}`;
+  const share = searchShareMetadata(canonicalPath);
+  const description = `Search results for "${cleaned}" on Find That Card.`;
+
+  return {
+    title: `${cleaned} - Search`,
+    description,
+    alternates: { canonical: canonicalPath },
+    openGraph: {
+      ...share.openGraph,
+      title: `${cleaned} - Find That Card`,
+      description,
+    },
+    twitter: {
+      ...share.twitter,
+      title: `${cleaned} - Find That Card`,
+      description,
+    },
+  };
+}

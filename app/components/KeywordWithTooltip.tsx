@@ -88,7 +88,7 @@ export default function KeywordWithTooltip({ keyword, className = "" }: KeywordW
       {showTooltip && (
         <span
           role="tooltip"
-          className={`absolute left-1/2 z-[100] w-64 -translate-x-1/2 rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-xs font-normal leading-relaxed text-gray-200 shadow-xl whitespace-normal ${
+          className={`absolute left-1/2 z-[100] w-64 -translate-x-1/2 rounded-lg border border-border bg-surface px-3 py-2 text-xs font-normal leading-relaxed text-foreground shadow-xl whitespace-normal ${
             tooltipPosition === "above"
               ? "bottom-full mb-2"
               : "top-full mt-2"

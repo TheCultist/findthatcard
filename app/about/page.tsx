@@ -15,6 +15,9 @@ export const metadata: Metadata = {
   },
 };
 
+const socialLinkClass =
+  "inline-flex items-center justify-center rounded-full border border-border bg-surface-muted px-5 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted";
+
 export default function AboutPage() {
   return (
     <main className="min-h-screen bg-background px-4 py-8 sm:px-6 lg:px-8">
@@ -70,7 +73,7 @@ export default function AboutPage() {
                   href="https://www.instagram.com/card_cultist/"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-full border border-border bg-surface-muted px-5 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted"
+                  className={socialLinkClass}
                 >
                   Instagram
                 </a>
@@ -78,7 +81,7 @@ export default function AboutPage() {
                   href="https://www.tiktok.com/@cardboardcultist"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-full border border-border bg-surface-muted px-5 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted"
+                  className={socialLinkClass}
                 >
                   TikTok
                 </a>
@@ -86,7 +89,7 @@ export default function AboutPage() {
                   href="https://www.youtube.com/@card_cultist"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-full border border-border bg-surface-muted px-5 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted"
+                  className={socialLinkClass}
                 >
                   YouTube
                 </a>
