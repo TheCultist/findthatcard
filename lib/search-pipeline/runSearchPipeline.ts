@@ -235,7 +235,6 @@ export async function runSearchPipeline(naturalQuery: string): Promise<SearchPip
   // Runs only when Phase 1 left fragments that carry concrete game-mechanic intent.
   if (shouldRunPhase1_5(phase1)) {
     await runPhase1_5(phase1);
-    phase1.debug.aiBatchCalls += 1;
   }
 
   const phase2 = await resolveUnresolvedFragments(phase1);
@@ -294,7 +293,6 @@ async function runCompoundPipeline(
     phase1Results.map(async (p1) => {
       if (shouldRunPhase1_5(p1)) {
         await runPhase1_5(p1);
-        p1.debug.aiBatchCalls += 1;
       }
     })
   );
