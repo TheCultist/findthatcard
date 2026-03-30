@@ -89,9 +89,16 @@ function sanitizeTags(tags: string[]): string[] {
 }
 
 function parseResolverOutput(raw: string): ResolverResponse {
-  const trimmed = raw.trim();
-  const parsed = JSON.parse(trimmed) as ResolverResponse;
-  return parsed;
+  const trimmed = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  try {
+    return JSON.parse(trimmed) as ResolverResponse;
+  } catch {
+    return { results: [] };
+  }
 }
 
 async function runCategoryBatch(args: {

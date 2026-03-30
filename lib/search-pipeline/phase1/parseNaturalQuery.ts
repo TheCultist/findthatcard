@@ -540,13 +540,6 @@ function detectColorShorthand(
 
 /**
  * Returns true when the query explicitly asks for cards that *include* or *contain*
- * certain colors, rather than cards whose color is exactly those colors.
- * Used to switch from the default c=/id= (exact) to c:/id: (superset).
- * Examples: "creatures that include white", "cards containing blue and red",
- *           "cards with at least green", "cards with green or more colors"
- */
-/**
- * Returns true when the query explicitly asks for cards that *include* or *contain*
  * certain colors. Used to switch c= (default exact) → c: (superset).
  * e.g. "creatures containing blue and red", "cards with at least green"
  */

@@ -183,7 +183,7 @@ export function shouldRunPhase1_5(ir: SearchPipelineIR): boolean {
 
   const COLLOQUIAL_TRIGGERS = [
     /\b(?:cheap|expensive|costly|budget|overcosted|undercosted)\b/i,
-    /\b(?:big|huge|large|small|tiny|tiny|weak|strong|powerful|beefy|fat|slim|chonky)\b/i,
+    /\b(?:big|huge|large|small|tiny|weak|strong|powerful|beefy|fat|slim|chonky)\b/i,
     /\b(?:early|late)\s+(?:game|turn)\b/i,
     /\b(?:in|from|before|after|since|around)\s+(?:19|20)\d{2}\b/i,
     /\b(?:printed|released|from)\s+(?:in\s+)?(?:19|20)\d{2}\b/i,
