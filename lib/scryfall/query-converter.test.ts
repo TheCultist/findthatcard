@@ -154,6 +154,13 @@ const finalizeCases: FinalizeTestCase[] = [
       "id:ub (function:mill-opponent or function:mill or function:mill-any)",
   },
   {
+    name: "replaces kw:mill with self-mill function tags when self-mill qualifier matches",
+    naturalQuery: "self mill cards in blue black red",
+    rawQuery: "prefer:best id:ubr kw:mill game:paper",
+    expected:
+      "prefer:best id:ubr game:paper (function:mill-self or function:self-mill or function:mill)",
+  },
+  {
     name: "adds blink tags for blink intent",
     naturalQuery: "azorius blink effects",
     rawQuery: "id:wu",

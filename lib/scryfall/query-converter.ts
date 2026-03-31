@@ -1175,18 +1175,36 @@ function normalizeArchetypeIntents(
   for (const archetype of ARCHETYPE_REGISTRY) {
     if (!archetype.detect.test(lower)) continue;
     if (archetype.disqualify?.test(lower)) continue;
-    // Skip when Phase 1 already expressed the intent as kw:X — injecting function: tags on
-    // top would AND them together and make the query unnecessarily restrictive.
-    if (archetype.skipIfKw && new RegExp(`(?:^|\\s)kw:${archetype.skipIfKw}\\b`, "i").test(updated)) continue;
 
+    // Detect qualifier match before checking skipIfKw so that a refined intent (e.g.
+    // "self mill") can override the Phase-1 kw:X token rather than being suppressed by it.
     let desiredTags = archetype.defaultTags;
+    let qualifierMatched = false;
 
     if (archetype.qualifiers) {
       for (const qualifier of archetype.qualifiers) {
         if (qualifier.detect.test(lower)) {
           desiredTags = qualifier.tags;
+          qualifierMatched = true;
           break;
         }
+      }
+    }
+
+    if (archetype.skipIfKw) {
+      const kwPattern = new RegExp(`(?:^|\\s)kw:${archetype.skipIfKw}\\b`, "i");
+      if (kwPattern.test(updated)) {
+        if (!qualifierMatched) {
+          // Phase 1 already expressed the general intent via kw:X; don't AND with function: tags.
+          continue;
+        }
+        // A qualifier refines the intent beyond what kw:X captures — replace kw:X with the
+        // qualifier-specific function: tags instead of AND-ing both together.
+        updated = updated.replace(
+          new RegExp(`\\bkw:${archetype.skipIfKw}\\b`, "gi"),
+          " ",
+        );
+        updated = normalizeWhitespace(updated);
       }
     }
 
