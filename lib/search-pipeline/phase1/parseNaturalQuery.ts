@@ -249,6 +249,14 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   //     e.g. "make 1/1 tokens" → ["tokens"] (not t:token)
   //          "creates three 2/2 beast tokens" → ["beast", "tokens"] (not t:token, t:beast)
   capture(/\b(?:make[sd]?|creates?|creating|produces?|producing|generates?|generating)\s+(?:(?:your|all|each|every|a|an|any|the|one|two|three|four|five|six|seven|eight|nine|ten)\s+)*[\d]+\/[\d]+\s+((?:[a-z]+\s+){0,4}tokens?)\b/gi);
+  // 8c. Named token creation without P/T — "make treasure tokens", "create clue tokens"
+  //     Pattern 8 above only captures the first word after the verb, so "make treasure tokens"
+  //     captures "treasure" but leaves "tokens" unprotected → would generate t:token.
+  //     This pattern captures "TYPE tokens?" as a two-word phrase so both words enter
+  //     semanticRoleTokens, preventing t:token AND t:<type> from being generated.
+  //     e.g. "make treasure tokens" → ["treasure", "tokens"] (not t:token, not t:treasure)
+  //          "creates food tokens" → ["food", "tokens"]
+  capture(/\b(?:gives?|grants?|make[sd]?|creates?|creating|produces?|producing|generates?|generating)\s+(?:(?:your|all|each|every|target|a|an|any|the|friendly|one|two|three|four|five|six|seven|eight|nine|ten)\s+)*([a-z][a-z-]+\s+tokens?)\b/gi);
 
   // 10. Enchant / equip / attach targets — the permanent being enchanted/equipped is not
   //     the card type of the spell being searched.

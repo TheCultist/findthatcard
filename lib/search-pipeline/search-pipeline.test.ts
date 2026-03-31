@@ -1023,6 +1023,23 @@ async function testPhase1MakeTokensDoesNotProduceTokenType() {
     `t:token must not appear for generic token query; got: ${mustValues0.join(", ")}`
   );
   console.log("[PASS] phase1: generic token query does not produce t:token");
+
+  // Named token types (e.g. "treasure tokens") — neither t:token nor t:<type> should appear
+  const namedCases = [
+    "rakdos cards that make treasure tokens for commander",
+    "creates food tokens",
+    "generates clue tokens",
+    "makes gold tokens",
+  ];
+  for (const q of namedCases) {
+    const parsed = await parseNaturalQuery(q);
+    const mustValues = parsed.mustClauses.map((c) => c.value);
+    assert.ok(
+      !mustValues.some((v) => /\bt:token\b/i.test(v)),
+      `t:token must not appear for named token query "${q}"; got: ${mustValues.join(", ")}`
+    );
+  }
+  console.log("[PASS] phase1: named token type queries (treasure/food/clue tokens) do not produce t:token");
 }
 
 async function testPhase1MakeTokensWithPtAddsOracleClause() {
