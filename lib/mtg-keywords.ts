@@ -683,7 +683,14 @@ export async function applyKeywordFiltersFromNaturalQuery(
   const existingKw = getExistingKwInQuery(scryfallQuery);
   const toAdd = keywords.filter((name) => {
     const normalized = name.toLowerCase();
-    return !existingKw.has(normalized) && !existingKw.has(normalized.replace(/\s+/g, "-"));
+    if (existingKw.has(normalized) || existingKw.has(normalized.replace(/\s+/g, "-"))) return false;
+    // Also skip if function tags for this keyword are already in the query — this covers the case
+    // where normalizeArchetypeIntents replaced kw:X with qualifier-specific function: tags
+    // (e.g. kw:mill replaced by function:mill-self). Without this check, this function would
+    // re-add kw:mill and OR it alongside the function tags, producing a broken query.
+    const fnTagPattern = new RegExp(`\\bfunction:${normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:-|\\b)`, "i");
+    if (fnTagPattern.test(scryfallQuery)) return false;
+    return true;
   });
 
   if (toAdd.length === 0) return removeEmptyBrackets(scryfallQuery);
