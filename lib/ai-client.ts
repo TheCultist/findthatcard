@@ -4,7 +4,7 @@
  *
  * OpenAI env vars: OPENAI_API_KEY, OPENAI_MODEL (default: gpt-4.1-mini)
  * Optional: OPENAI_REASONING_EFFORT=low|medium|high for reasoning-capable models only (Responses API).
- * Claude env vars:  ANTHROPIC_API_KEY, CLAUDE_MODEL (default: claude-3-5-haiku-20241022)
+ * Claude env vars:  ANTHROPIC_API_KEY, CLAUDE_MODEL (default: claude-haiku-4-5)
  */
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
@@ -96,7 +96,7 @@ function getAnthropicClient(): Anthropic {
 }
 
 async function callClaude(params: AIRequestParams): Promise<AIResponse> {
-  const model = process.env.CLAUDE_MODEL || "claude-3-5-haiku-20241022";
+  const model = process.env.CLAUDE_MODEL || "claude-haiku-4-5";
 
   const response = await getAnthropicClient().messages.create({
     model,
