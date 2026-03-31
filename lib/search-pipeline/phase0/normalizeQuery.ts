@@ -65,7 +65,11 @@ Examples:
 "I'm looking for cards that give flying to all creatures" → "cards that give flying to all creatures"
 "what cards can I use that produce mana" → "cards that produce mana"
 "budget cards for commander" → "budget cards for commander" (unchanged — commander is a format)
-"1 drop creatures for a token deck" → "1 drop creatures for a token deck" (unchanged — token is a generic archetype)`;
+"1 drop creatures for a token deck" → "1 drop creatures for a token deck" (unchanged — token is a generic archetype)
+"self mill black cards" → "black cards that self-mill"
+"self mill creatures blue black red" → "blue black red creatures that self-mill"
+"blue self mill spells" → "blue spells that self-mill"`;
+
 
 /**
  * Validates the LLM response. Returns the normalized query if safe,
@@ -109,6 +113,15 @@ export function validateResponse(original: string, response: string): string | n
  * Fixes misspellings, broken grammar, and missing connectors so Phase 1
  * can parse reliably. Gated on 3+ word natural language queries.
  */
+/**
+ * Hyphenates known two-word MTG compound terms before they reach the LLM so the
+ * LLM treats them as a single semantic unit and doesn't drop either word.
+ * The original query is restored after normalization by un-hyphenating.
+ */
+function protectCompoundTerms(query: string): string {
+  return query.replace(/\bself\s+mill\b/gi, "self-mill");
+}
+
 export async function normalizeQuery(
   query: string
 ): Promise<{ normalized: string; didNormalize: boolean }> {
@@ -116,10 +129,12 @@ export async function normalizeQuery(
     return { normalized: query, didNormalize: false };
   }
 
+  const protected_ = protectCompoundTerms(query);
+
   try {
     const response = await callAI({
       system: SYSTEM_PROMPT,
-      user: query,
+      user: protected_,
       max_output_tokens: 200,
     });
 
