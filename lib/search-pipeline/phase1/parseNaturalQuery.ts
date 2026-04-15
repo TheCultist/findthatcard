@@ -226,6 +226,13 @@ function extractSemanticRoleTokens(naturalQuery: string): Set<string> {
   capture(/\b([a-z][a-z-]{2,}(?:\s+(?:or|and)\s+[a-z][a-z-]{2,})*)\s+(?:synerg(?:y|ies)|support|matters?|payoffs?|tribal)\b/gi);
   capture(/\bsupport(?:ing)?\s+([a-z][a-z-]{2,})\b/gi);
 
+  // 6b. Synergy-WITH target noun phrase — "works with X", "synergizes with X", "pairs with X",
+  //     "combos with X". The entire noun phrase after "with" describes what the user already has
+  //     in their deck (synergy partner), NOT the card type being searched for. Capturing it here
+  //     prevents every word in the phrase (e.g. "food", "artifact", "tokens") from being
+  //     misinterpreted as a type filter (t:food, t:artifact, t:token).
+  capture(/\b(?:combos?|synerg(?:izes?|izing)|pairs?\s*(?:ing)?|works?|working)\s+with\s+((?:[a-z][a-z-]*\s*){1,6})/gi);
+
   // 6. "Named / called X" — card-name references
   capture(/\b(?:named?|called)\s+([a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,3})(?=\s+(?:in|from|with|that|or|and)|\s*$)/gi);
 

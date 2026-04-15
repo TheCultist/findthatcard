@@ -508,10 +508,12 @@ function hasKeywordPositiveIntent(
       return true;
     }
   }
-  // Synergy intent: "work well with X", "synergize with X" - add kw: to OR chain with function tags
+  // Synergy intent: "work well with X", "synergize with X" - add kw: to OR chain with function tags.
+  // Negative lookahead excludes compound token-type nouns: "work with food artifact tokens" means
+  // the user wants cards that work WITH Food tokens (the object), not cards with the Food keyword.
   if (
     new RegExp(
-      `\\b(?:work(?:\\s+well)?|synergiz(?:e|es)|synergyz(?:e|es)|synergis(?:e|es)|synergy)\\s+with\\s+${kwEscaped(kwLower)}s?\\b`,
+      `\\b(?:work(?:\\s+well)?|synergiz(?:e|es)|synergyz(?:e|es)|synergis(?:e|es)|synergy)\\s+with\\s+${kwEscaped(kwLower)}s?(?!\\s+(?:tokens?|artifact|creature|enchantment|land|planeswalker|spell))\\b`,
       "i"
     ).test(lower)
   ) {
