@@ -24,7 +24,7 @@ A Magic: The Gathering card search tool that converts natural language queries i
 
 ## Tech Stack
 
-- **Next.js 15** (App Router, Turbopack in dev)
+- **Next.js 16** (App Router, Turbopack in dev)
 - **TypeScript**
 - **Tailwind CSS**
 - **OpenAI API** — used only for unresolved query fragments and Phase 0 normalization

@@ -7,15 +7,22 @@ import {
 import { SearchRequest, SearchResponse, ErrorResponse } from "@/types/scryfall";
 import { CARDS_PER_PAGE, searchScryfall } from "@/lib/scryfall/client";
 import { runSearchPipeline } from "@/lib/search-pipeline/runSearchPipeline";
+import { getActiveProvider } from "@/lib/ai-client";
 
 /**
  * POST /api/search
  */
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
+    const provider = getActiveProvider();
+    const apiKeyMissing =
+      provider === "claude"
+        ? !process.env.ANTHROPIC_API_KEY
+        : !process.env.OPENAI_API_KEY;
+    if (apiKeyMissing) {
+      const providerName = provider === "claude" ? "Anthropic" : "OpenAI";
       return NextResponse.json<ErrorResponse>(
-        { error: "OpenAI API key is not configured" },
+        { error: `${providerName} API key is not configured` },
         { status: 500 }
       );
     }
