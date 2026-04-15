@@ -123,8 +123,8 @@ export const WORD_TO_NUMBER: Record<string, number> = {
  * Evaluated in order — first match wins.
  */
 export const COMPARISON_OP_PATTERNS: Array<[RegExp, string]> = [
-  [/less\s+than|fewer\s+than|below/i, "<"],
-  [/more\s+than|greater\s+than|above|higher\s+than/i, ">"],
+  [/less\s+than|fewer\s+than|below|under/i, "<"],
+  [/more\s+than|greater\s+than|above|higher\s+than|over/i, ">"],
   [/at\s+most|at\s+max(?:imum)?|or\s+(?:less|fewer)|up\s+to|no\s+more\s+than/i, "<="],
   [/at\s+least|at\s+min(?:imum)?|or\s+(?:more|greater)|no\s+less\s+than/i, ">="],
   [/equal(?:\s+to)?|exactly/i, "="],

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-03-31",
+  "updatedAt": "2026-04-15",
   "keywords": [
     {
       "name": "Abandon",
@@ -650,6 +650,10 @@
       "slug": "improvise"
     },
     {
+      "name": "Increment",
+      "slug": "increment"
+    },
+    {
       "name": "Incubate",
       "slug": "incubate"
     },
@@ -896,6 +900,10 @@
     {
       "name": "Pack tactics",
       "slug": "pack-tactics"
+    },
+    {
+      "name": "Paradigm",
+      "slug": "paradigm"
     },
     {
       "name": "Paradox",

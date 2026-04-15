@@ -40,8 +40,8 @@ export function resolveNumericStatFilters(naturalQuery: string): {
 
   const NUM_PAT = `(?:\\d+|zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)`;
   const OP_PAT = [
-    `less\\s+than`, `fewer\\s+than`, `below`,
-    `more\\s+than`, `greater\\s+than`, `above`, `higher\\s+than`,
+    `less\\s+than`, `fewer\\s+than`, `below`, `under`,
+    `more\\s+than`, `greater\\s+than`, `above`, `higher\\s+than`, `over`,
     `at\\s+most`, `at\\s+max(?:imum)?`, `or\\s+(?:less|fewer)`, `up\\s+to`, `no\\s+more\\s+than`,
     `at\\s+least`, `at\\s+min(?:imum)?`, `or\\s+(?:more|greater)`, `no\\s+less\\s+than`,
     `equal(?:\\s+to)?`, `exactly`,

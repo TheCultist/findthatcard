@@ -47,7 +47,8 @@ const FEW_SHOT_EXAMPLES = `
 {"results":[{"fragment":"deals damage equal to the number of cards in hand","archetype":null,"qualifier":null,"tags":["o:\"equal to\"","o:\"cards in hand\""],"confidence":0.9}]}
 {"results":[{"fragment":"whenever you cast an instant or sorcery draw a card","archetype":null,"qualifier":null,"tags":["o:\"whenever you cast\"","o:\"instant or sorcery\"","o:draw"],"confidence":0.9}]}
 {"results":[{"fragment":"pings all opponents for damage when a noncreature spell is played","archetype":null,"qualifier":null,"tags":["function:cast-trigger-you","o:\"noncreature spell\"","function:burn-player"],"confidence":0.9}]}
-{"results":[{"fragment":"that make themselves cheaper","archetype":null,"qualifier":null,"tags":["function:cheaper-than-mv"],"confidence":0.9}]}`;
+{"results":[{"fragment":"that make themselves cheaper","archetype":null,"qualifier":null,"tags":["function:cheaper-than-mv"],"confidence":0.9}]}
+{"results":[{"fragment":"create a token creature whenever you cast a spell","archetype":"tokens","qualifier":"creature","tags":["function:cast-trigger-you"],"confidence":0.95}]}`;
 
 export function buildResolverPrompt({
   category,
@@ -75,7 +76,7 @@ export function buildResolverPrompt({
     '{"results":[{"fragment":"...","archetype":"name-or-null","qualifier":"qualifier-or-null","tags":["..."],"confidence":0.0}]}',
     "",
     "Rules:",
-    "- If the fragment matches a known archetype above, set archetype (and qualifier if applicable). Leave tags empty -- we handle tag mapping.",
+    "- If the fragment matches a known archetype above, set archetype (and qualifier if applicable). Leave tags empty UNLESS the fragment also specifies a trigger condition that further narrows the archetype (e.g. 'whenever you cast a spell', 'when a creature dies', 'when this enters'). In that case, set archetype AND include the relevant trigger tag (e.g. function:cast-trigger-you for spell-cast triggers) in tags.",
     "- If no archetype fits, set archetype to null and provide raw Scryfall tags (function:..., art:..., kw:..., o:\"...\", t:...).",
     "- use art: ONLY when the query explicitly mentions art, illustration, depiction, or visual appearance (e.g. 'with thopter art', 'depicting a dragon'). Do NOT use art: for creature types, card mechanics, or named MTG permanents that happen to appear in card art. use artist: for illustrator names.",
     "- max 4 raw tags per fragment.",

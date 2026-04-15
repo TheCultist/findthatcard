@@ -443,6 +443,63 @@ function wantsSpellCastNoncreatureDamageOpponents(naturalQuery: string): boolean
   return hasSpellCast && hasNoncreature && hasOpponentDamage && hasOpponents;
 }
 
+/**
+ * When the user asks for "permanents", add is:permanent. Guards skip game-object uses
+ * of "permanent" (target permanent, each permanent, reanimate permanents, etc.) and
+ * cases where a more specific type filter is already present.
+ */
+function injectPermanentTypeFilter(naturalQuery: string, query: string): string {
+  const q = naturalQuery.toLowerCase();
+  if (!/\bpermanents?\b/.test(q)) return query;
+  // Already filtered to a specific permanent subtype — adding -instant/-sorcery is redundant
+  if (/\b(?:t|type):(?:creature|artifact|enchantment|land|planeswalker|battle)\b/i.test(query)) return query;
+  // Already has the filter
+  if (/\bis:permanent\b/i.test(query)) return query;
+  // "non-permanent" or "permanent" used as an adjective meaning "lasting"
+  if (/\bnon-?permanent\b/i.test(q)) return query;
+  if (/\bpermanents?\s+(?:counter|bonus|boost|buff|effect|aura)\b/i.test(q)) return query;
+  // Game-object references: "target permanent", "a permanent dies", "each permanent", etc.
+  if (/\b(?:target|each|every|any|a|an|another)\s+permanents?\b/i.test(q)) return query;
+  if (/\bwhen(?:ever)?\s+(?:a\s+|an\s+|each\s+|the\s+)?permanents?\b/i.test(q)) return query;
+  // Action-verb objects: "reanimate permanents", "exile permanents", etc.
+  if (
+    /\b(?:reanimate[sd]?|return(?:s|ed|ing)?|exile[sd]?|destroy(?:s|ed|ing)?|sacrifice[sd]?|bounce[sd]?|blink[sd]?|kill[sd]?|remove[sd]?|copies?)\s+(?:\w+\s+){0,3}permanents?\b/i.test(
+      q
+    )
+  )
+    return query;
+  return `${query} is:permanent`.replace(/\s{2,}/g, " ").trim();
+}
+
+/**
+ * When the user asks for permanents that create tokens on a spell-cast trigger
+ * (e.g., "whenever you cast a spell, create a token"), Phase 2 classifies the
+ * fragment as archetype:tokens but drops the cast-trigger condition because the
+ * archetype rule suppresses extra tags. Inject function:cast-trigger-you here
+ * when the assembled query already has token-generation archetype tags and the
+ * natural query clearly expresses a cast trigger.
+ */
+function injectCastTriggerTagForTokenSpellCreation(
+  naturalQuery: string,
+  query: string
+): string {
+  const q = naturalQuery.toLowerCase();
+  const hasCastTrigger =
+    /\bwhen(?:ever)?\s+(?:i\s+|you\s+)?cast\b/.test(q) ||
+    /\beach\s+(?:time\s+)?(?:you\s+)?cast\b/.test(q) ||
+    /\bon\s+(?:each\s+)?cast\b/.test(q);
+  if (!hasCastTrigger) return query;
+  if (/\bfunction:cast-trigger-you\b/i.test(query)) return query;
+  // Only inject when a token-generation archetype tag is already present —
+  // prevents adding the cast tag to unrelated queries that mention "cast".
+  const hasTokenFunctionTag =
+    /\bfunction:(?:repeatable-token-generator|repeatable-creature-tokens|young-pyromancer-ability)\b/i.test(
+      query
+    );
+  if (!hasTokenFunctionTag) return query;
+  return `${query} function:cast-trigger-you`.replace(/\s{2,}/g, " ").trim();
+}
+
 function stripMisleadingGroupSlugForSpellCastTriggers(
   naturalQuery: string,
   scryfallQuery: string
@@ -627,6 +684,16 @@ function injectArchetypeTagsFromResolvedFragments(
       flushArchetypeOrGroup();
       orGroupChains.push(orChain);
     }
+
+    // Extra tags from Phase 2 (e.g. function:cast-trigger-you alongside archetype:tokens)
+    // are AND conditions that narrow the archetype — append them directly after flushing.
+    const extraTags = fragment.tags.filter((t) => t.trim().length > 0);
+    if (extraTags.length > 0 && !unresolved.orConnected) {
+      flushArchetypeOrGroup();
+      for (const tag of extraTags) {
+        updated = `${updated} ${tag}`;
+      }
+    }
   }
   flushArchetypeOrGroup();
 
@@ -745,6 +812,8 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     query = stripMisleadingKwSupportForDeckbuilding(ir.naturalQuery, query);
     query = stripMisleadingGroupSlugForSpellCastTriggers(ir.naturalQuery, query);
     query = normalizeSpellCastPingOpponentsOracle(ir.naturalQuery, query);
+    query = injectCastTriggerTagForTokenSpellCreation(ir.naturalQuery, query);
+    query = injectPermanentTypeFilter(ir.naturalQuery, query);
     query = applyDefaultGameFilter(query);
     query = query.replace(/^\s*[iI]\s+/i, "").trim();
 
