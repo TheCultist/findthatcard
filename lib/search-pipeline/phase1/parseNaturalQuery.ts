@@ -941,8 +941,8 @@ function applyOracleIntentHeuristics(
 
   if (hasEtbIntent && hasLifegainIntent) {
     mustClauses.push({ value: 'o:"~ enters"', source: "phase1:oracle" });
-    mustClauses.push({ value: 'o:"gain"', source: "phase1:oracle" });
-    strippedTerms.push(...ETB_TERMS, "gain", "gains", "gain life", "lifegain", "life gain", "heal", "heals");
+    mustClauses.push({ value: "function:lifegain", source: "phase1:function" });
+    strippedTerms.push(...ETB_TERMS, "gain", "gains", "life", "gain life", "lifegain", "life gain", "heal", "heals");
     return;
   }
 
