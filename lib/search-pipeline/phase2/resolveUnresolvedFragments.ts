@@ -75,6 +75,8 @@ function sanitizeTags(tags: string[]): string[] {
     .map((tag) => tag.trim())
     .filter((tag) => tag.length > 0)
     .filter((tag) => !/[{}[\]]/.test(tag))
+    // Phase 2 must never emit card-type filters; strip them defensively
+    .filter((tag) => !/^(?:t|type):/i.test(tag))
     .map((tag) => autoPrefix(tag))
     .filter((tag): tag is string => tag !== null);
   const seen = new Set<string>();

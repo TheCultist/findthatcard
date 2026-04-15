@@ -687,7 +687,10 @@ function injectArchetypeTagsFromResolvedFragments(
 
     // Extra tags from Phase 2 (e.g. function:cast-trigger-you alongside archetype:tokens)
     // are AND conditions that narrow the archetype — append them directly after flushing.
-    const extraTags = fragment.tags.filter((t) => t.trim().length > 0);
+    // Strip any t:/type: tags — card-type filters must never come from Phase 2.
+    const extraTags = fragment.tags.filter(
+      (t) => t.trim().length > 0 && !/^(?:t|type):/i.test(t)
+    );
     if (extraTags.length > 0 && !unresolved.orConnected) {
       flushArchetypeOrGroup();
       for (const tag of extraTags) {
