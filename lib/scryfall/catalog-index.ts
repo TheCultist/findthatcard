@@ -312,7 +312,10 @@ export function lookupCardNameFuzzy(text: string, maxTotalEdits: number = 2): st
   let bestCanonical: string | null = null;
   let bestScore = maxTotalEdits + 1;
 
-  for (const [key, canonical] of cardNameIndexPair.simplified) {
+  // Scan the exact map (all canonical names in lowercase) rather than the
+  // simplified map, because simple names with no apostrophes/hyphens are only
+  // present in exact and would be invisible to the fuzzy scan otherwise.
+  for (const [key, canonical] of cardNameIndexPair.exact) {
     const keyTokens = key.split(" ").filter(Boolean);
 
     // Must have the same number of words.

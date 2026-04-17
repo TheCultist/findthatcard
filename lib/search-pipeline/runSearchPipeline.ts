@@ -11,6 +11,7 @@ import {
   PREFER_BEST_PREFIX,
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
+import { ensureCatalogIndex } from "@/lib/scryfall/catalog-index";
 
 /** Log a pipeline stage string — use JSON.stringify so embedded `o:"..."` does not break quoted display. */
 function dbgQ(value: string): string {
@@ -211,6 +212,12 @@ export type SearchPipelineResult = {
 };
 
 export async function runSearchPipeline(naturalQuery: string): Promise<SearchPipelineResult> {
+  // The catalog index must be ready before Phase 0 so that correctCardNameTypo
+  // (the fuzzy card-name pre-correction in normalizeQuery) can use it.
+  // ensureCatalogIndex is idempotent and cached, so this only pays a real cost
+  // on the very first request after a cold start.
+  await ensureCatalogIndex();
+
   const phase0 = await normalizeQuery(naturalQuery);
 
   // Check for compound OR query (e.g. "jund creatures 10mv+ or artifact creatures 10mv+")
