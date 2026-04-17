@@ -35,6 +35,7 @@ Rules:
 - If the query is already clear, grammatical, and correctly spelled, return it UNCHANGED
 - Keep the output as close to the input meaning as possible
 - Output ONLY the cleaned-up query. No quotes, no explanations.
+- PRESERVE VERB-FIRST PHRASING: When the query begins with an action verb (destroy, exile, remove, kill, counter, bounce, draw, sacrifice, etc.) followed by a target, keep that verb-first structure. NEVER convert "destroy creatures with X" into "creatures with X that destroy anything" — that flips the meaning from "removal spell targeting X" to "X that performs removal". Only fix the spelling; do not restructure.
 - SIMPLIFY PREAMBLES: Remove verbose, meaningless preambles that add no search value. Replace "any type of card that", "any card that", "any kind of card that", "I'm looking for cards that", "show me cards that", "what cards", "find me cards that", "cards that I can use that" with just "cards that". The resulting query must still be natural English.
 - REMOVAL TARGET DISAMBIGUATION: When multiple card types appear alongside "removal" (e.g. "creature removal for enchantment and artifact"), ALL of those types are removal targets, not the type of the removing card. Rewrite to make this explicit: "removal that targets creatures, enchantments, and artifacts". This avoids the ambiguity of "[type] removal for [type2]" being misread as the card being a [type].
 - SYNERGY DECK CONTEXT: When a query uses "for [a/an/my] X deck" or "in [a/an/my] X deck" and X looks like a specific Magic: The Gathering card name (not a format like "commander"/"modern", a color like "grixis"/"naya", or a generic archetype like "tokens"/"storm"/"aristocrats"), rewrite that portion to "that synergize with X deck". Keep all other constraints (mana value, color, type, etc.) exactly as written. IMPORTANT: keep the word "deck" in the output so the meaning stays intact.
@@ -44,6 +45,8 @@ Examples:
 "white creatures haste flash etb draw" → "white creatures with haste and flash that draw on etb"
 "green ramp draw instant" → "green instant that ramps and draws"
 "creaturs that destory other creaturs" → "creatures that destroy other creatures"
+"destroy cretures with flying" → "destroy creatures with flying" (fix typo only — verb stays first)
+"exile creaturs with lifeling" → "exile creatures with lifelink" (fix typos only — verb stays first)
 "enchantmens giving fly and indestrutible" → "enchantments that give flying and indestructible"
 "red card with deal damage when enter" → "red card that deals damage when it enters"
 "sorcary to find lands from deck" → "sorcery to find lands from deck"
@@ -71,6 +74,22 @@ Examples:
 "self mill creatures blue black red" → "blue black red creatures that self-mill"
 "blue self mill spells" → "blue spells that self-mill"`;
 
+
+/**
+ * Action verbs that, when they START a search query, must remain at the front
+ * of the normalized output.  Phase 0 must never reorder "destroy creatures with
+ * flying" into "creatures with flying that destroy X" — that inverts subject and
+ * object and produces completely wrong search results.
+ */
+const REMOVAL_VERB_FIRST_SET = new Set([
+  "destroy", "destroys", "destroyed",
+  "exile",   "exiles",   "exiled",
+  "remove",  "removes",  "removed",
+  "kill",    "kills",    "killed",
+  "eliminate", "eliminates",
+  "counter", "counters",
+  "bounce",  "bounces",  "bounced",
+]);
 
 /**
  * Validates the LLM response. Returns the normalized query if safe,
@@ -104,6 +123,20 @@ export function validateResponse(original: string, response: string): string | n
       (rw) => levenshteinDistance(word, rw) <= 3
     );
     if (!hasCloseMatch) return null;
+  }
+
+  // Guard: when the original query starts with a removal/action verb, that verb
+  // must still appear within the first 3 tokens of the response.  A response
+  // that moves it later (e.g. "creatures with flying that destroy …") has
+  // inverted subject and object — reject it so the original is preserved.
+  const firstWordMatch = original.trim().match(/^([a-z]+)/i);
+  const firstWord = firstWordMatch ? firstWordMatch[1].toLowerCase() : "";
+  if (REMOVAL_VERB_FIRST_SET.has(firstWord)) {
+    const respTokens = trimmed.toLowerCase().match(/\b[a-z]+\b/g) ?? [];
+    const posInResp = respTokens.findIndex(
+      (w) => levenshteinDistance(w, firstWord) <= 1
+    );
+    if (posInResp === -1 || posInResp > 2) return null;
   }
 
   return trimmed;

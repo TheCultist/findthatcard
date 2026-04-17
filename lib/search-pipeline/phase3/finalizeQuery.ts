@@ -500,6 +500,46 @@ function injectCastTriggerTagForTokenSpellCreation(
   return `${query} function:cast-trigger-you`.replace(/\s{2,}/g, " ").trim();
 }
 
+/**
+ * "destroy/exile/kill creatures WITH [keyword]" — the keyword qualifies the
+ * TARGET, not the card being searched.  Phase 1 (frozen) always emits kw:X for
+ * any MTG keyword it encounters; combined with removal function tags that
+ * yields results that ARE flyers with destroy-text rather than spells that
+ * destroy flyers.  Detect the pattern and demote kw:X → o:X so Scryfall
+ * matches oracle text (e.g. "Destroy target creature with flying.") instead.
+ *
+ * Only fires when:
+ *  – at least one removal function tag is present (the card IS removal)
+ *  – the natural query contains "[remove-verb] creatures with [keyword]"
+ *  – a matching kw:[keyword] exists in the assembled query
+ */
+function demoteRemovalTargetKeyword(
+  naturalQuery: string,
+  scryfallQuery: string
+): string {
+  if (!/\bfunction:(?:removal[\w-]*|spot-removal)\b/i.test(scryfallQuery)) return scryfallQuery;
+  if (!/\bkw:\w/i.test(scryfallQuery)) return scryfallQuery;
+
+  // Matches "[remove-verb] ... creatures with [keyword]"
+  // The lookahead up to 60 chars lets intervening words like "all" or "target" pass through.
+  const REMOVAL_TARGET_KW_RE =
+    /\b(?:destroy|exile|remove|kill|eliminate|counter|bounce|fight)\b[\s\S]{0,60}?\bcreatures?\s+with\s+([\w]+(?:\s+[\w]+)?)\b/i;
+  const m = REMOVAL_TARGET_KW_RE.exec(naturalQuery);
+  if (!m) return scryfallQuery;
+
+  // Only use the first token (keywords like "first strike" are two words; kw: would have
+  // been emitted as kw:first or kw:"first strike" — handling single-token covers 95% of cases).
+  const kwToken = m[1].trim().toLowerCase().split(/\s+/)[0];
+  const escaped = kwToken.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const kwRe = new RegExp(`\\bkw:${escaped}\\b`, "gi");
+  if (!kwRe.test(scryfallQuery)) return scryfallQuery;
+
+  return scryfallQuery
+    .replace(kwRe, `o:${kwToken}`)
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function stripMisleadingGroupSlugForSpellCastTriggers(
   naturalQuery: string,
   scryfallQuery: string
@@ -813,6 +853,7 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     query = await stripPlaneswalkerSubtypesWhenCreatureRequired(query);
     query = stripMvBoundRedundantFunctionTags(ir.naturalQuery, query);
     query = stripMisleadingKwSupportForDeckbuilding(ir.naturalQuery, query);
+    query = demoteRemovalTargetKeyword(ir.naturalQuery, query);
     query = stripMisleadingGroupSlugForSpellCastTriggers(ir.naturalQuery, query);
     query = normalizeSpellCastPingOpponentsOracle(ir.naturalQuery, query);
     query = injectCastTriggerTagForTokenSpellCreation(ir.naturalQuery, query);
