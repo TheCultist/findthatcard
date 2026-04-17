@@ -1,4 +1,5 @@
 import { ensureScryfallCatalogCache, getCatalog } from "@/lib/scryfall/catalogs";
+import { levenshteinDistance } from "@/lib/utils/text";
 
 export type SubtypeMatch = {
   name: string;
@@ -284,6 +285,62 @@ export function hasCardNameIndex(): boolean {
  *
  * Returns null if no name starts with the given prefix.
  */
+/**
+ * Fuzzy card-name lookup. Used to correct single-word typos in names that appear
+ * after "similar to / like / alternatives to" triggers, where we know the text is
+ * intended to be a card name but the user misspelled one or more tokens.
+ *
+ * Strategy: split both the candidate and each simplified-index key into tokens,
+ * require the same token count, reject if total char-length difference > 4, then
+ * sum per-token Levenshtein distances.  Returns the canonical name for the entry
+ * with the lowest total edit distance that is ≤ maxTotalEdits (default 2).
+ *
+ * Performance: ~27 k entries × simple integer ops ≈ < 20 ms; only called when the
+ * exact / simplified lookups have already failed and we're in a named-card context.
+ */
+export function lookupCardNameFuzzy(text: string, maxTotalEdits: number = 2): string | null {
+  if (!cardNameIndexPair) return null;
+
+  // Short-circuit if an exact or simplified match already exists.
+  const exact = lookupCardName(text);
+  if (exact) return exact;
+
+  const simplified = simplifyForNameLookup(text);
+  const candidateTokens = simplified.split(" ").filter(Boolean);
+  if (candidateTokens.length === 0) return null;
+
+  let bestCanonical: string | null = null;
+  let bestScore = maxTotalEdits + 1;
+
+  for (const [key, canonical] of cardNameIndexPair.simplified) {
+    const keyTokens = key.split(" ").filter(Boolean);
+
+    // Must have the same number of words.
+    if (keyTokens.length !== candidateTokens.length) continue;
+
+    // Cheap total-char filter: skip if the simplified forms are too different in length.
+    if (Math.abs(key.length - simplified.length) > 4) continue;
+
+    // First-character of first token must agree (avoids huge false-positive pool).
+    if (keyTokens[0][0] !== candidateTokens[0][0]) continue;
+
+    // Sum per-token Levenshtein distances; bail early if already over threshold.
+    let totalEdits = 0;
+    for (let i = 0; i < candidateTokens.length; i++) {
+      totalEdits += levenshteinDistance(candidateTokens[i], keyTokens[i]);
+      if (totalEdits >= bestScore) break;
+    }
+
+    if (totalEdits < bestScore) {
+      bestScore = totalEdits;
+      bestCanonical = canonical;
+      if (bestScore === 0) break;
+    }
+  }
+
+  return bestCanonical;
+}
+
 export function lookupCardNameByPrefix(prefix: string): string | null {
   if (!cardNameIndexPair) return null;
   const norm = simplifyForNameLookup(prefix);

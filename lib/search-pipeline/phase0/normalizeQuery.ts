@@ -1,6 +1,7 @@
 import { callAI } from "@/lib/ai-client";
 import { isAiPromptLoggingEnabled } from "@/lib/search-pipeline/debug";
 import { levenshteinDistance } from "@/lib/utils/text";
+import { hasCardNameIndex, lookupCardName, lookupCardNameFuzzy } from "@/lib/scryfall/catalog-index";
 
 const shouldLog = isAiPromptLoggingEnabled;
 
@@ -122,14 +123,84 @@ function protectCompoundTerms(query: string): string {
   return query.replace(/\bself\s+mill\b/gi, "self-mill");
 }
 
+/**
+ * Named-card typo correction for "similar-cards"-style patterns.
+ *
+ * Phase 1 (frozen) looks up card names with exact/simplified matching only.
+ * If the user misspelled a card name in a "like X / similar to X" phrase
+ * (e.g. "creatures like boris reckoner" instead of "Boros Reckoner"), Phase 1
+ * fails to detect the intent and falls back to plain attribute parsing.
+ *
+ * This deterministic pre-pass runs BEFORE the AI call.  It:
+ *   1. Tests whether the query matches a "similar-cards" trigger pattern.
+ *   2. Extracts the card-name candidate after the trigger.
+ *   3. If the candidate doesn't hit the catalog exactly, tries fuzzy lookup
+ *      (≤ 2 total per-token Levenshtein edits across all name tokens).
+ *   4. Substitutes the corrected name into the query.
+ *
+ * Returns the (possibly corrected) query unchanged if nothing fires or if
+ * the card-name index isn't loaded yet.
+ */
+const SIMILAR_PRE_PATTERNS: RegExp[] = [
+  /\b(?:cards?|spells?|creatures?|instants?|sorceries|enchantments?|artifacts?|lands?|something|anything)\s+(?:that\s+(?:are?\s+|is\s+)?)?like\s+([\s\S]+)/i,
+  /\b(?:similar\s+(?:cards?\s+)?to|alternatives?\s+(?:to|for)|effects?\s+(?:like|similar\s+to)|abilities?\s+(?:like|similar\s+to))\s+([\s\S]+)/i,
+];
+
+// How many words to try as a name candidate (longest-first).
+const MAX_NAME_WORDS = 6;
+
+function correctCardNameTypo(query: string): string {
+  if (!hasCardNameIndex()) return query;
+
+  for (const pattern of SIMILAR_PRE_PATTERNS) {
+    const m = query.match(pattern);
+    if (!m) continue;
+
+    const rawAfter = m[1].trim();
+    const words = rawAfter
+      .toLowerCase()
+      .replace(/[^a-z0-9'\s-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    // Try longest candidate first; stop at first exact hit.
+    for (let len = Math.min(words.length, MAX_NAME_WORDS); len >= 1; len--) {
+      const candidate = words.slice(0, len).join(" ");
+      if (lookupCardName(candidate)) return query; // already correct, no-op
+
+      const corrected = lookupCardNameFuzzy(candidate, 2);
+      if (corrected) {
+        // Replace just the misspelled portion while preserving the rest of the query.
+        const misspelled = new RegExp(
+          words.slice(0, len).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+"),
+          "i"
+        );
+        const fixed = query.replace(misspelled, corrected);
+        if (fixed !== query) {
+          console.log(`[Phase0] Typo correction: "${candidate}" → "${corrected}"`);
+          return fixed;
+        }
+      }
+    }
+  }
+
+  return query;
+}
+
 export async function normalizeQuery(
   query: string
 ): Promise<{ normalized: string; didNormalize: boolean }> {
-  if (!shouldNormalize(query)) {
-    return { normalized: query, didNormalize: false };
+  // Deterministic card-name typo correction runs first, regardless of AI gate.
+  const typoFixed = correctCardNameTypo(query);
+  const didTypoFix = typoFixed !== query;
+
+  if (!shouldNormalize(typoFixed)) {
+    return { normalized: typoFixed, didNormalize: didTypoFix };
   }
 
-  const protected_ = protectCompoundTerms(query);
+  const protected_ = protectCompoundTerms(typoFixed);
 
   try {
     const response = await callAI({
@@ -146,18 +217,18 @@ export async function normalizeQuery(
     }
 
     const text = response.text;
-    const validated = validateResponse(query, text);
+    const validated = validateResponse(typoFixed, text);
 
-    if (validated && validated.toLowerCase() !== query.toLowerCase()) {
+    if (validated && validated.toLowerCase() !== typoFixed.toLowerCase()) {
       if (shouldLog()) {
-        console.log(`[Phase0] "${query}" -> "${validated}"`);
+        console.log(`[Phase0] "${typoFixed}" -> "${validated}"`);
       }
       return { normalized: validated, didNormalize: true };
     }
 
-    return { normalized: query, didNormalize: false };
+    return { normalized: typoFixed, didNormalize: didTypoFix };
   } catch (error) {
     console.warn("[Phase0] Normalization failed, using original query:", error);
-    return { normalized: query, didNormalize: false };
+    return { normalized: typoFixed, didNormalize: didTypoFix };
   }
 }

@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-04-15",
+  "updatedAt": "2026-04-17",
   "keywords": [
     {
       "name": "Abandon",
@@ -666,6 +666,10 @@
       "slug": "infect"
     },
     {
+      "name": "Infusion",
+      "slug": "infusion"
+    },
+    {
       "name": "Ingest",
       "slug": "ingest"
     },
@@ -890,6 +894,10 @@
       "slug": "open-an-attraction"
     },
     {
+      "name": "Opus",
+      "slug": "opus"
+    },
+    {
       "name": "Outlast",
       "slug": "outlast"
     },
@@ -952,6 +960,10 @@
     {
       "name": "Populate",
       "slug": "populate"
+    },
+    {
+      "name": "Prepared",
+      "slug": "prepared"
     },
     {
       "name": "Proliferate",
@@ -1028,6 +1040,10 @@
     {
       "name": "Renown",
       "slug": "renown"
+    },
+    {
+      "name": "Repartee",
+      "slug": "repartee"
     },
     {
       "name": "Replicate",
