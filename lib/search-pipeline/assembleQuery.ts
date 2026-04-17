@@ -35,6 +35,30 @@ function isArtTag(token: string): boolean {
   return ART_TAG_PREFIX.test(token.trim());
 }
 
+/**
+ * Compound zone-movement pairs: each tuple represents two function tags that
+ * describe complementary aspects of the *same* card operation (source zone +
+ * destination position). When a resolved fragment contains exactly these two
+ * tags they must be ANDed — an OR would widen to any card that does either
+ * half in isolation (e.g. any card that shuffles a graveyard back, or any card
+ * that puts something on the bottom, rather than cards that specifically do
+ * graveyard→bottom).
+ */
+const COMPOUND_ZONE_MOVEMENT_PAIRS: ReadonlyArray<readonly [string, string]> = [
+  ["function:graveyard-to-library", "function:bottom-deck-manipulation"],
+  ["function:graveyard-to-library", "function:top-deck-manipulation"],
+] as const;
+
+function isCompoundZoneMovementPair(members: string[]): readonly [string, string] | null {
+  if (members.length !== 2) return null;
+  const a = members[0].trim().toLowerCase();
+  const b = members[1].trim().toLowerCase();
+  for (const [pa, pb] of COMPOUND_ZONE_MOVEMENT_PAIRS) {
+    if ((a === pa && b === pb) || (a === pb && b === pa)) return [pa, pb];
+  }
+  return null;
+}
+
 /** Prefixes whose multiple values within one fragment should be OR-chained. */
 const OR_CHAIN_PREFIXES = [
   /^function:/i,
@@ -116,6 +140,14 @@ function emitFragmentTags(tags: string[]): string[] {
         result.push(`${cast} ${burnPart}`.trim());
         continue;
       }
+    }
+
+    // Compound zone-movement: source-zone tag + destination-position tag must
+    // both apply to the same card (AND), not be alternatives (OR).
+    const compoundPair = isCompoundZoneMovementPair(members);
+    if (compoundPair) {
+      result.push(`${compoundPair[0]} ${compoundPair[1]}`);
+      continue;
     }
 
     if (members.length === 1) {

@@ -95,6 +95,40 @@ function testAssemblerCastTriggerYouAndBurnUsesAndNotOr() {
   console.log("[PASS] assembler: cast-trigger-you + opponent burn uses AND (space), not OR");
 }
 
+function testAssemblerGraveyardToBottomUsesAndNotOr() {
+  const ir: SearchPipelineIR = {
+    naturalQuery: "graveyard to bottom",
+    intent: "search",
+    tokenizedQuery: [],
+    noiseTokens: [],
+    mustClauses: [],
+    shouldClauses: [],
+    mustNotClauses: [],
+    unresolvedFragments: [{ text: "graveyard to bottom", category: "effect", orConnected: false }],
+    resolvedFragments: [
+      {
+        fragment: "graveyard to bottom",
+        tags: ["function:graveyard-to-library", "function:bottom-deck-manipulation"],
+        confidence: 0.9,
+        category: "effect",
+      },
+    ],
+    debug: { strippedTerms: [], aiBatchCalls: 0, aiSequentialCalls: 0, invalidTagsRemoved: 0, phase0Normalized: false },
+  };
+  const query = assembleQueryFromIR(ir);
+  assert.match(
+    query,
+    /function:graveyard-to-library\s+function:bottom-deck-manipulation/i,
+    `expected AND between compound zone-movement tags; got: ${query}`
+  );
+  assert.doesNotMatch(
+    query,
+    /\(function:graveyard-to-library\s+or\s+function:bottom-deck-manipulation\)/i,
+    "compound zone-movement tags must not be OR-chained"
+  );
+  console.log("[PASS] assembler: graveyard-to-library + bottom-deck-manipulation uses AND, not OR");
+}
+
 async function testPhase3DirectQueryAddsPreferBest() {
   const ir: SearchPipelineIR = {
     naturalQuery: "t:dragon",
@@ -1718,6 +1752,7 @@ async function run() {
   testAssemblerBooleanComposition();
   testFixMisclassifiedRampAsCostReduction();
   testAssemblerCastTriggerYouAndBurnUsesAndNotOr();
+  testAssemblerGraveyardToBottomUsesAndNotOr();
   testAssemblerSkipsArchetypeFragmentTags();
   testAssemblerEmitsRawTagsForNonArchetypeFragments();
   testAssemblerAndsArtConceptsPerFragment();
