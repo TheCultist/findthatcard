@@ -608,7 +608,9 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     name: "removal",
     description: "Destroy, exile, bounce, or tuck permanents",
     detect: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?|kill\s+spell|kill\s+spells)\b/i,
-    disqualify: /\b(graveyard|reanimate|return|recursion)\b/i,
+    // "library" / "top of" / "top card" indicate mill-exile or play-from-top mechanics,
+    // not targeted removal — e.g. "exile top of library", "exile from the top".
+    disqualify: /\b(graveyard|reanimate|return|recursion|library|from\s+(?:the\s+)?top|top\s+(?:card|of))\b/i,
     defaultTags: ["removal", "spot-removal", "repeatable-removal", "oblivion-ring-effect"],
     qualifiers: [
       {
