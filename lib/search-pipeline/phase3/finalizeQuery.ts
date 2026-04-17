@@ -513,6 +513,69 @@ function injectCastTriggerTagForTokenSpellCreation(
  *  – the natural query contains "[remove-verb] creatures with [keyword]"
  *  – a matching kw:[keyword] exists in the assembled query
  */
+/**
+ * "whenever you cast an instant or sorcery spell" — the user is quoting a
+ * triggered-ability condition, not asking for instants/sorceries themselves.
+ *
+ * Phase 1 (frozen) sees "instant or sorcery" and emits (t:instant or t:sorcery).
+ * Phase 2 resolves the "whenever you cast" fragment but OR-joins it with o:spell,
+ * which matches millions of cards.
+ *
+ * When the natural query IS a "whenever you cast [types]" trigger condition:
+ *   – remove the misapplied spell-type filters (they are not card-type constraints)
+ *   – replace the vague Phase-2 oracle clause with the precise trigger phrase
+ */
+function normalizeWheneverCastTrigger(
+  naturalQuery: string,
+  scryfallQuery: string
+): string {
+  const q = naturalQuery.toLowerCase().trim();
+  if (!/\bwhenever\s+you\s+cast\b/.test(q)) return scryfallQuery;
+
+  // Skip if the user is filtering the SOURCE card's type ("creatures with whenever you cast").
+  if (/\b(?:creatures?|artifacts?|enchantments?|permanents?)\s+(?:with|that|which)\b/i.test(q)) {
+    return scryfallQuery;
+  }
+
+  // Extract the trigger object, e.g. "an instant or sorcery spell" / "a noncreature spell"
+  const castMatch = q.match(/\bwhenever\s+you\s+cast\s+([\s\S]+?)(?:\s*[,.]|$)/);
+  const castObject = castMatch ? castMatch[1].trim() : null;
+
+  let updated = scryfallQuery;
+
+  // Remove spell-type filters that were emitted for the TRIGGER's types, not the card.
+  const SPELL_TYPES = ["instant", "sorcery", "creature", "artifact", "enchantment", "land", "planeswalker"];
+  for (const type of SPELL_TYPES) {
+    // Only remove when the natural query mentions this type as part of the cast condition.
+    const inCastCondition = new RegExp(
+      `\\bwhenever\\s+you\\s+cast[^.]*\\b${type}\\b`
+    ).test(q);
+    if (!inCastCondition) continue;
+    // Remove grouped "(t:X or t:Y)" or bare "t:X".
+    updated = updated.replace(new RegExp(`\\s*\\(\\s*(?:t|type):${type}[^)]*\\)`, "gi"), " ");
+    updated = updated.replace(new RegExp(`\\s*\\(?\\s*(?:t|type):${type}\\b[^)]*\\)?`, "gi"), " ");
+  }
+
+  // Remove the vague Phase-2 oracle clause: (o:"whenever you cast" or o:spell)
+  updated = updated
+    .replace(/\(\s*o:"whenever you cast"\s+or\s+o:spell\s*\)/gi, " ")
+    .replace(/o:"whenever you cast"\s+or\s+o:spell/gi, " ")
+    .replace(/\bo:spell\b/gi, " ");
+
+  // Inject the precise oracle phrase.
+  if (castObject) {
+    const oraclePhrase = `whenever you cast ${castObject}`;
+    const oracleTag = `o:"${oraclePhrase}"`;
+    if (!updated.includes(oracleTag)) {
+      updated = `${updated} ${oracleTag}`.trim();
+    }
+  } else if (!/o:"whenever you cast/i.test(updated)) {
+    updated = `${updated} o:"whenever you cast"`.trim();
+  }
+
+  return updated.replace(/\s{2,}/g, " ").trim();
+}
+
 function demoteRemovalTargetKeyword(
   naturalQuery: string,
   scryfallQuery: string
@@ -853,6 +916,7 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     query = await stripPlaneswalkerSubtypesWhenCreatureRequired(query);
     query = stripMvBoundRedundantFunctionTags(ir.naturalQuery, query);
     query = stripMisleadingKwSupportForDeckbuilding(ir.naturalQuery, query);
+    query = normalizeWheneverCastTrigger(ir.naturalQuery, query);
     query = demoteRemovalTargetKeyword(ir.naturalQuery, query);
     query = stripMisleadingGroupSlugForSpellCastTriggers(ir.naturalQuery, query);
     query = normalizeSpellCastPingOpponentsOracle(ir.naturalQuery, query);
