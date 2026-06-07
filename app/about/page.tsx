@@ -95,6 +95,30 @@ export default function AboutPage() {
                 </a>
               </div>
             </section>
+
+            <section className="mx-auto mt-10 max-w-xl text-left">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-accent">
+                Other Projects
+              </p>
+              <a
+                href="https://stormcount.gg"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 block rounded-2xl border border-border bg-surface p-5 transition-colors hover:border-accent/50 hover:bg-accent-muted/30"
+              >
+                <h3 className="font-display text-lg font-semibold text-foreground">
+                  Storm Count
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">
+                  MTG higher-or-lower: guess whether each card&apos;s mana value beats the last,
+                  chain correct calls to climb your storm count. Daily leaderboard runs and endless
+                  survival mode.
+                </p>
+                <span className="mt-3 inline-block text-sm font-medium text-accent">
+                  stormcount.gg →
+                </span>
+              </a>
+            </section>
           </div>
         </div>
 
