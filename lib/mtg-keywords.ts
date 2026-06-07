@@ -600,8 +600,13 @@ export async function resolveKeywordFilters(naturalQuery: string): Promise<strin
       : new RegExp(`\\b${base}s?\\b`, "i");
 
     if (!pattern.test(queryForMatch)) continue;
-    if (hasKeywordExcludeIntent(naturalQuery, name)) continue;
-    if (!hasKeywordPositiveIntent(naturalQuery, name, queryForMatch)) continue;
+    // An explicitly negated keyword ("board wipe without flying") is still a
+    // meaningful mention: return it so callers can decide polarity. parseNaturalQuery
+    // routes it to a -kw: exclusion via isTermNegated; applyKeywordFiltersFromNaturalQuery
+    // skips it from positive additions. Dropping it here silently discarded the
+    // "without X" constraint entirely.
+    const isExcluded = hasKeywordExcludeIntent(naturalQuery, name);
+    if (!isExcluded && !hasKeywordPositiveIntent(naturalQuery, name, queryForMatch)) continue;
 
     // Avoid duplicates (e.g. "first strike" and "strike")
     const alreadyMatched = matched.some(
@@ -684,6 +689,10 @@ export async function applyKeywordFiltersFromNaturalQuery(
 
   const existingKw = getExistingKwInQuery(scryfallQuery);
   const toAdd = keywords.filter((name) => {
+    // Negated keywords ("without flying") are emitted as -kw: exclusions upstream
+    // (Phase 1 mustNotClauses). resolveKeywordFilters now returns them so the pipeline
+    // can negate them, so this positive-only adder must skip them.
+    if (hasKeywordExcludeIntent(naturalQuery, name)) return false;
     const normalized = name.toLowerCase();
     if (existingKw.has(normalized) || existingKw.has(normalized.replace(/\s+/g, "-"))) return false;
     // Also skip if function tags for this keyword are already in the query — this covers the case

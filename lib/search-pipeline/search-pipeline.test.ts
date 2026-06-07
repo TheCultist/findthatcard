@@ -1866,6 +1866,8 @@ async function run() {
   await testPhase1LootingMapsFunctionLoot();
   await testPhase1PoliteExtraTurnsNotAntisocialCommander();
   await testPhase1NegatedTablePoliticsWithoutExtraTurnExcludesFullHateMagnet();
+  await testPhase1NegatedKeywordWithoutFlyingExcludesKeyword();
+  await testPhase1BoardWipeWithoutFlyingUsesOracleScope();
   testRemoveInvalidTagsDoesNotStripHyphenatedFunctionTags();
   // Scaling oracle text heuristics
   await testPhase1ManaForEachSpell();
@@ -2317,6 +2319,51 @@ async function testPhase1NegatedTablePoliticsWithoutExtraTurnExcludesFullHateMag
     "must not emit function:extra-turn when the query does not ask for extra turns"
   );
   console.log("[PASS] phase1: negated antisocial without extra-turn → mustNot entire hate-magnet tag set");
+}
+
+async function testPhase1NegatedKeywordWithoutFlyingExcludesKeyword() {
+  // Non-sweeper context: "without flying" describes a creature lacking the keyword.
+  const parsed = await parseNaturalQuery("red creatures without flying");
+  const mustNot = parsed.mustNotClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    mustNot.includes("kw:flying"),
+    `"creatures without flying" must produce -kw:flying exclusion; got mustNot: ${mustNot.join(", ")}`
+  );
+  assert.ok(
+    !parsed.mustClauses.some((c) => /\bkw:flying\b/i.test(c.value)),
+    `negated flying must not appear as a positive kw:flying; got must: ${parsed.mustClauses
+      .map((c) => c.value)
+      .join(", ")}`
+  );
+  assert.ok(
+    !parsed.mustClauses.some((c) => /o:"without flying"/i.test(c.value)),
+    `non-sweeper query must not emit oracle scope o:"without flying"; got must: ${parsed.mustClauses
+      .map((c) => c.value)
+      .join(", ")}`
+  );
+  console.log('[PASS] phase1: "red creatures without flying" → -kw:flying (keyword negation)');
+}
+
+async function testPhase1BoardWipeWithoutFlyingUsesOracleScope() {
+  // Sweeper context: "board wipe without flying" means an area effect that SPARES
+  // flyers (e.g. Earthquake: "deals X damage to each creature without flying").
+  // That is the oracle phrase o:"without flying", not a -kw:flying exclusion.
+  const parsed = await parseNaturalQuery("board wipe without flying");
+  const must = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  const mustNot = parsed.mustNotClauses.map((c) => c.value.toLowerCase());
+  assert.ok(
+    must.includes('o:"without flying"'),
+    `sweeper "without flying" must emit oracle scope o:"without flying"; got must: ${must.join(", ")}`
+  );
+  assert.ok(
+    !mustNot.some((v) => /kw:flying/i.test(v)),
+    `sweeper "without flying" must NOT negate the flying keyword; got mustNot: ${mustNot.join(", ")}`
+  );
+  assert.ok(
+    !must.some((v) => /\bkw:flying\b/i.test(v)),
+    `sweeper "without flying" must NOT add a positive kw:flying; got must: ${must.join(", ")}`
+  );
+  console.log('[PASS] phase1: "board wipe without flying" → o:"without flying" (effect spares flyers)');
 }
 
 function testRemoveInvalidTagsDoesNotStripHyphenatedFunctionTags() {

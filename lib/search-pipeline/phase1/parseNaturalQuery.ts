@@ -3454,7 +3454,53 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     }
   }
 
-  const keywordFilters = await resolveKeywordFilters(correctedQuery);
+  // --- Area-effect "spares <evasion keyword>" oracle scope ---
+  // A sweeper described as skipping a keyword ("board wipe without flying",
+  // "destroy all creatures without flying", "deal damage to each creature without
+  // flying") prints the verbatim phrase "without flying" in its oracle text — e.g.
+  // Earthquake: "deals X damage to each creature without flying". That is an oracle
+  // (o:) constraint on the spell's EFFECT, NOT a -kw: exclusion on the card itself
+  // (which would be a near no-op on sweepers and miss the intent). Detect it before
+  // keyword resolution and mask the evasion phrase so the keyword detector below does
+  // not also negate the keyword. Outside a sweeper context, "creatures without flying"
+  // still correctly resolves to -kw:flying via the keyword loop's isTermNegated path.
+  let keywordScanQuery = correctedQuery;
+  {
+    const SWEEPER_CONTEXT_RE =
+      /\b(?:board\s*-?\s*wipe|boardwipe|board\s*-?\s*sweep(?:er)?|sweepers?|wrath|mass\s+(?:removal|destruction|damage)|destroys?\s+all|deals?\s+(?:\w+\s+){0,2}damage\s+to\s+(?:all|each|every)|damage\s+to\s+(?:all|each|every)|kills?\s+all)\b/i;
+    if (SWEEPER_CONTEXT_RE.test(correctedQuery)) {
+      const normalizedScan = correctedQuery
+        .replace(/\bflyers?\b/gi, "flying")
+        .replace(/\btramplers?\b/gi, "trample");
+      for (const kwName of keywordList) {
+        const kw = kwName.toLowerCase();
+        if (kw.includes(" ")) continue; // single-word evasion keywords only
+        const escaped = escapeRegex(kw);
+        const scopeRe = new RegExp(
+          `\\b(?:without\\s+|non-?\\s*)${escaped}s?\\b` +
+            `|\\bthat\\s+(?:don'?t|doesn'?t|do\\s+not|does\\s+not|can'?t|cannot)\\s+(?:have\\s+|gain\\s+)?${escaped}s?\\b`,
+          "i"
+        );
+        if (!scopeRe.test(normalizedScan)) continue;
+
+        const clauseValue = `o:"without ${kw}"`;
+        if (!mustClauses.some((c) => c.value.toLowerCase() === clauseValue.toLowerCase())) {
+          mustClauses.push({ value: clauseValue, source: "phase1:oracle" });
+        }
+        // Mask the keyword (and its synonyms) so resolveKeywordFilters does not also
+        // return it for keyword negation/positive matching.
+        keywordScanQuery = keywordScanQuery.replace(new RegExp(`\\b${escaped}s?\\b`, "gi"), " ");
+        if (kw === "flying") {
+          keywordScanQuery = keywordScanQuery.replace(/\bflyers?\b/gi, " ");
+        } else if (kw === "trample") {
+          keywordScanQuery = keywordScanQuery.replace(/\btramplers?\b/gi, " ");
+        }
+        strippedTerms.push(kw, "without");
+      }
+    }
+  }
+
+  const keywordFilters = await resolveKeywordFilters(keywordScanQuery);
   const positiveKeywords: string[] = [];
   for (const keyword of keywordFilters) {
     const kw = keyword.toLowerCase();
