@@ -1843,6 +1843,8 @@ async function run() {
   await testPhase1SynergyWithCardDoesNotFalsePositive();
   await testPhase1CommanderDeckNotSynergyWithCommanderPrefixCard();
   await testPhase1StripsNotCedhPowerLevelAside();
+  await testPhase1DeckIsNotSubtypeDack();
+  await testPhase1FuzzySubtypeStructuralGuards();
   await testPhase1SynergyWithCardPreservesExtraConstraints();
   await testPhase1SimilarToCardPreservesExtraConstraints();
   // Rarity filter tests
@@ -2013,6 +2015,47 @@ async function testPhase1StripsNotCedhPowerLevelAside() {
     `unexpected t:dack from cEDH noise; must: ${parsed.mustClauses.map((c) => c.value).join(", ")}`
   );
   console.log("[PASS] phase1: 'not cEDH' power-level aside stripped (no bogus fragments)");
+}
+
+async function testPhase1DeckIsNotSubtypeDack() {
+  // "decks" fuzzy-matches the plural form "dacks" of the Dack planeswalker subtype
+  // (levenshtein 1). Planeswalker subtypes are excluded from fuzzy matching entirely,
+  // so "deck"/"decks" must never become t:dack.
+  const parsed = await parseNaturalQuery("board wipe for bant decks");
+  assert.ok(
+    !parsed.mustClauses.some((c) => /\bt:\s*dack\b/i.test(c.value)),
+    `unexpected t:dack from "decks"; must: ${parsed.mustClauses.map((c) => c.value).join(", ")}`
+  );
+  const mustValues = parsed.mustClauses.map((c) => c.value.toLowerCase());
+  assert.ok(mustValues.includes("id:guw"), `expected id:guw for bant; got: ${mustValues.join(", ")}`);
+  console.log("[PASS] phase1: 'bant decks' does not emit bogus t:dack");
+}
+
+async function testPhase1FuzzySubtypeStructuralGuards() {
+  // Structural fuzzy guards (no per-word blocklist entry needed):
+  //   - planeswalker subtypes excluded → "buff"→guff, "mill"→will never match
+  //   - matched form length ≥6 → "board"→boars (form length 5) never matches
+  const cases: Array<{ query: string; badType: RegExp }> = [
+    { query: "ways to buff my creatures in azorius", badType: /\bt:\s*guff\b/i },
+    { query: "mill strategies in dimir", badType: /\bt:\s*will\b/i },
+    { query: "go wide board presence in selesnya", badType: /\bt:\s*boar\b/i },
+  ];
+  for (const { query, badType } of cases) {
+    const parsed = await parseNaturalQuery(query);
+    assert.ok(
+      !parsed.mustClauses.some((c) => badType.test(c.value)),
+      `"${query}" emitted bogus type ${badType}; must: ${parsed.mustClauses
+        .map((c) => c.value)
+        .join(", ")}`
+    );
+  }
+  // Sanity: a substantial subtype typo still corrects (form length ≥6, creature category).
+  const dragon = await parseNaturalQuery("dragn creatures in rakdos");
+  assert.ok(
+    dragon.mustClauses.some((c) => /\bt:\s*dragon\b/i.test(c.value)),
+    `expected fuzzy 'dragn' -> t:dragon; must: ${dragon.mustClauses.map((c) => c.value).join(", ")}`
+  );
+  console.log("[PASS] phase1: fuzzy subtype structural guards (planeswalker + min-length)");
 }
 
 async function testPhase1SynergyWithCardPreservesExtraConstraints() {

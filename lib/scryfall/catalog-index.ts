@@ -206,13 +206,25 @@ export function matchSupertype(token: string): string | null {
 }
 
 /**
- * Common English words that are close (levenshtein ≤ 1) to MTG subtype names or their
- * plurals but should never be treated as subtypes. Checked before fuzzy subtype matching.
+ * Minimum length of a subtype form before it is eligible as a fuzzy-match target.
+ *
+ * Almost every fuzzy false positive comes from short subtype forms that sit within
+ * edit-distance 1 of an everyday English word (e.g. "board"→"boars", "deck"→"dacks").
+ * Requiring the *matched form* to be ≥6 chars structurally removes that class while
+ * still allowing typo correction for substantial subtype names ("dragn"→"dragon",
+ * "goblns"→"goblin"). Tuned to 6 so legitimate 6-char subtypes (dragon, goblin) stay
+ * correctable; raising it would start dropping real subtype-typo recall.
+ */
+const MIN_FUZZY_SUBTYPE_FORM_LENGTH = 6;
+
+/**
+ * Residual blocklist for common English words that fuzzy-match a *creature*-type form
+ * of length ≥6 (so they survive the structural guards in fuzzyMatchSubtype). Planeswalker
+ * collisions ("buff"→guff, "mill"→will, "deck"→dack) and short-form collisions
+ * ("board"→boars) are handled structurally and must NOT be re-added here.
  */
 const SUBTYPE_FUZZY_BLOCKLIST = new Set([
-  // "board" → "boars" (Boar creature type, levenshtein 1)
-  "board", "boards",
-  // "other" / "others" → "otter" / "otters" (Otter creature type, levenshtein 1)
+  // "other" / "others" → "otters" (Otter creature type, levenshtein 1, form length 6)
   "other", "others",
   // "wipe" / "wipes" — MTG slang for mass removal, not a subtype
   "wipe", "wipes",
@@ -222,20 +234,23 @@ const SUBTYPE_FUZZY_BLOCKLIST = new Set([
   // Common relational / grammar words that sit within edit-distance of creature types
   "target", "player", "players", "spell", "spells", "effect", "effects",
   "power", "token", "tokens", "counter", "counters", "trigger", "triggers",
-  // "matter" / "matters" → "master" / "masters" (Master creature type, levenshtein 1)
+  // "matter" / "matters" → "master" / "masters" (Master creature type, levenshtein 1, form length 6)
   "matter", "matters",
-  // "combat"/"combats" → "wombat"/"wombats" (Wombat creature type, levenshtein 1 — first char c→w)
+  // "combat"/"combats" → "wombat"/"wombats" (Wombat creature type, levenshtein 1, form length 6)
   "combat", "combats",
-  // "buff" / "buffs" → "guff" / "guffs" (Guff planeswalker type, levenshtein 1 — first char b→g)
-  "buff", "buffs", "buffing",
   // "pump" → common MTG jargon for combat tricks, not a subtype
   "pump", "pumps",
   // "boost" → common MTG jargon for power/toughness increases, not a subtype
   "boost", "boosts",
-  // "mill" / "mills" → fuzzy-matches "wills" (plural of Will, a planeswalker type, levenshtein 1)
-  // Mill is an MTG keyword action (kw:mill), not a card subtype.
-  "mill", "mills", "milling",
 ]);
+
+/**
+ * Subtype categories excluded from fuzzy matching. Planeswalker subtypes are a tiny,
+ * closed set of short proper nouns (Dack, Will, Guff, Jace, …) that nobody enters as a
+ * search term, yet they sit distance-1 from everyday words ("deck", "mill", "buff").
+ * Exact matching still works for the rare intentional use; only fuzzy correction is skipped.
+ */
+const FUZZY_EXCLUDED_SUBTYPE_CATEGORIES = new Set(["planeswalker"]);
 
 export function fuzzyMatchSubtype(
   token: string,
@@ -246,6 +261,8 @@ export function fuzzyMatchSubtype(
   if (SUBTYPE_FUZZY_BLOCKLIST.has(lower)) return null;
   for (const [form, entry] of subtypeIndex.entries()) {
     if (form.includes(" ") || form.includes("-")) continue;
+    if (form.length < MIN_FUZZY_SUBTYPE_FORM_LENGTH) continue;
+    if (FUZZY_EXCLUDED_SUBTYPE_CATEGORIES.has(entry.category)) continue;
     if (distanceFn(lower, form)) return entry;
   }
   return null;

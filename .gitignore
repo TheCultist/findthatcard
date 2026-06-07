@@ -44,3 +44,5 @@ data/tagger-tags.json
 data/mtg-keywords.json
 data/scryfall-catalogs.json
 tasks/*
+
+graphify-out/*
