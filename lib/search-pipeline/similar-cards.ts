@@ -1,4 +1,7 @@
-import { fetchCardByName } from "@/lib/scryfall/lookup";
+import { callAI } from "@/lib/ai-client";
+import { sanitizeFunctionalClause } from "@/lib/search-pipeline/card-query-sanitize";
+import { isAiPromptLoggingEnabled } from "@/lib/search-pipeline/debug";
+import { fetchCardByName, ScryfallNamedCard } from "@/lib/scryfall/lookup";
 import { fetchTaggerCardData, TaggerCardData } from "@/lib/scryfall/tagger-graphql";
 
 /**
@@ -119,7 +122,20 @@ function buildArtQueryFromTaggerData(tagger: TaggerCardData): string | null {
  * Returns null when the card cannot be found or no meaningful query can be
  * built (e.g. card has no tagger data at all).
  */
-export async function resolveSimilarCardsQuery(cardName: string): Promise<string | null> {
+export interface SimilarCardsResult {
+  /** The OR-combined Scryfall expression (curated names + functional clause). */
+  query: string;
+  /**
+   * Colour-identity filter for the source card (e.g. `id<=w`, `id:c`). Injected
+   * by the intent resolver as a SEPARATE top-level clause — never embedded in
+   * `query` — so Phase 3's identity normalizer can hoist it cleanly without
+   * adding nesting depth or fighting the functional clause. This is the primary
+   * breadth control (keeps "cards like Farewell" to white sweepers).
+   */
+  identityClause: string;
+}
+
+export async function resolveSimilarCardsQuery(cardName: string): Promise<SimilarCardsResult | null> {
   const card = await fetchCardByName(cardName);
   if (!card) {
     console.warn(`[SimilarCards] Card not found: "${cardName}"`);
@@ -128,6 +144,7 @@ export async function resolveSimilarCardsQuery(cardName: string): Promise<string
 
   console.log(`[SimilarCards] Resolving similar-cards query for: "${card.name}" (${card.set}/${card.collector_number})`);
 
+  const identityClause = buildIdentityFilter(card.color_identity);
   const tagger = await fetchTaggerCardData(card.set, card.collector_number);
 
   // oracle_text may span card faces (e.g. DFCs); join them if needed.
@@ -136,7 +153,8 @@ export async function resolveSimilarCardsQuery(cardName: string): Promise<string
     card.card_faces?.map((f) => f.oracle_text ?? "").filter(Boolean).join("\n");
 
   if (tagger) {
-    return buildQueryFromTaggerData(tagger, oracleText);
+    const query = await buildQueryFromTaggerData(card, tagger, oracleText);
+    return query ? { query, identityClause } : null;
   }
 
   console.warn(`[SimilarCards] Tagger data unavailable for "${card.name}", falling back to all_parts`);
@@ -151,7 +169,7 @@ export async function resolveSimilarCardsQuery(cardName: string): Promise<string
 
   const orNames = comboPieceNames.map((n) => `name:"${n}"`).join(" or ");
   const nameClause = comboPieceNames.length > 1 ? `(${orNames})` : orNames;
-  return `${nameClause} -name:"${card.name}"`;
+  return { query: `${nameClause} -name:"${card.name}"`, identityClause };
 }
 
 /**
@@ -397,9 +415,59 @@ function buildAndChainItems(
   return items;
 }
 
-function buildQueryFromTaggerData(tagger: TaggerCardData, oracleText?: string): string | null {
+/**
+ * Heuristic fallback: builds the function clause from tagger tags + oracle-text
+ * keyword scoring (the original deterministic strategy).  Used only when the
+ * LLM clause builder is unavailable (no API key, network/parse failure).
+ *
+ * Returns a clause safe to OR-combine (parenthesized when it has >1 term), or
+ * null when no usable tags/clauses exist.
+ */
+function buildHeuristicFunctionClause(
+  functionTags: string[],
+  oracleText: string | undefined
+): { clause: string; debug: string } | null {
+  const andItems = buildAndChainItems(functionTags, oracleText, 2);
+  if (andItems.length === 0) return null;
+
+  const oracleUsed = andItems.some((item) => item.startsWith('o:"'));
+  const clause = andItems.length > 1 ? `(${andItems.join(" ")})` : andItems[0];
+  return {
+    clause,
+    debug: `heuristic ${andItems.length} AND-chain items: [${andItems.join(", ")}]` + (oracleUsed ? " (oracle text used)" : ""),
+  };
+}
+
+/**
+ * Wraps a function clause so it can be safely OR-combined with the curated
+ * name list.  Multi-term clauses (containing whitespace) must be parenthesized
+ * so Scryfall's AND > OR precedence doesn't bind only the last token to the
+ * surrounding OR.  Double-wrapping an already-parenthesized clause is harmless.
+ */
+function wrapClauseForOr(clause: string): string {
+  const trimmed = clause.trim();
+  return /\s/.test(trimmed) ? `(${trimmed})` : trimmed;
+}
+
+/**
+ * Builds a Scryfall colour-identity filter from a card's `color_identity`,
+ * used to keep the functional clause from matching off-colour cards:
+ *   - coloured cards → `id<=wubrg` subset (cards castable in that identity);
+ *   - colourless cards → `id:c` (exactly colourless, e.g. mana rocks).
+ */
+function buildIdentityFilter(colorIdentity: string[]): string {
+  if (colorIdentity.length === 0) return "id:c";
+  return `id<=${colorIdentity.join("").toLowerCase()}`;
+}
+
+async function buildQueryFromTaggerData(
+  card: ScryfallNamedCard,
+  tagger: TaggerCardData,
+  oracleText?: string
+): Promise<string | null> {
   const parts: string[] = [];
 
+  // Signal 1 — community-curated similar-card names (high precision seed).
   const relatedNames = new Set<string>();
   for (const name of [...tagger.similarTo, ...tagger.worseThan, ...tagger.withoutBody]) {
     relatedNames.add(name);
@@ -412,22 +480,174 @@ function buildQueryFromTaggerData(tagger: TaggerCardData, oracleText?: string): 
     parts.push(names.length > 1 ? `(${orNames})` : orNames);
   }
 
-  const andItems = buildAndChainItems(tagger.functionTags, oracleText, 2);
-
-  if (andItems.length > 0) {
-    parts.push(andItems.length > 1 ? `(${andItems.join(" ")})` : andItems[0]);
+  // Signal 2 — functional clause. Prefer the LLM (it reads the actual card and
+  // writes a query for cards filling the same role); fall back to the
+  // deterministic tag/oracle heuristic when the LLM is unavailable.
+  let functionSource = "none";
+  let functionClause: string | null = null;
+  const llmClause = await tryBuildSimilarClauseViaLLM(card, oracleText, tagger.functionTags, [...relatedNames]);
+  if (llmClause) {
+    functionClause = llmClause;
+    functionSource = "llm";
+  } else {
+    const heuristic = buildHeuristicFunctionClause(tagger.functionTags, oracleText);
+    if (heuristic) {
+      functionClause = heuristic.clause;
+      functionSource = heuristic.debug;
+    }
   }
 
-  const oracleUsed = andItems.some((item) => item.startsWith('o:"'));
+  if (functionClause) {
+    parts.push(wrapClauseForOr(functionClause));
+  }
+
   console.log(
     `[SimilarCards] Tagger data for "${tagger.name}": ` +
-    `${relatedNames.size} related names, ` +
-    `${tagger.functionTags.length} total tags -> ${andItems.length} AND-chain items: [${andItems.join(", ")}]` +
-    (oracleUsed ? ` (oracle text used)` : "")
+    `${relatedNames.size} related names, ${tagger.functionTags.length} total tags -> function clause: ${functionSource}`
   );
 
   if (parts.length === 0) return null;
 
   const combined = parts.length === 1 ? parts[0] : `(${parts.join(" or ")})`;
   return `${combined} -name:"${tagger.name}"`;
+}
+
+// ── LLM-backed functional similarity ────────────────────────────────────────
+
+const shouldLogAi = isAiPromptLoggingEnabled;
+
+/**
+ * Cache of resolved functional clauses keyed by oracle id.  "Cards like X" is
+ * a repeated query (the debug log shows it firing twice for a single search),
+ * and the clause is deterministic per card, so caching avoids redundant LLM
+ * calls — the key lever for keeping this feature cheap.
+ */
+const similarClauseCache = new Map<string, string>();
+
+const COLOR_NAMES: Record<string, string> = {
+  W: "white", U: "blue", B: "black", R: "red", G: "green",
+};
+
+function describeIdentity(identity: string[]): string {
+  if (identity.length === 0) return "colorless";
+  return identity.map((c) => COLOR_NAMES[c] ?? c).join("/");
+}
+
+function fullTypeLine(card: ScryfallNamedCard): string {
+  if (card.card_faces?.length) {
+    return card.card_faces.map((f) => f.type_line).join(" // ");
+  }
+  return card.type_line;
+}
+
+function buildSimilarPrompt(
+  card: ScryfallNamedCard,
+  oracleText: string,
+  functionTags: string[],
+  curatedNames: string[]
+): string {
+  const slugTags = functionTags.map((t) => t.replace(/\s+/g, "-"));
+  const tagList = slugTags.length > 0 ? slugTags.join(", ") : "none";
+  const knownSimilar = curatedNames.length > 0 ? curatedNames.join(", ") : "none";
+
+  return [
+    "You are a Magic: The Gathering search expert. Given a card, produce a Scryfall query that finds OTHER cards that fill the SAME functional role.",
+    "",
+    `Card: ${card.name}`,
+    `Type: ${fullTypeLine(card)}`,
+    `Color identity: ${describeIdentity(card.color_identity)}`,
+    `Keywords: ${card.keywords.length > 0 ? card.keywords.join(", ") : "none"}`,
+    `Mana value: ${card.cmc}`,
+    `Community function tags: ${tagList}`,
+    `Known-similar cards (community curated, for context): ${knownSimilar}`,
+    "Oracle text:",
+    oracleText,
+    "",
+    "Task: Write a single Scryfall query that finds cards SIMILAR to this one — cards a player would consider as alternatives or replacements because they DO THE SAME THING.",
+    "",
+    "What 'similar' means here:",
+    "  - Same core effect / mechanical role (e.g. a cheap creature that bounces your own permanent on ETB; a one-mana red instant that deals damage to any target).",
+    "  - NOT complementary/synergy cards. Do NOT find cards that merely combo with it.",
+    "  - The known-similar cards above are examples of the target — infer the shared function from them and the oracle text, but do NOT just list names.",
+    "",
+    "Guidelines:",
+    "- Use Scryfall syntax: o:\"phrase\" for oracle text, kw:keyword, t:type, function:tag for Tagger function tags.",
+    "- **Strongly prefer a SINGLE clause (no top-level OR).** If the role spans card types, use a type alternation inside one branch — `(t:sorcery or t:instant)` — NOT two separate branches. Hard cap: at most ONE top-level OR.",
+    "- **Never repeat the same oracle phrase in two branches.** `(t:sorcery o:\"exile all\") OR (t:instant o:\"exile all\")` is wrong — write `(t:sorcery or t:instant) o:\"exile all\"` instead.",
+    "- **Every clause MUST be anchored by card SHAPE.** Include a t:type and/or mv constraint, AND 2+ distinctive oracle phrases for a comprehensive effect. A query that is a single broad oracle phrase is forbidden.",
+    "  - ❌ `o:\"exile all\"` (one broad phrase — matches hundreds of cards)",
+    "  - ❌ `o:\"destroy all\"` / `o:\"draw a card\"` alone",
+    "  - ✅ `(t:sorcery or t:instant) o:\"exile all\" o:\"creature\" o:\"artifact\"` (typed alternation + multiple constraints)",
+    "  - ✅ `t:creature mv<=2 o:\"deals\" o:\"any target\"`",
+    "- Capture the DISTINCTIVE effect, not a generic trigger. Prefer o:\"return target\" or o:\"to its owner's hand\" over o:\"when this creature enters\".",
+    "- Only use o:\"...\" for distinctive MULTI-WORD phrases. Never single-word o: fragments (o:draw, o:dies) — they match thousands of cards.",
+    "- Do NOT AND two broad function: tags together (near-zero results). AND a function: tag with a type/keyword/mana filter instead.",
+    "- Do NOT add name: filters, id:/identity color filters, f:/format filters, or -name:/-o: exclusions — the pipeline handles those (it adds the card's colour identity for you).",
+    "- Keep the query under 350 characters.",
+    "",
+    "Output JSON only (no markdown). Shape:",
+    '{"scryfall_query":"...","reasoning":"one sentence naming the shared function"}',
+    "",
+    "Example — for a cheap white creature that returns a permanent you control to your hand when it enters:",
+    '{"scryfall_query":"t:creature mv<=3 o:\\"return\\" o:\\"you control\\" o:\\"owner\'s hand\\"","reasoning":"Cheap creatures that self-bounce a permanent on ETB for repeatable value."}',
+  ].join("\n");
+}
+
+type SimilarLlmResponse = { scryfall_query?: string; reasoning?: string };
+
+/**
+ * Asks the LLM for a functional-similarity clause.  Returns a sanitized clause
+ * (no name:/id:/-name:) ready to OR with the curated name list, or null on any
+ * failure so the caller falls back to the deterministic heuristic.
+ */
+async function tryBuildSimilarClauseViaLLM(
+  card: ScryfallNamedCard,
+  oracleText: string | undefined,
+  functionTags: string[],
+  curatedNames: string[]
+): Promise<string | null> {
+  if (!oracleText || oracleText.trim().length === 0) return null;
+
+  const cached = similarClauseCache.get(card.oracle_id);
+  if (cached !== undefined) return cached;
+
+  try {
+    const prompt = buildSimilarPrompt(card, oracleText, functionTags, curatedNames);
+    if (shouldLogAi()) {
+      console.log(`[SimilarCards][AI Prompt]\n${prompt}`);
+    }
+
+    const response = await callAI({ user: prompt, max_output_tokens: 600 });
+
+    if (shouldLogAi()) {
+      const u = response.usage;
+      console.log(`[SimilarCards][AI Usage] input_tokens=${u.input_tokens} output_tokens=${u.output_tokens} total_tokens=${u.total_tokens}`);
+    }
+
+    const cleaned = response.text
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```\s*$/, "")
+      .trim();
+
+    let parsed: SimilarLlmResponse;
+    try {
+      parsed = JSON.parse(cleaned) as SimilarLlmResponse;
+    } catch {
+      console.warn(`[SimilarCards] Failed to parse LLM response for "${card.name}": ${cleaned.slice(0, 200)}`);
+      return null;
+    }
+
+    const clause = sanitizeFunctionalClause(parsed.scryfall_query ?? "");
+    if (!clause) return null;
+
+    if (parsed.reasoning) {
+      console.log(`[SimilarCards] LLM clause for "${card.name}": ${clause} — ${parsed.reasoning}`);
+    }
+
+    similarClauseCache.set(card.oracle_id, clause);
+    return clause;
+  } catch (err) {
+    console.warn(`[SimilarCards] LLM clause unavailable for "${card.name}":`, err);
+    return null;
+  }
 }

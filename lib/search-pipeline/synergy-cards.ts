@@ -1,4 +1,5 @@
 import { callAI } from "@/lib/ai-client";
+import { sanitizeFunctionalClause } from "@/lib/search-pipeline/card-query-sanitize";
 import { isAiPromptLoggingEnabled } from "@/lib/search-pipeline/debug";
 import { fetchCardByName, ScryfallNamedCard } from "@/lib/scryfall/lookup";
 import { fetchTaggerCardData } from "@/lib/scryfall/tagger-graphql";
@@ -140,73 +141,14 @@ function buildSynergyPrompt(
   ].join("\n");
 }
 
-/**
- * Returns true when `query` contains an OR operator at the top level
- * (i.e. not inside parentheses or quoted strings).
- * Used to decide whether the expression must be wrapped in parens so that
- * global AND filters (mv=, id:, etc.) apply to the whole expression.
- */
-function hasTopLevelOR(query: string): boolean {
-  let depth = 0;
-  let inQuote = false;
-  for (let i = 0; i < query.length; i++) {
-    const ch = query[i];
-    if (ch === '"') { inQuote = !inQuote; continue; }
-    if (inQuote) continue;
-    if (ch === "(") { depth++; continue; }
-    if (ch === ")") { depth--; continue; }
-    if (depth === 0 && /^OR\s/i.test(query.slice(i))) return true;
-  }
-  return false;
-}
-
 function sanitizeScryfallQuery(raw: string, cardName: string): string | null {
-  let query = raw.trim();
-  if (!query || query.length < 3) return null;
+  const clause = sanitizeFunctionalClause(raw);
+  if (!clause) return null;
 
-  if (query.startsWith('"') && query.endsWith('"')) {
-    query = query.slice(1, -1);
+  if (!clause.includes(`-name:"${cardName}"`)) {
+    return `${clause} -name:"${cardName}"`;
   }
-
-  query = query.replace(/\bf:\w+\b/gi, "").replace(/\s{2,}/g, " ").trim();
-
-  // Strip positive name: — prompt forbids; ANDing name: with -name: yields zero hits.
-  query = query.replace(/\bname:"[^"]*"/gi, "").replace(/\s{2,}/g, " ").trim();
-
-  // Strip bare single-word oracle text fragments — they match too broadly.
-  // o:"multi word phrase" is fine; o:singleword is not.
-  query = query.replace(/\bo:"[^"]{1,15}"\b/g, (match) => {
-    const inner = match.slice(3, -1);
-    return /\s/.test(inner) ? match : "";
-  });
-  query = query.replace(/\bo:\S+/g, (match) => {
-    if (match.startsWith('o:"')) return match;
-    return "";
-  });
-  query = query.replace(/\s{2,}/g, " ").trim();
-
-  query = query.replace(
-    /\b(function|otag|oracletag|art|atag|arttag):"([^"]+)"/gi,
-    (_match, prefix: string, value: string) => `${prefix}:${value.replace(/\s+/g, "-")}`
-  );
-
-  // Strip any identity filters the AI may have added — they are injected by the pipeline.
-  query = query.replace(/\bid(?:entity)?(?:<=|>=|=|:)\s*[wubrgc]{1,5}\b/gi, "").replace(/\s{2,}/g, " ").trim();
-
-  query = query.replace(/-o:"[^"]*"/g, "").replace(/-o:\S+/g, "").replace(/-!"[^"]*"/g, "").replace(/-n:"[^"]*"/g, "").replace(/\s{2,}/g, " ").trim();
-
-  // Wrap top-level OR expressions in parens before appending the -name: exclusion.
-  // Without this, Scryfall's AND > OR precedence would bind -name: (and any user
-  // filters like mv= or id:) only to the last OR branch, not the whole expression.
-  if (hasTopLevelOR(query)) {
-    query = `(${query})`;
-  }
-
-  if (!query.includes(`-name:"${cardName}"`)) {
-    query = `${query} -name:"${cardName}"`;
-  }
-
-  return query || null;
+  return clause;
 }
 
 export const __testOnly = {
