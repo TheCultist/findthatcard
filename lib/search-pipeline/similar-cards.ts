@@ -122,20 +122,7 @@ function buildArtQueryFromTaggerData(tagger: TaggerCardData): string | null {
  * Returns null when the card cannot be found or no meaningful query can be
  * built (e.g. card has no tagger data at all).
  */
-export interface SimilarCardsResult {
-  /** The OR-combined Scryfall expression (curated names + functional clause). */
-  query: string;
-  /**
-   * Colour-identity filter for the source card (e.g. `id<=w`, `id:c`). Injected
-   * by the intent resolver as a SEPARATE top-level clause — never embedded in
-   * `query` — so Phase 3's identity normalizer can hoist it cleanly without
-   * adding nesting depth or fighting the functional clause. This is the primary
-   * breadth control (keeps "cards like Farewell" to white sweepers).
-   */
-  identityClause: string;
-}
-
-export async function resolveSimilarCardsQuery(cardName: string): Promise<SimilarCardsResult | null> {
+export async function resolveSimilarCardsQuery(cardName: string): Promise<string | null> {
   const card = await fetchCardByName(cardName);
   if (!card) {
     console.warn(`[SimilarCards] Card not found: "${cardName}"`);
@@ -144,7 +131,6 @@ export async function resolveSimilarCardsQuery(cardName: string): Promise<Simila
 
   console.log(`[SimilarCards] Resolving similar-cards query for: "${card.name}" (${card.set}/${card.collector_number})`);
 
-  const identityClause = buildIdentityFilter(card.color_identity);
   const tagger = await fetchTaggerCardData(card.set, card.collector_number);
 
   // oracle_text may span card faces (e.g. DFCs); join them if needed.
@@ -153,8 +139,7 @@ export async function resolveSimilarCardsQuery(cardName: string): Promise<Simila
     card.card_faces?.map((f) => f.oracle_text ?? "").filter(Boolean).join("\n");
 
   if (tagger) {
-    const query = await buildQueryFromTaggerData(card, tagger, oracleText);
-    return query ? { query, identityClause } : null;
+    return buildQueryFromTaggerData(card, tagger, oracleText);
   }
 
   console.warn(`[SimilarCards] Tagger data unavailable for "${card.name}", falling back to all_parts`);
@@ -169,7 +154,7 @@ export async function resolveSimilarCardsQuery(cardName: string): Promise<Simila
 
   const orNames = comboPieceNames.map((n) => `name:"${n}"`).join(" or ");
   const nameClause = comboPieceNames.length > 1 ? `(${orNames})` : orNames;
-  return { query: `${nameClause} -name:"${card.name}"`, identityClause };
+  return `${nameClause} -name:"${card.name}"`;
 }
 
 /**
@@ -449,15 +434,12 @@ function wrapClauseForOr(clause: string): string {
   return /\s/.test(trimmed) ? `(${trimmed})` : trimmed;
 }
 
-/**
- * Builds a Scryfall colour-identity filter from a card's `color_identity`,
- * used to keep the functional clause from matching off-colour cards:
- *   - coloured cards → `id<=wubrg` subset (cards castable in that identity);
- *   - colourless cards → `id:c` (exactly colourless, e.g. mana rocks).
- */
-function buildIdentityFilter(colorIdentity: string[]): string {
-  if (colorIdentity.length === 0) return "id:c";
-  return `id<=${colorIdentity.join("").toLowerCase()}`;
+/** Strips mv/cmc bounds — similar-cards must not restrict on mana value. */
+function stripManaValueFilters(query: string): string {
+  return query
+    .replace(/\b(?:mv|cmc)(?:<=|>=|<|>|=)\s*\d+\b/gi, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 async function buildQueryFromTaggerData(
@@ -574,22 +556,23 @@ function buildSimilarPrompt(
     "- Use Scryfall syntax: o:\"phrase\" for oracle text, kw:keyword, t:type, function:tag for Tagger function tags.",
     "- **Strongly prefer a SINGLE clause (no top-level OR).** If the role spans card types, use a type alternation inside one branch — `(t:sorcery or t:instant)` — NOT two separate branches. Hard cap: at most ONE top-level OR.",
     "- **Never repeat the same oracle phrase in two branches.** `(t:sorcery o:\"exile all\") OR (t:instant o:\"exile all\")` is wrong — write `(t:sorcery or t:instant) o:\"exile all\"` instead.",
-    "- **Every clause MUST be anchored by card SHAPE.** Include a t:type and/or mv constraint, AND 2+ distinctive oracle phrases for a comprehensive effect. A query that is a single broad oracle phrase is forbidden.",
+    "- **Every clause MUST be anchored by card SHAPE.** Include a t:type and/or kw: constraint, AND 2+ distinctive oracle phrases for a comprehensive effect. A query that is a single broad oracle phrase is forbidden.",
     "  - ❌ `o:\"exile all\"` (one broad phrase — matches hundreds of cards)",
     "  - ❌ `o:\"destroy all\"` / `o:\"draw a card\"` alone",
     "  - ✅ `(t:sorcery or t:instant) o:\"exile all\" o:\"creature\" o:\"artifact\"` (typed alternation + multiple constraints)",
-    "  - ✅ `t:creature mv<=2 o:\"deals\" o:\"any target\"`",
+    "  - ✅ `t:instant o:\"deals\" o:\"any target\"`",
     "- Capture the DISTINCTIVE effect, not a generic trigger. Prefer o:\"return target\" or o:\"to its owner's hand\" over o:\"when this creature enters\".",
     "- Only use o:\"...\" for distinctive MULTI-WORD phrases. Never single-word o: fragments (o:draw, o:dies) — they match thousands of cards.",
-    "- Do NOT AND two broad function: tags together (near-zero results). AND a function: tag with a type/keyword/mana filter instead.",
-    "- Do NOT add name: filters, id:/identity color filters, f:/format filters, or -name:/-o: exclusions — the pipeline handles those (it adds the card's colour identity for you).",
+    "- Do NOT AND two broad function: tags together (near-zero results). AND a function: tag with a type/keyword filter instead.",
+    "- Do NOT restrict by mana value (no mv:/cmc: filters) or colour identity (no id:/identity filters) — similar means same function regardless of cost or colours.",
+    "- Do NOT add name: filters, f:/format filters, or -name:/-o: exclusions — the pipeline handles the source-card exclusion.",
     "- Keep the query under 350 characters.",
     "",
     "Output JSON only (no markdown). Shape:",
     '{"scryfall_query":"...","reasoning":"one sentence naming the shared function"}',
     "",
-    "Example — for a cheap white creature that returns a permanent you control to your hand when it enters:",
-    '{"scryfall_query":"t:creature mv<=3 o:\\"return\\" o:\\"you control\\" o:\\"owner\'s hand\\"","reasoning":"Cheap creatures that self-bounce a permanent on ETB for repeatable value."}',
+    "Example — for a white creature that returns a permanent you control to your hand when it enters:",
+    '{"scryfall_query":"t:creature o:\\"return\\" o:\\"you control\\" o:\\"owner\'s hand\\"","reasoning":"Creatures that self-bounce a permanent on ETB for repeatable value."}',
   ].join("\n");
 }
 
@@ -637,7 +620,7 @@ async function tryBuildSimilarClauseViaLLM(
       return null;
     }
 
-    const clause = sanitizeFunctionalClause(parsed.scryfall_query ?? "");
+    const clause = stripManaValueFilters(sanitizeFunctionalClause(parsed.scryfall_query ?? "") ?? "");
     if (!clause) return null;
 
     if (parsed.reasoning) {

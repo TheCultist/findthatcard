@@ -67,17 +67,10 @@ function dropContradictoryNameClauses(ir: SearchPipelineIR, intentQuery: string)
  */
 export async function resolveIntentClauses(ir: SearchPipelineIR): Promise<void> {
   if (ir.intent === "similar-cards" && ir.similarToCardName) {
-    const similar = await resolveSimilarCardsQuery(ir.similarToCardName);
-    if (similar) {
-      dropContradictoryNameClauses(ir, similar.query);
-      ir.mustClauses.unshift({ value: `(${similar.query})`, source: "phase1:intent" });
-      // Inject colour identity as a SEPARATE top-level clause (mirrors synergy)
-      // — keeps the functional clause flat and lets Phase 3 hoist it cleanly.
-      // Skip when the user already specified an explicit colour-identity filter.
-      const hasExplicitColorId = ir.mustClauses.some((c) => /^id[:=<>]/.test(c.value));
-      if (!hasExplicitColorId) {
-        ir.mustClauses.push({ value: similar.identityClause, source: "phase1:intent" });
-      }
+    const similarQuery = await resolveSimilarCardsQuery(ir.similarToCardName);
+    if (similarQuery) {
+      dropContradictoryNameClauses(ir, similarQuery);
+      ir.mustClauses.unshift({ value: `(${similarQuery})`, source: "phase1:intent" });
     } else {
       ir.mustClauses.unshift({ value: `name:"${ir.similarToCardName}"`, source: "phase1:cardname" });
     }
