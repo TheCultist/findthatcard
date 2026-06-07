@@ -19,7 +19,7 @@ import {
   findFunctionTagBySegments,
   findGrantFunctionTagsForKeywordSlug,
 } from "@/lib/tagger/context";
-import { escapeRegex, normalizeWhitespace, levenshteinDistance } from "@/lib/utils/text";
+import { escapeRegex, normalizeWhitespace, levenshteinDistance, findFuzzyMatch } from "@/lib/utils/text";
 import { ClauseSource, Phase1Result, QueryClause, QueryIntent, ResolverCategory, UnresolvedFragment } from "@/lib/search-pipeline/types";
 import {
   FORMAT_TOKENS,
@@ -435,40 +435,6 @@ function buildUnresolvedFragments(
   }
 
   return { unresolvedFragments: deduped, noiseTokens };
-}
-
-function shouldUseFuzzyMatch(token: string, candidate: string): boolean {
-  if (token.length < 5 || candidate.length < 5) {
-    return false;
-  }
-  if (Math.abs(token.length - candidate.length) > 1) {
-    return false;
-  }
-  if (levenshteinDistance(token, candidate) <= 1) {
-    return true;
-  }
-
-  if (token.length === candidate.length) {
-    const mismatches: number[] = [];
-    for (let i = 0; i < token.length; i += 1) {
-      if (token[i] !== candidate[i]) {
-        mismatches.push(i);
-        if (mismatches.length > 2) {
-          break;
-        }
-      }
-    }
-    if (
-      mismatches.length === 2 &&
-      mismatches[1] === mismatches[0] + 1 &&
-      token[mismatches[0]] === candidate[mismatches[1]] &&
-      token[mismatches[1]] === candidate[mismatches[0]]
-    ) {
-      return true;
-    }
-  }
-
-  return false;
 }
 
 const WUBRG_ORDER = "wubrg";
@@ -1451,8 +1417,10 @@ function applyFuzzyKeywordCorrections(
 
   for (const token of tokens) {
     if (candidates.includes(token)) continue;
-    if (FUZZY_KEYWORD_CORRECTION_BLOCKLIST.has(token)) continue;
-    const best = candidates.find((candidate) => shouldUseFuzzyMatch(token, candidate));
+    const best = findFuzzyMatch(token, candidates, {
+      getForm: (candidate) => candidate,
+      blocklist: FUZZY_KEYWORD_CORRECTION_BLOCKLIST,
+    });
     if (!best) continue;
     replacements.set(token, best);
     matchedTypos.push(token);
@@ -1699,14 +1667,16 @@ function detectStrategyClauses(
     .filter((token) => token.length >= 5);
 
   for (const token of tokens) {
-    for (const entry of fuzzyEntries) {
-      if (!shouldUseFuzzyMatch(token, entry.normalized)) continue;
-      const resolved = resolveStrategyName(entry.raw);
-      if (!resolved) continue;
-      canonical.add(resolved);
-      strippedTerms.push(token);
-      break;
-    }
+    const match = findFuzzyMatch(token, fuzzyEntries, {
+      getForm: (entry) => entry.normalized,
+      // Only accept a fuzzy hit that actually resolves to a known strategy.
+      excludeCandidate: (entry) => !resolveStrategyName(entry.raw),
+    });
+    if (!match) continue;
+    const resolved = resolveStrategyName(match.raw);
+    if (!resolved) continue;
+    canonical.add(resolved);
+    strippedTerms.push(token);
   }
 
   for (const strategy of canonical) {
@@ -3220,7 +3190,7 @@ export async function parseNaturalQuery(naturalQuery: string): Promise<Phase1Res
     }
 
     if (token.length >= 5 && !matchedSubtypes.has(token)) {
-      const fuzzy = fuzzyMatchSubtype(token, shouldUseFuzzyMatch);
+      const fuzzy = fuzzyMatchSubtype(token);
       if (fuzzy) {
         const stLower = fuzzy.name.toLowerCase();
         if (!synergySubjects.has(stLower)) {

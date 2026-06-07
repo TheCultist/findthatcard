@@ -1,5 +1,5 @@
 import { ensureScryfallCatalogCache, getCatalog } from "@/lib/scryfall/catalogs";
-import { levenshteinDistance } from "@/lib/utils/text";
+import { findFuzzyMatch, levenshteinDistance } from "@/lib/utils/text";
 
 export type SubtypeMatch = {
   name: string;
@@ -252,20 +252,18 @@ const SUBTYPE_FUZZY_BLOCKLIST = new Set([
  */
 const FUZZY_EXCLUDED_SUBTYPE_CATEGORIES = new Set(["planeswalker"]);
 
-export function fuzzyMatchSubtype(
-  token: string,
-  distanceFn: (a: string, b: string) => boolean
-): SubtypeMatch | null {
+export function fuzzyMatchSubtype(token: string): SubtypeMatch | null {
   if (!subtypeIndex) return null;
-  const lower = token.toLowerCase();
-  if (SUBTYPE_FUZZY_BLOCKLIST.has(lower)) return null;
-  for (const [form, entry] of subtypeIndex.entries()) {
-    if (form.includes(" ") || form.includes("-")) continue;
-    if (form.length < MIN_FUZZY_SUBTYPE_FORM_LENGTH) continue;
-    if (FUZZY_EXCLUDED_SUBTYPE_CATEGORIES.has(entry.category)) continue;
-    if (distanceFn(lower, form)) return entry;
-  }
-  return null;
+  const match = findFuzzyMatch(token, subtypeIndex.entries(), {
+    getForm: ([form]) => form,
+    minFormLength: MIN_FUZZY_SUBTYPE_FORM_LENGTH,
+    blocklist: SUBTYPE_FUZZY_BLOCKLIST,
+    excludeCandidate: ([form, entry]) =>
+      form.includes(" ") ||
+      form.includes("-") ||
+      FUZZY_EXCLUDED_SUBTYPE_CATEGORIES.has(entry.category),
+  });
+  return match ? match[1] : null;
 }
 
 export function getArtistIndex(): Map<string, string> | null {
