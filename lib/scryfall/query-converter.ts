@@ -10,7 +10,7 @@ import {
   STRATEGY_ORACLETAGS,
 } from "@/lib/strategies/oracletagStrategies";
 import { hasCommanderDeckContext } from "@/lib/commander-context";
-import { maskSynergyWithComplements } from "@/lib/search-pipeline/phase1/synergyPartnerMask";
+import { maskSynergyWithComplements } from "@/lib/search-pipeline/synergyPartnerMask";
 import { escapeRegex } from "@/lib/utils/text";
 
 let openaiClient: OpenAI | null = null;

@@ -6,9 +6,8 @@
  * already run or pair with (partners), not the card type you are searching for — e.g.
  * "combos with mana dorks" is not a request for `function:mana-dork` cards.
  *
- * Used by:
- * - `detectFunctionConceptClauses` (Phase 1) — `lower` is derived from masked text
- * - `normalizeArchetypeIntents` (Phase 3) — archetype `detect` regexes run on masked text
+ * Used by `normalizeArchetypeIntents` (Phase 3, via query-converter): archetype `detect`
+ * regexes run on the masked text so a partner mention never triggers an archetype.
  *
  * Does **not** change the raw query shown to users; only affects matching for tags/archetypes.
  */

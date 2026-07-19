@@ -87,6 +87,31 @@ function extractTaggerKeywords(naturalQuery: string): string[] {
     "creatures",
     "deck",
     "decks",
+    // Filler/function words: never Tagger tag concepts. Without these, a word like
+    // "into" matches an irrelevant tag ("cheat-into-play") and, combined with a
+    // second weak match, inflates that tag's score high enough to raise the
+    // minScore threshold and suppress the genuinely relevant tags.
+    "into",
+    "onto",
+    "upon",
+    "within",
+    "as",
+    "at",
+    "it",
+    "its",
+    "they",
+    "them",
+    "their",
+    "your",
+    "you",
+    "my",
+    "me",
+    "so",
+    "than",
+    "then",
+    "theme",
+    "themes",
+    "themed",
   ]);
 
   const words = naturalQuery.toLowerCase().match(/[a-z0-9-]+/g) || [];
@@ -256,6 +281,15 @@ function scoreTagMatch(tag: string, keywords: string[]): number {
     if (tag.toLowerCase().includes(keyword)) {
       score += 1;
     }
+  }
+
+  // A tag whose entire value equals a query keyword (e.g. the bare tag "tribal"
+  // for the keyword "tribal") is the strongest relevance signal: it must outrank
+  // incidental partial matches like "dinosaur-tribal", which otherwise tie on
+  // score and win the alphabetical tiebreak, pushing the exact concept past the
+  // result slice.
+  if (keywords.includes(tag.toLowerCase())) {
+    score += 3;
   }
 
   return score;

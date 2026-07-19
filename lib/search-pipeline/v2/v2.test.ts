@@ -1,0 +1,199 @@
+/**
+ * V2 pipeline self-check (no AI, no network).
+ *
+ * Validates the deterministic guardrails: catalog-backed IR construction from a
+ * fixed extraction fixture, assembly output, card-name recognition, and that
+ * bogus function/art tags are dropped by vocabulary validation.
+ *
+ * Run: tsx lib/search-pipeline/v2/v2.test.ts
+ */
+
+import assert from "node:assert/strict";
+import { ensureCatalogIndex } from "@/lib/scryfall/catalog-index";
+import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
+import { buildIRFromExtraction } from "@/lib/search-pipeline/v2/buildIR";
+import { recognizeCardNames, runPrePass } from "@/lib/search-pipeline/v2/prePass";
+import type { V2Extraction } from "@/lib/search-pipeline/v2/schema";
+
+function baseExtraction(overrides: Partial<V2Extraction>): V2Extraction {
+  return {
+    intent: "search",
+    cardName: null,
+    colors: null,
+    typesAll: [],
+    typesAny: [],
+    negatedTypes: [],
+    subtypes: [],
+    supertypes: [],
+    stats: [],
+    rarity: null,
+    year: null,
+    keywords: [],
+    format: null,
+    set: null,
+    artist: null,
+    artSubjects: [],
+    functionTags: [],
+    archetypes: [],
+    oraclePhrases: [],
+    negatedOraclePhrases: [],
+    ...overrides,
+  };
+}
+
+let passed = 0;
+function check(name: string, cond: boolean, detail?: string): void {
+  assert.ok(cond, `${name}${detail ? ` — ${detail}` : ""}`);
+  passed += 1;
+  console.log(`[PASS] ${name}`);
+}
+
+async function main(): Promise<void> {
+  await ensureCatalogIndex();
+
+  // 1. Structural attributes map to validated clauses.
+  {
+    const ir = await buildIRFromExtraction(
+      baseExtraction({
+        colors: { mode: "color", op: ":", letters: "r" },
+        typesAll: ["creatures"],
+        subtypes: ["dragons"],
+        supertypes: ["legendary"],
+        stats: [{ field: "mv", op: "<", value: 5 }],
+        keywords: ["flying"],
+      }),
+      "legendary red dragons with flying under 5 mana"
+    );
+    const q = assembleQueryFromIR(ir);
+    check("emits color", q.includes("c:r"), q);
+    check("emits base type", q.includes("t:creature"), q);
+    check("emits subtype (singularized)", q.includes("t:dragon"), q);
+    check("emits supertype", q.includes("t:legendary"), q);
+    check("emits stat", q.includes("mv<5"), q);
+    check("emits keyword", q.includes("kw:flying"), q);
+  }
+
+  // 1b. Compound types AND; enumerated types OR (the "artifact creatures" vs "instants or sorceries" distinction).
+  {
+    const compound = await buildIRFromExtraction(
+      baseExtraction({ typesAll: ["artifact", "creature"] }),
+      "artifact creatures"
+    );
+    const cq = assembleQueryFromIR(compound);
+    check("compound types AND-ed", cq.includes("t:artifact") && cq.includes("t:creature") && !cq.includes(" or "), cq);
+
+    const enumerated = await buildIRFromExtraction(
+      baseExtraction({ typesAny: ["instant", "sorcery"] }),
+      "instants or sorceries"
+    );
+    const eq = assembleQueryFromIR(enumerated);
+    check("enumerated types OR-grouped", eq.includes("(t:instant or t:sorcery)"), eq);
+  }
+
+  // 1c. Rarity sets and malformed AI shapes (Claude ignores the schema) are handled defensively.
+  {
+    const multi = await buildIRFromExtraction(
+      baseExtraction({ rarity: { op: ":", codes: ["c", "u"] } }),
+      "common and uncommon cards"
+    );
+    check("multi-rarity OR-grouped", assembleQueryFromIR(multi).includes("(r:c or r:u)"), assembleQueryFromIR(multi));
+
+    // Legacy/malformed: scalar `code` instead of `codes` array must still coerce.
+    const legacy = await buildIRFromExtraction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      baseExtraction({ rarity: { op: ":", code: "m" } as any }),
+      "mythics"
+    );
+    check("scalar rarity code coerced", assembleQueryFromIR(legacy).includes("r:m"), assembleQueryFromIR(legacy));
+
+    // Out-of-enum / non-finite values are dropped, not emitted as garbage.
+    const bad = await buildIRFromExtraction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      baseExtraction({ stats: [{ field: "mv", op: "~" as any, value: "x" as any }], rarity: { op: ":", codes: ["z" as any] } }),
+      "garbage"
+    );
+    const bq = assembleQueryFromIR(bad);
+    check("malformed stat/rarity dropped", !bq.includes("mv") && !/r[:<>]/.test(bq), bq);
+  }
+
+  // 2. Invalid types / subtypes are dropped, not fuzzy-corrected.
+  {
+    const ir = await buildIRFromExtraction(
+      baseExtraction({ typesAll: ["notatype"], subtypes: ["zzznope"] }),
+      "notatype zzznope"
+    );
+    const q = assembleQueryFromIR(ir);
+    check("drops invalid type", !q.includes("notatype"), q);
+    check("drops invalid subtype", !q.includes("zzznope"), q);
+  }
+
+  // 3. Bogus function/art tags fail vocabulary validation and are dropped.
+  {
+    const ir = await buildIRFromExtraction(
+      baseExtraction({
+        functionTags: ["totally-not-a-real-function-tag-xyz"],
+        artSubjects: ["totally-not-a-real-art-tag-xyz"],
+      }),
+      "nonsense tags"
+    );
+    const q = assembleQueryFromIR(ir);
+    check("drops bogus function tag", !q.includes("xyz"), q);
+  }
+
+  // 4. Negations become mustNot clauses.
+  {
+    const ir = await buildIRFromExtraction(
+      baseExtraction({
+        typesAll: ["creature"],
+        negatedTypes: ["artifact"],
+        negatedOraclePhrases: ["can't block"],
+      }),
+      "creatures that are not artifacts and can't block"
+    );
+    const q = assembleQueryFromIR(ir);
+    check("negated type becomes -t:", q.includes("-t:artifact"), q);
+    check("negated oracle becomes -o:", q.includes('-o:"can\'t block"'), q);
+  }
+
+  // 5. Named-card intent routes the card name for the intent resolver.
+  {
+    const ir = await buildIRFromExtraction(
+      baseExtraction({ intent: "similar-cards", cardName: "Lightning Bolt" }),
+      "cards like lightning bolt"
+    );
+    check("similar-cards intent set", ir.intent === "similar-cards");
+    check("similar card name resolved", ir.similarToCardName === "Lightning Bolt", ir.similarToCardName);
+  }
+
+  // 6. Card-name recognition finds multi-word catalog names (protecting them from filters).
+  {
+    const names = recognizeCardNames("cards similar to Sheoldred, the Apocalypse in modern");
+    check(
+      "recognizes multi-word card name",
+      names.some((n) => n.toLowerCase().startsWith("sheoldred")),
+      names.join("|")
+    );
+  }
+
+  // 7. Direct Scryfall syntax is detected by the pre-pass.
+  {
+    const pp = runPrePass('name:"Lightning Bolt" game:paper');
+    check("pre-pass flags direct scryfall", pp.direct === true);
+  }
+
+  // 8. Empty extraction still yields a non-empty IR (safety net) so Phase 3 never gets nothing.
+  {
+    const ir = await buildIRFromExtraction(baseExtraction({}), "asdfghjkl vague");
+    check(
+      "empty extraction yields safety-net fragment",
+      ir.unresolvedFragments.length > 0 || ir.mustClauses.length > 0
+    );
+  }
+
+  console.log(`\nAll ${passed} V2 self-checks passed.`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

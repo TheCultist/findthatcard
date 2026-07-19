@@ -1,13 +1,13 @@
 # Find That Card
 
-A Magic: The Gathering card search tool that converts natural language queries into Scryfall search queries using a multi-phase NLP pipeline, and displays results in a clean, responsive interface.
+A Magic: The Gathering card search tool that converts natural language queries into Scryfall search queries using a single schema-constrained AI extraction wrapped in deterministic guardrails, and displays results in a clean, responsive interface.
 
 **Live at:** [findthatcard.net](https://findthatcard.net)
 
 ## Features
 
 - **Natural Language Search**: Describe what you're looking for in plain English
-- **Multi-Phase Search Pipeline**: Deterministic NLP parser handles colors, formats, types, keywords, and strategies before falling back to AI for unresolved fragments
+- **AI Extraction Pipeline**: One schema-constrained AI call extracts colors, formats, types, keywords, stats, tags, and strategies, then deterministic guardrails validate the result against live Scryfall/Tagger catalogs
 - **Direct Scryfall Query Support**: Enter Scryfall queries directly (e.g., `t:creature c:r`) — the app detects and passes them through without conversion
 - **Editable Query Field**: View and edit the generated Scryfall query as tokenized chips or raw text
 - **Scryfall Tagger Support**: Native support for art and function tags from [Scryfall Tagger](https://tagger.scryfall.com)
@@ -27,7 +27,7 @@ A Magic: The Gathering card search tool that converts natural language queries i
 - **Next.js 16** (App Router, Turbopack in dev)
 - **TypeScript**
 - **Tailwind CSS**
-- **OpenAI API** — used only for unresolved query fragments and Phase 0 normalization
+- **OpenAI / Anthropic API** — one structured extraction call per query (provider-selectable via `AI_PROVIDER`)
 - **Scryfall API** — card data, catalogs, sets, and symbology
 - **Scryfall Tagger** — art and function tag data (scraped/cached)
 - **Resend** — bug report emails
@@ -36,28 +36,19 @@ A Magic: The Gathering card search tool that converts natural language queries i
 
 ### Search Pipeline
 
-Queries go through a five-phase pipeline before hitting Scryfall:
+A query becomes a Scryfall query through one AI extraction wrapped in deterministic steps:
 
-1. **Phase 0 — Normalization** *(optional, LLM)*: Detects structurally ambiguous queries (e.g. missing connectors) and rewrites them. Most queries skip this phase entirely.
+1. **Pre-pass** *(no LLM)*: Raw Scryfall syntax (e.g. `t:creature c:r`, `name:"X" game:paper`) is detected by `isScryfallQuery` and passed straight through — the AI is never involved. Compound "or" queries are split into branches. Multi-word card names are recognized against a catalog n-gram index so the extractor can protect them.
 
-2. **Phase 1 — Deterministic NLP Parser** *(no LLM)*: A frozen, rule-based parser handles the majority of queries without any AI calls. It extracts:
-   - Colors and color identities (including guild/shard/wedge/nephilim names)
-   - Formats (Standard, Modern, Commander, Pauper, etc.)
-   - Card types and subtypes (matched against live Scryfall catalog indexes)
-   - MTG keyword abilities (Flying, Trample, etc.) with synonym expansion
-   - Tagger function/art tags via strategy expansions
-   - Artist names, set names, and CMC/stat filters
-   - Named land cycles, IS-flags (MDFC, adventure, etc.), and explicit action verbs
+2. **Structured AI extraction** *(one LLM call)*: A single schema-constrained call (`v2/extractIR.ts` + `v2/extractPrompt.ts` + `v2/schema.ts`) turns the query into a `V2Extraction` object — intent, card name, colors, types/subtypes/supertypes, stats, rarity, year, keywords, format, set, artist, art subjects, function tags, archetypes, and oracle phrases. The prompt is fed a narrowed slice of relevant Tagger tags and the archetype menu.
 
-   Phase 1 is **intentionally frozen** — new colloquial patterns are handled in Phase 1.5, not by expanding this parser.
+3. **IR build + validation** *(no LLM)*: `v2/buildIR.ts` is the trust boundary. Because some models treat the schema as a hint, it validates every field against live catalogs (types, subtypes, keywords, card names, Tagger tags) and coerces shape mismatches, dropping anything invalid, before assembling a `SearchPipelineIR`.
 
-3. **Phase 1.5 — Structured AI Extraction** *(LLM, optional)*: Runs only when concrete numeric, rarity, or year-phrase fragments remain after Phase 1. Unlike Phase 2, this phase asks the AI a **narrow, schema-constrained question** ("what are the exact stat/rarity/year values in this text?") and validates the output before injecting it as first-class IR clauses. This replaces the old approach of adding ever-more regex to Phase 1.
+4. **Intent resolver**: For a named-card intent ("find cards similar to X", "art like X", "synergy with X"), `resolveIntentClauses.ts` fetches card-specific data (Tagger relationship graph, illustration tags, or an LLM synergy query) and injects it as a `mustClause`. The query still continues to finalization, so appended constraints ("…that aren't instants", "…in Modern") are applied.
 
-4. **Phase 2 — Fragment Resolver** *(LLM, optional)*: Any vibe/strategy/abstract fragments remaining after Phase 1.5 are sent to the AI with a focused resolver prompt. It answers "what Scryfall tags match this theme?" Results are merged back into the IR.
+5. **Finalization**: `phase3/finalizeQuery.ts` injects archetype tags, suppresses redundant type filters, adds the `game:` filter, sanitizes, and truncates to Scryfall's length limit.
 
-5. **Phase 3 — Finalization**: Post-processing injects archetype tags, suppresses redundant type filters, adds game filters, and validates the assembled query.
-
-6. **Intent resolver**: When Phase 1 detects a named-card intent ("find cards similar to X", "art like X", "synergy with X"), `resolveIntentClauses.ts` fetches card-specific data (Tagger relationship graph, illustration tags, or an LLM synergy query) and injects the result as a `mustClause`. The query then continues through Phase 1.5, 2, and 3 — so any additional constraints the user appended (e.g. "…that aren't instants", "…in Modern") are still applied.
+Results are cached in-memory (LRU, keyed by normalized query) so repeat searches skip the AI call.
 
 ### Query Assembly
 
@@ -126,7 +117,7 @@ npm run test:queries
 npm run lint
 ```
 
-The test suite (`lib/search-pipeline/search-pipeline.test.ts`) contains 50+ assertion-based tests covering the full pipeline.
+The deterministic self-check (`lib/search-pipeline/v2/v2.test.ts`) asserts extraction-to-IR-to-query behavior on fixed fixtures without any live AI calls. `query-converter.test.ts`, `synergy-cards.test.ts`, and `synergyPartnerMask.test.ts` cover the finalization/assembly helpers. For end-to-end quality spot-checks against real search results, use `npm run search:qa`.
 
 ## Project Structure
 
@@ -169,29 +160,25 @@ findthatcard/
 ├── lib/
 │   ├── search-pipeline/
 │   │   ├── types.ts                # IR types: SearchPipelineIR, QueryIntent, etc.
-│   │   ├── runSearchPipeline.ts    # Orchestrates Phase 0–1.5–2–3 + intent resolver
+│   │   ├── runSearchPipeline.ts    # Public entry point — delegates to V2
 │   │   ├── resolveIntentClauses.ts # Intent resolver: similar/art-like/synergy named-card intents
 │   │   ├── assembleQuery.ts        # IR → Scryfall query string
+│   │   ├── compound.ts             # Splits top-level "or" queries into branches
+│   │   ├── synergyPartnerMask.ts   # Masks "combos with X" partner mentions for finalize
 │   │   ├── similar-cards.ts        # Similar-card and art-like resolvers
-│   │   ├── phase0/normalizeQuery.ts
-│   │   ├── phase1/                 # Deterministic NLP parser (FROZEN — do not expand)
-│   │   │   ├── parseNaturalQuery.ts    # Main parser entry point
-│   │   │   ├── constants.ts            # Shared token lists and maps
-│   │   │   ├── resolveStats.ts         # Numeric stat filter resolution
-│   │   │   ├── resolveRarity.ts        # Rarity filter resolution
-│   │   │   ├── isFlags.ts              # Card face / layout IS-flag detection
-│   │   │   ├── landCycles.ts           # Named land cycle detection
-│   │   │   └── actionRules.ts          # Explicit MTG action verb detection
-│   │   ├── phase1_5/
-│   │   │   └── structuredExtraction.ts # AI structured extraction for stat/rarity/year
-│   │   ├── phase2/
-│   │   │   ├── buildResolverPrompt.ts
-│   │   │   └── resolveUnresolvedFragments.ts
-│   │   ├── phase3/finalizeQuery.ts
-│   │   └── search-pipeline.test.ts
+│   │   ├── v2/                     # The pipeline: one AI extraction + guardrails
+│   │   │   ├── runV2.ts                # Orchestrator: passthrough, compound, cache, wiring
+│   │   │   ├── prePass.ts              # Card-name recognition (n-gram catalog lookup)
+│   │   │   ├── schema.ts               # V2Extraction type + JSON schema
+│   │   │   ├── extractPrompt.ts        # Builds the extraction prompt
+│   │   │   ├── extractIR.ts            # Runs the single structured AI call
+│   │   │   ├── buildIR.ts              # Validates AI output → SearchPipelineIR (trust boundary)
+│   │   │   ├── cache.ts                # LRU cache keyed by normalized query
+│   │   │   └── v2.test.ts              # Deterministic self-check (no live AI)
+│   │   └── phase3/finalizeQuery.ts # Archetype injection, sanitization, game filter, truncation
 │   ├── scryfall/
 │   │   ├── client.ts               # Pagination math, multi-page fetching
-│   │   ├── query-converter.ts      # Legacy converter + archetype registry
+│   │   ├── query-converter.ts      # Scryfall query helpers: archetype registry, sanitizers, direct-query detection
 │   │   ├── response-transformer.ts # Alchemy substitution, TCGPlayer links
 │   │   ├── symbols.ts              # Mana symbol SVG cache
 │   │   ├── lookup.ts               # Fuzzy card lookup via /cards/named
