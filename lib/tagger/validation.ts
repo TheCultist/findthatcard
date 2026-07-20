@@ -11,15 +11,18 @@ export function extractTaggerTags(
   const tags: Array<{ type: "art" | "function"; tag: string; fullMatch: string }> =
     [];
 
+  // A tag can be preceded by start-of-string, whitespace, or an open paren —
+  // assembled queries routinely emit `((function:tag …`, and requiring
+  // whitespace made every parenthesized tag invisible to validation.
   // Patterns for art tags: art:, atag:, arttag:
-  const artPattern = /(?:^|\s)(?:art|atag|arttag):([^\s"()]+|"[^"]+")/gi;
+  const artPattern = /(?:^|[\s(])(?:art|atag|arttag):([^\s"()]+|"[^"]+")/gi;
   // Patterns for function tags: function:, otag:, oracletag:
-  const functionPattern = /(?:^|\s)(?:function|otag|oracletag):([^\s"()]+|"[^"]+")/gi;
+  const functionPattern = /(?:^|[\s(])(?:function|otag|oracletag):([^\s"()]+|"[^"]+")/gi;
 
   // Also handle negated tags (-art:, -function:, etc.)
-  const negatedArtPattern = /(?:^|\s)-(?:art|atag|arttag):([^\s"()]+|"[^"]+")/gi;
+  const negatedArtPattern = /(?:^|[\s(])-(?:art|atag|arttag):([^\s"()]+|"[^"]+")/gi;
   const negatedFunctionPattern =
-    /(?:^|\s)-(?:function|otag|oracletag):([^\s"()]+|"[^"]+")/gi;
+    /(?:^|[\s(])-(?:function|otag|oracletag):([^\s"()]+|"[^"]+")/gi;
 
   // Extract art tags
   let match;

@@ -15,6 +15,7 @@ import { splitCompoundQuery } from "@/lib/search-pipeline/compound";
 import { buildIRFromExtraction } from "@/lib/search-pipeline/v2/buildIR";
 import { recognizeCardNames, runPrePass } from "@/lib/search-pipeline/v2/prePass";
 import type { V2Extraction } from "@/lib/search-pipeline/v2/schema";
+import { extractTaggerTags } from "@/lib/tagger/validation";
 
 function baseExtraction(overrides: Partial<V2Extraction>): V2Extraction {
   return {
@@ -205,6 +206,22 @@ async function main(): Promise<void> {
     );
     const q = assembleQueryFromIR(ir);
     check("drops bogus function tag", !q.includes("xyz"), q);
+  }
+
+  // 3b. Tag extraction sees tags behind an open paren — assembled queries emit
+  // "((function:tag …", and validation used to require whitespace before the
+  // operator, making every parenthesized (in particular every OR-grouped) tag
+  // invisible to the invalid-tag backstop.
+  {
+    const tags = extractTaggerTags(
+      '(((function:heroic-payoff t:creature) OR (function:card-draw-payoff o:"cast")) -name:"X") id:u'
+    );
+    const found = tags.map((t) => t.tag);
+    check(
+      "extracts parenthesized function tags",
+      found.includes("heroic-payoff") && found.includes("card-draw-payoff"),
+      found.join("|")
+    );
   }
 
   // 4. Negations become mustNot clauses.

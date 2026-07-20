@@ -1,8 +1,14 @@
 import { callAI } from "@/lib/ai-client";
-import { sanitizeFunctionalClause } from "@/lib/search-pipeline/card-query-sanitize";
+import {
+  dropUnanchoredOrBranches,
+  sanitizeFunctionalClause,
+} from "@/lib/search-pipeline/card-query-sanitize";
 import { isAiPromptLoggingEnabled } from "@/lib/search-pipeline/debug";
+import { removeInvalidTagsFromQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
 import { fetchCardByName, ScryfallNamedCard } from "@/lib/scryfall/lookup";
 import { fetchTaggerCardData } from "@/lib/scryfall/tagger-graphql";
+import { getTaggerTagContext } from "@/lib/tagger/context";
+import { validateTaggerTags } from "@/lib/tagger/validation";
 
 const shouldLog = isAiPromptLoggingEnabled;
 
@@ -125,6 +131,7 @@ function buildSynergyPrompt(
     "  - Do NOT AND two function: tags together (near-zero results). Instead AND a function: tag with a type/keyword/mana-value filter.",
     "- Avoid umbrella tags (function:mana-producer, function:removal, function:draw-card, function:token-maker, function:pump) — prefer narrower variants.",
     "- Prefer function: tags over o: oracle text.",
+    "- Every function: tag MUST be a real Scryfall Tagger tag — do NOT invent plausible-sounding tags (function:card-draw-payoff does not exist). The community tags listed above are guaranteed valid. If unsure a tag exists, use kw:/t:/mv filters or a multi-word o:\"…\" phrase instead.",
     "- Only use o:\"...\" for specific multi-word phrases. Never use single-word o: fragments (o:attacks, o:dies, o:draws) — they match thousands of cards.",
     "- Do NOT add -o: or -name: exclusions to remove the original card — the system handles that automatically.",
     "- Do NOT add id: or id<= color identity filters — the system injects those automatically.",
@@ -149,6 +156,39 @@ function sanitizeScryfallQuery(raw: string, cardName: string): string | null {
     return `${clause} -name:"${cardName}"`;
   }
   return clause;
+}
+
+/**
+ * Builds the correction message appended to the prompt when the model's first
+ * query used Tagger tags that don't exist. Suggests valid catalog tags whose
+ * segments resemble the hallucinated ones (best-effort, via the same scorer
+ * that narrows tag context for extraction).
+ */
+async function buildInvalidTagFeedback(
+  previousQuery: string,
+  invalid: Array<{ type: "art" | "function"; tag: string }>
+): Promise<string> {
+  let suggestions: string[] = [];
+  try {
+    const ctx = await getTaggerTagContext(
+      invalid.map((t) => t.tag.replace(/-/g, " ")).join(" ")
+    );
+    suggestions = ctx.function.slice(0, 25);
+  } catch {
+    // Suggestions are best-effort; the feedback works without them.
+  }
+  return [
+    "",
+    `Your previous query was: ${previousQuery}`,
+    "It used Tagger tags that DO NOT EXIST in the catalog and matched zero cards:",
+    ...invalid.map((t) => `- ${t.type}:${t.tag}`),
+    suggestions.length > 0
+      ? `Real catalog tags with similar meaning: ${suggestions.join(", ")}`
+      : "",
+    'Rewrite the query using ONLY the community tags listed for the card, the real catalog tags above, or structural filters (kw:/t:/mv/o:"multi word phrase"). Same JSON shape.',
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export const __testOnly = {
@@ -201,38 +241,82 @@ export async function resolveSynergyQuery(cardName: string): Promise<SynergyQuer
     console.log(`[Synergy][AI Prompt]\n${prompt}`);
   }
 
-  const response = await callAI({
-    user: prompt,
-    max_output_tokens: 2000,
-  });
+  const usage = { input: 0, output: 0, total: 0 };
 
-  const { input_tokens: inputTokens, output_tokens: outputTokens, total_tokens: totalTokens } = response.usage;
+  const askModel = async (userPrompt: string): Promise<SynergyResponse | null> => {
+    const response = await callAI({
+      user: userPrompt,
+      max_output_tokens: 2000,
+    });
+    usage.input += response.usage.input_tokens;
+    usage.output += response.usage.output_tokens;
+    usage.total += response.usage.total_tokens;
+    if (shouldLog()) {
+      console.log(
+        `[Synergy][AI Usage] input_tokens=${response.usage.input_tokens} output_tokens=${response.usage.output_tokens} total_tokens=${response.usage.total_tokens}`
+      );
+    }
+    try {
+      const cleaned = response.text
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```\s*$/, "")
+        .trim();
+      return JSON.parse(cleaned) as SynergyResponse;
+    } catch {
+      console.warn(
+        `[Synergy] Failed to parse LLM response (${response.text.length} chars): ${response.text.slice(0, 300)}`
+      );
+      return null;
+    }
+  };
 
-  if (shouldLog()) {
-    console.log(
-      `[Synergy][AI Usage] input_tokens=${inputTokens} output_tokens=${outputTokens} total_tokens=${totalTokens}`
-    );
-  }
+  let parsed = await askModel(prompt);
+  if (!parsed) return null;
 
-  const text = response.text;
-
-  let parsed: SynergyResponse;
-  try {
-    const cleaned = text
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```\s*$/, "")
-      .trim();
-    parsed = JSON.parse(cleaned) as SynergyResponse;
-  } catch {
-    console.warn(`[Synergy] Failed to parse LLM response (${text.length} chars): ${text.slice(0, 300)}`);
-    return null;
-  }
-
-  const query = sanitizeScryfallQuery(parsed.scryfall_query ?? "", card.name);
-  if (!query) {
+  let clause = sanitizeFunctionalClause(parsed.scryfall_query ?? "");
+  if (!clause) {
     console.warn(`[Synergy] LLM returned empty/invalid query for "${card.name}"`);
     return null;
   }
+
+  // The model routinely invents plausible-sounding tags (function:card-draw-payoff).
+  // An invalid tag makes its branch match ZERO cards — and stripping it later
+  // leaves an unanchored broad shell instead. Validate here and retry ONCE with
+  // explicit feedback; ponytail: single retry, no correction loop.
+  let invalidTags = await validateTaggerTags(clause);
+  if (invalidTags.length > 0) {
+    console.warn(
+      `[Synergy] Query for "${card.name}" uses nonexistent tags [${invalidTags.map((t) => t.tag).join(", ")}]; retrying with feedback`
+    );
+    const feedback = await buildInvalidTagFeedback(parsed.scryfall_query ?? "", invalidTags);
+    const retried = await askModel(prompt + "\n" + feedback);
+    const retriedClause = retried ? sanitizeFunctionalClause(retried.scryfall_query ?? "") : null;
+    if (retriedClause) {
+      parsed = retried!;
+      clause = retriedClause;
+      invalidTags = await validateTaggerTags(clause);
+    }
+  }
+
+  // Last resort: strip tags that are still invalid, then drop any OR branch
+  // left without a selective anchor — a branch reduced to `(t:instant OR
+  // t:sorcery)` floods the results with every instant/sorcery.
+  if (invalidTags.length > 0) {
+    console.warn(
+      `[Synergy] Retry still used nonexistent tags [${invalidTags.map((t) => t.tag).join(", ")}]; stripping them`
+    );
+    const stripped = removeInvalidTagsFromQuery(clause, invalidTags);
+    const anchored = dropUnanchoredOrBranches(stripped);
+    if (!anchored) {
+      console.warn(`[Synergy] No anchored clause left after stripping invalid tags for "${card.name}"`);
+      return null;
+    }
+    clause = anchored;
+  }
+
+  const query = clause.includes(`-name:"${card.name}"`)
+    ? clause
+    : `${clause} -name:"${card.name}"`;
 
   console.log(`[Synergy] Result for "${card.name}": ${query}`);
   if (parsed.reasoning) {
@@ -243,6 +327,6 @@ export async function resolveSynergyQuery(cardName: string): Promise<SynergyQuer
     query,
     colorIdentity: card.color_identity.length > 0 ? card.color_identity.join("").toLowerCase() : "",
     reasoning: parsed.reasoning,
-    aiTokens: { input: inputTokens, output: outputTokens, total: totalTokens },
+    aiTokens: { input: usage.input, output: usage.output, total: usage.total },
   };
 }
