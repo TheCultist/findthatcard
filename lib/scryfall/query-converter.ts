@@ -611,7 +611,10 @@ const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
     // "exile" used as a zone name (preceded by "from" or "in") is a zone-reference,
     // not targeted removal — e.g. "cast from exile", "cards in exile", "from the exile zone".
     // "library" / "top of" / "top card" indicate mill-exile or play-from-top, also not removal.
-    disqualify: /\b(graveyard|reanimate|return|recursion|library|from\s+(?:the\s+)?top|top\s+(?:card|of)|(?:from|in)\s+(?:the\s+)?exile)\b/i,
+    // Exile-for-delayed-use is impulse/exile-utility, not removal: "exile and can be
+    // used/cast/played later", "for later", or a named delayed-cast mechanic
+    // (warp, foretell, suspend, plot, impulse).
+    disqualify: /\b(graveyard|reanimate|return|recursion|library|from\s+(?:the\s+)?top|top\s+(?:card|of)|(?:from|in)\s+(?:the\s+)?exile|(?:cast|play|use)[a-z]*[^,;.]{0,20}later|(?:for|until)\s+later|warp|foretell|suspend|plot|impulse)\b/i,
     defaultTags: ["removal", "spot-removal", "repeatable-removal", "oblivion-ring-effect"],
     qualifiers: [
       {
@@ -1653,6 +1656,10 @@ function normalizeOrphanedOr(query: string): string {
   // Drop parentheses that only contain ORs, e.g. rogue "(or)" from empty OR-merge slots.
   updated = updated.replace(/\(\s*(?:OR\s*)+\)/gi, "");
   updated = updated.replace(/\(\s*or\s*\)/gi, "");
+  // Unwrap redundant single-member groups left after a sibling was stripped from an
+  // OR-chain (e.g. "(function:zombie-lord)" ← "(function:zombie-lord or function:anthem)").
+  // In Scryfall, parens around one space-free token add nothing; preserve any leading "-".
+  updated = updated.replace(/(^|\s)(-?)\(\s*(-?[^\s()]+)\s*\)/g, "$1$2$3");
   // Collapse repeated OR tokens that can be introduced by removals.
   updated = updated.replace(/\bOR(?:\s+OR)+\b/gi, "OR");
   updated = updated.replace(/\bor(?:\s+or)+\b/gi, "or");

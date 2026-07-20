@@ -57,6 +57,12 @@ const finalizeCases: FinalizeTestCase[] = [
       "f:commander (function:boardwipe or function:wrath-of-god) (function:removal-exile or function:removal-destroy) game:paper",
   },
   {
+    name: "unwraps redundant single-member group after OR sibling stripped",
+    naturalQuery: "best lords and anthems for zombie in commander",
+    rawQuery: "t:zombie f:commander (function:zombie-lord or function:anthem or function:lord)",
+    expected: "t:zombie f:commander function:zombie-lord function:anthem function:lord",
+  },
+  {
     name: "appends and expands strategy tags",
     naturalQuery: "Orzhov aristocrats",
     rawQuery: "id=wb",
@@ -135,6 +141,27 @@ const finalizeCases: FinalizeTestCase[] = [
   {
     name: "adds creature removal tags for creature removal intent",
     naturalQuery: "white creature removal spells",
+    rawQuery: "c:w",
+    expected:
+      "c:w (function:removal-creature or function:removal-creature-burn or function:removal-creature-fight or function:removal-exile or function:removal-destroy or function:spot-removal)",
+  },
+  {
+    name: "exile-for-delayed-use does not trigger removal archetype",
+    naturalQuery: "cards that exile and can be used later",
+    rawQuery:
+      "(function:exile-on-resolution or function:castable-from-exile or function:unexile)",
+    expected:
+      "(function:exile-on-resolution or function:castable-from-exile or function:unexile)",
+  },
+  {
+    name: "delayed-cast mechanic name does not trigger removal archetype",
+    naturalQuery: "creatures with warp that exile themselves",
+    rawQuery: "t:creature kw:warp",
+    expected: "t:creature kw:warp",
+  },
+  {
+    name: "plain exile removal still triggers removal archetype",
+    naturalQuery: "white spells that exile creatures",
     rawQuery: "c:w",
     expected:
       "c:w (function:removal-creature or function:removal-creature-burn or function:removal-creature-fight or function:removal-exile or function:removal-destroy or function:spot-removal)",

@@ -24,8 +24,12 @@ export interface V2Extraction {
   intent: V2Intent;
   /** For named-card intents: the card the user referenced (validated against the catalog). */
   cardName: string | null;
-  /** Color / color-identity constraint. `letters` uses w u b r g c. */
-  colors: { mode: "identity" | "color"; op: ColorOp; letters: string } | null;
+  /**
+   * Color / color-identity constraint. `letters` uses w u b r g c.
+   * `combine` "and" = card must have all the letters (guilds, "red and green");
+   * "or" = the letters are alternatives ("red or green" → any one qualifies).
+   */
+  colors: { mode: "identity" | "color"; op: ColorOp; letters: string; combine: "and" | "or" } | null;
   /** Types the card must have ALL of — compound types like "artifact creature". */
   typesAll: string[];
   /** Types where ANY one qualifies — enumerated alternatives like "instants or sorceries". */
@@ -102,11 +106,12 @@ export const V2_EXTRACTION_SCHEMA: Record<string, unknown> = {
     colors: {
       type: ["object", "null"],
       additionalProperties: false,
-      required: ["mode", "op", "letters"],
+      required: ["mode", "op", "letters", "combine"],
       properties: {
         mode: { type: "string", enum: ["identity", "color"] },
         op: { type: "string", enum: [":", "=", ">=", "<="] },
         letters: { type: "string" },
+        combine: { type: "string", enum: ["and", "or"] },
       },
     },
     typesAll: { type: "array", items: { type: "string" } },

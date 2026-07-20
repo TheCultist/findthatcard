@@ -19,7 +19,7 @@ import useAdBlockDetection from "@/app/hooks/useAdBlockDetection";
 import CardCard from "@/app/components/CardCard";
 import AdBanner from "@/app/components/AdBanner";
 import QueryTokenPreview from "@/app/components/QueryTokenPreview";
-import { COLOR_NAMES } from "@/lib/query-tokens";
+import { getColorSemanticSelectors } from "@/lib/query-tokens";
 import { formatErrorMessage } from "@/lib/utils/errors";
 import CardDetailPanel from "@/app/components/CardDetailPanel";
 import ThemeToggle from "@/app/components/ThemeToggle";
@@ -652,43 +652,35 @@ export default function SearchPage() {
                 </a>
               </div>
             </div>
-            {(() => {
-              // Detect a single id: or id= token in the current query.
-              const idMatch = editableQuery.match(/\bid([=:])([a-z]+)/i);
-              if (!idMatch) return null;
-              const currentOp = idMatch[1]!;   // ":" or "="
-              const idValue = idMatch[2]!.toLowerCase();
-              const targetOp = currentOp === ":" ? "=" : ":";
-              // Normalize to WUBRG order for the color name lookup.
-              const wubrg = "wubrg";
-              const normalized = idValue.split("").sort((a, b) => wubrg.indexOf(a) - wubrg.indexOf(b)).join("");
-              const fullName = COLOR_NAMES[normalized] ?? idValue.toUpperCase();
-              // Trim the parenthetical so we just get e.g. "Jund" not "Jund (Black + Red + Green)".
-              const shortName = fullName.split(" (")[0];
-              const altQuery = editableQuery.replace(
-                new RegExp(`\\bid${currentOp === ":" ? ":" : "="}${idValue}\\b`, "i"),
-                `id${targetOp}${idValue}`
-              );
-              const label = targetOp === "="
-                ? `Exact ${shortName} identity (id=)`
-                : `Playable in ${shortName} (id:)`;
-              return (
-                <div className="mt-2 flex items-center gap-2 text-sm text-muted">
-                  <span className="text-muted-soft">Also try:</span>
+            {getColorSemanticSelectors(editableQuery).map((selector) => (
+              <div
+                key={selector.field}
+                className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted"
+              >
+                <span className="text-muted-soft">
+                  {selector.field === "id" ? "Color identity:" : "Colors:"}
+                </span>
+                {selector.options.map((option) => (
                   <button
+                    key={option.clause}
+                    disabled={option.current}
                     onClick={() => {
-                      setEditableQuery(altQuery);
+                      setEditableQuery(option.query);
                       setCurrentPage(1);
                       setPageInput("1");
-                      handleSearch(altQuery, 1, { updateUrl: false });
+                      handleSearch(option.query, 1, { updateUrl: false });
                     }}
-                    className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface-muted px-3 py-1 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted"
+                    className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-sm font-medium transition-colors ${
+                      option.current
+                        ? "cursor-default border-accent bg-accent-muted text-accent"
+                        : "border-border bg-surface-muted text-foreground hover:border-accent/50 hover:bg-accent-muted"
+                    }`}
                   >
-                    {label}
+                    {option.label}
                   </button>
-                </div>
-              );
-            })()}
+                ))}
+              </div>
+            ))}
           </div>
         )}
 

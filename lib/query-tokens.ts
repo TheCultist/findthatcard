@@ -56,6 +56,131 @@ export const COLOR_NAMES: Record<string, string> = {
   m: "Multicolor",
 };
 
+// ---------------------------------------------------------------------------
+// Color semantic selectors ("Also try" alternatives for c: / id: clauses)
+// ---------------------------------------------------------------------------
+
+export type ColorSemanticOption = {
+  /** The Scryfall clause this option writes, e.g. "c=rg" or "(c:r or c:g)". */
+  clause: string;
+  label: string;
+  /** Full query with the detected color clause replaced by this option's clause. */
+  query: string;
+  current: boolean;
+};
+
+export type ColorSemanticSelector = {
+  field: "c" | "id";
+  /** WUBRG-normalized letters of the detected clause. */
+  letters: string;
+  options: ColorSemanticOption[];
+};
+
+const WUBRG = "wubrg";
+
+const sortWubrg = (letters: string): string =>
+  [...new Set(letters.toLowerCase())]
+    .sort((a, b) => WUBRG.indexOf(a) - WUBRG.indexOf(b))
+    .join("");
+
+/** "Gruul" from "rg", "Red" from "r" — parenthetical trimmed. */
+const shortColorName = (letters: string): string =>
+  (COLOR_NAMES[sortWubrg(letters)] ?? letters.toUpperCase()).split(" (")[0];
+
+type SemanticKind = "any" | "all" | "exact" | "within" | "includes";
+
+/**
+ * Detects the first color (`c`) and color-identity (`id`) constraint in a
+ * Scryfall query — either a plain token (`c:rg`, `id=wu`) or an OR-group
+ * (`(c:r or c:g)`) — and returns the alternative semantic readings the user
+ * can switch to, each with the full rewritten query. Negated clauses (`-c:r`)
+ * are left alone.
+ */
+export function getColorSemanticSelectors(query: string): ColorSemanticSelector[] {
+  const selectors: ColorSemanticSelector[] = [];
+
+  for (const field of ["c", "id"] as const) {
+    const groupRe = new RegExp(
+      `\\(\\s*${field}[:=][wubrg]+(?:\\s+or\\s+${field}[:=][wubrg]+)+\\s*\\)`,
+      "i"
+    );
+    const tokenRe = new RegExp(`(?<![\\w-])${field}(<=|>=|[:=])([wubrg]+)\\b`, "i");
+
+    let matched: string;
+    let letters: string;
+    let currentKind: SemanticKind | null;
+
+    const group = query.match(groupRe);
+    if (group) {
+      matched = group[0];
+      letters = sortWubrg(
+        [...matched.matchAll(new RegExp(`${field}[:=]([wubrg]+)`, "gi"))].map((m) => m[1]).join("")
+      );
+      currentKind = "any";
+    } else {
+      const token = query.match(tokenRe);
+      if (!token) continue;
+      matched = token[0];
+      letters = sortWubrg(token[2]);
+      const op = token[1];
+      currentKind =
+        op === "="
+          ? "exact"
+          : op === ":"
+            ? field === "id"
+              ? "within"
+              : "all"
+            : op === ">="
+              ? "includes"
+              : null; // "<=" has no selector entry; options still offered
+    }
+    if (!letters) continue;
+
+    const names = letters.split("").map((l) => COLOR_NAMES[l] ?? l.toUpperCase());
+    const combined = shortColorName(letters);
+    const multi = letters.length > 1;
+
+    const candidates: Array<{ kind: SemanticKind; clause: string; label: string }> = [];
+    if (field === "c") {
+      if (multi) {
+        candidates.push({
+          kind: "any",
+          clause: `(${letters.split("").map((l) => `c:${l}`).join(" or ")})`,
+          label: `Any of ${names.join(" or ")}`,
+        });
+        candidates.push({ kind: "all", clause: `c:${letters}`, label: `All of ${names.join(" + ")} (c:)` });
+        candidates.push({ kind: "exact", clause: `c=${letters}`, label: `Exactly ${combined} (c=)` });
+      } else {
+        candidates.push({ kind: "all", clause: `c:${letters}`, label: `${names[0]} (can be multicolor)` });
+        candidates.push({ kind: "exact", clause: `c=${letters}`, label: `Mono ${names[0]} (c=)` });
+      }
+    } else {
+      candidates.push({ kind: "within", clause: `id:${letters}`, label: `Playable in ${combined} (id:)` });
+      candidates.push({ kind: "exact", clause: `id=${letters}`, label: `Exact ${combined} identity (id=)` });
+      if (multi) {
+        candidates.push({
+          kind: "includes",
+          clause: `id>=${letters}`,
+          label: `Identity includes ${names.join(" + ")} (id>=)`,
+        });
+      }
+    }
+
+    selectors.push({
+      field,
+      letters,
+      options: candidates.map((c) => ({
+        clause: c.clause,
+        label: c.label,
+        query: query.replace(matched, c.clause),
+        current: c.kind === currentKind,
+      })),
+    });
+  }
+
+  return selectors;
+}
+
 const FORMAT_NAMES: Record<string, string> = {
   standard: "Standard",
   modern: "Modern",

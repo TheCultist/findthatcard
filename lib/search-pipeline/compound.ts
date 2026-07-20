@@ -30,6 +30,17 @@ const EMBEDDED_OR_PATTERN =
 const COLOR_NAMES_RE =
   /\b(?:white|blue|black|red|green|colorless|azorius|dimir|rakdos|gruul|selesnya|orzhov|izzet|golgari|boros|simic|esper|grixis|jund|naya|bant|abzan|jeskai|sultai|mardu|temur|four.?color|five.?color|wubrg|mono.?(?:white|blue|black|red|green))\b/i;
 
+/**
+ * Number words + digits. "N or M" between two numbers is a numeric range
+ * ("turn two or three", "2 or 3 mana"), NOT a compound query split point.
+ */
+const NUMBER_WORDS = new Set([
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+  "nine", "ten", "eleven", "twelve",
+]);
+const isNumberish = (word: string): boolean =>
+  /^\d+$/.test(word) || NUMBER_WORDS.has(word);
+
 /** Card-type words on both sides of "or" → type list, not compound split (e.g. "artifacts or enchantments"). */
 const CARD_TYPE_LIST_WORDS = new Set([
   "artifact", "artifacts", "enchantment", "enchantments", "creature",
@@ -85,6 +96,8 @@ export function splitCompoundQuery(query: string): string[] {
     if (COLOR_NAMES_RE.test(wordBefore) && COLOR_NAMES_RE.test(wordAfter)) {
       embeddedRanges.push([co.index, co.index + co[0].length]);
     } else if (CARD_TYPE_LIST_WORDS.has(wb) && CARD_TYPE_LIST_WORDS.has(wa)) {
+      embeddedRanges.push([co.index, co.index + co[0].length]);
+    } else if (isNumberish(wb) && isNumberish(wa)) {
       embeddedRanges.push([co.index, co.index + co[0].length]);
     }
   }

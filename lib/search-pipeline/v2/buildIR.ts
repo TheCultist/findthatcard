@@ -60,6 +60,34 @@ function slugify(raw: string): string {
 
 const COLOR_LETTERS = /[^wubrgc]/g;
 
+// Oracle verbs whose subject-verb agreement varies across card wordings
+// ("Creatures lose all abilities" vs "…loses all abilities"). A quoted phrase
+// is an exact substring, so o:"lose all abilities" silently misses the
+// inflected form. Splitting the leading verb into its own stem token keeps
+// both AND-ed constraints while matching every inflection (o:"lose" is a
+// substring of "loses").
+const INFLECTABLE_ORACLE_VERBS = new Set([
+  "lose", "gain", "draw", "destroy", "sacrifice", "exile", "return", "discard",
+  "counter", "create", "enter", "deal", "put", "search", "reveal", "shuffle",
+  "tap", "untap", "cast", "die", "fight", "mill", "scry", "attack", "block",
+  "become", "get", "have", "cost", "prevent", "copy", "trigger",
+]);
+
+/**
+ * "lose all abilities" → ["lose", "all abilities"]; "loses all abilities" →
+ * ["lose", "all abilities"]; "whenever you cast" → unchanged.
+ * ponytail: first-word-only check — a verb mid-phrase ("creatures lose all
+ * abilities") stays quoted; extend to a scan if such extractions show up.
+ */
+function splitInflectedVerbPhrase(phrase: string): string[] {
+  const words = phrase.split(/\s+/);
+  if (words.length < 2) return [phrase];
+  const first = words[0].toLowerCase();
+  const stem = first.endsWith("s") && !first.endsWith("ss") ? first.slice(0, -1) : first;
+  if (!INFLECTABLE_ORACLE_VERBS.has(stem)) return [phrase];
+  return [stem, words.slice(1).join(" ")];
+}
+
 function emptyIR(naturalQuery: string): SearchPipelineIR {
   return {
     naturalQuery,
@@ -145,7 +173,18 @@ export async function buildIRFromExtraction(
     if (letters) {
       const field = extraction.colors.mode === "color" ? "c" : "id";
       const op = COLOR_OPS.has(extraction.colors.op) ? extraction.colors.op : ":";
-      must.push({ value: `${field}${op}${letters}`, source: "phase1:color" });
+      // combine "or" = the letters are alternatives ("red or green") → OR-group
+      // per letter. Anything else (missing/garbage — the AI may ignore the enum)
+      // defaults to "and": one combined token, the historical behavior.
+      const uniqueLetters = [...new Set(letters)];
+      if (extraction.colors.combine === "or" && uniqueLetters.length > 1) {
+        must.push({
+          value: `(${uniqueLetters.map((l) => `${field}${op}${l}`).join(" or ")})`,
+          source: "phase1:color",
+        });
+      } else {
+        must.push({ value: `${field}${op}${letters}`, source: "phase1:color" });
+      }
     }
   }
 
@@ -252,14 +291,20 @@ export async function buildIRFromExtraction(
     must.push({ value: `(${fnTags.join(" or ")})`, source: "phase1:function" });
   }
 
-  // --- Oracle phrases ---
+  // --- Oracle phrases (verb-initial phrases split so inflections still match) ---
   for (const phrase of extraction.oraclePhrases) {
     const p = phrase.trim().replace(/^["']|["']$/g, "");
-    if (p) must.push({ value: `o:"${p}"`, source: "phase1:oracle" });
+    if (!p) continue;
+    for (const part of splitInflectedVerbPhrase(p)) {
+      must.push({ value: `o:"${part}"`, source: "phase1:oracle" });
+    }
   }
   for (const phrase of extraction.negatedOraclePhrases) {
     const p = phrase.trim().replace(/^["']|["']$/g, "");
-    if (p) mustNot.push({ value: `o:"${p}"`, source: "phase1:oracle" });
+    if (!p) continue;
+    for (const part of splitInflectedVerbPhrase(p)) {
+      mustNot.push({ value: `o:"${part}"`, source: "phase1:oracle" });
+    }
   }
 
   // --- Archetypes (validated; routed through resolvedFragments so Phase 3 injects them) ---

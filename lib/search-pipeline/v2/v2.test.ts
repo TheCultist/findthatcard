@@ -11,6 +11,7 @@
 import assert from "node:assert/strict";
 import { ensureCatalogIndex } from "@/lib/scryfall/catalog-index";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
+import { splitCompoundQuery } from "@/lib/search-pipeline/compound";
 import { buildIRFromExtraction } from "@/lib/search-pipeline/v2/buildIR";
 import { recognizeCardNames, runPrePass } from "@/lib/search-pipeline/v2/prePass";
 import type { V2Extraction } from "@/lib/search-pipeline/v2/schema";
@@ -55,7 +56,7 @@ async function main(): Promise<void> {
   {
     const ir = await buildIRFromExtraction(
       baseExtraction({
-        colors: { mode: "color", op: ":", letters: "r" },
+        colors: { mode: "color", op: ":", letters: "r", combine: "and" },
         typesAll: ["creatures"],
         subtypes: ["dragons"],
         supertypes: ["legendary"],
@@ -90,6 +91,46 @@ async function main(): Promise<void> {
     check("enumerated types OR-grouped", eq.includes("(t:instant or t:sorcery)"), eq);
   }
 
+  // 1a2. Compound split leaves numeric ranges intact — "turn two or three" / "2 or 3"
+  // is one range, not two branches. A real top-level "or" still splits.
+  {
+    check(
+      "number-word range not split",
+      splitCompoundQuery("gruul creatures I can play on turn two or three in commander").length === 1
+    );
+    check(
+      "digit range not split",
+      splitCompoundQuery("creatures I can play on turn 2 or 3 in commander").length === 1
+    );
+    check(
+      "genuine compound still splits",
+      splitCompoundQuery("cheap red removal or blue counterspells for modern").length === 2
+    );
+  }
+
+  // 1b2. Color combine: "or" letters are alternatives; "and" stays one token; a
+  // missing/garbage combine (Claude ignores enums) defaults to the AND token.
+  {
+    const orColors = await buildIRFromExtraction(
+      baseExtraction({ colors: { mode: "color", op: ":", letters: "rg", combine: "or" } }),
+      "red or green sacrifice ability"
+    );
+    check("color alternatives OR-grouped", assembleQueryFromIR(orColors).includes("(c:r or c:g)"), assembleQueryFromIR(orColors));
+
+    const andColors = await buildIRFromExtraction(
+      baseExtraction({ colors: { mode: "identity", op: ":", letters: "rg", combine: "and" } }),
+      "gruul cards"
+    );
+    check("color AND stays combined", assembleQueryFromIR(andColors).includes("id:rg"), assembleQueryFromIR(andColors));
+
+    const badCombine = await buildIRFromExtraction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      baseExtraction({ colors: { mode: "color", op: ":", letters: "wu", combine: "maybe" as any } }),
+      "white blue cards"
+    );
+    check("garbage combine defaults to AND", assembleQueryFromIR(badCombine).includes("c:wu"), assembleQueryFromIR(badCombine));
+  }
+
   // 1c. Rarity sets and malformed AI shapes (Claude ignores the schema) are handled defensively.
   {
     const multi = await buildIRFromExtraction(
@@ -114,6 +155,32 @@ async function main(): Promise<void> {
     );
     const bq = assembleQueryFromIR(bad);
     check("malformed stat/rarity dropped", !bq.includes("mv") && !/r[:<>]/.test(bq), bq);
+  }
+
+  // 1d. Verb-initial oracle phrases are split into stem + rest so quoted
+  // substrings don't miss inflections ("lose all abilities" vs "loses…").
+  {
+    const ir = await buildIRFromExtraction(
+      baseExtraction({ oraclePhrases: ["loses all abilities"] }),
+      "strip creature of abilities"
+    );
+    const q = assembleQueryFromIR(ir);
+    check("verb phrase split to stem", q.includes('o:"lose"') && q.includes('o:"all abilities"'), q);
+    check("inflected quoted phrase gone", !q.includes('o:"loses all abilities"'), q);
+
+    const trigger = await buildIRFromExtraction(
+      baseExtraction({ oraclePhrases: ["whenever you cast"] }),
+      "whenever you cast a spell"
+    );
+    const tq = assembleQueryFromIR(trigger);
+    check("non-verb-initial phrase kept whole", tq.includes('o:"whenever you cast"'), tq);
+
+    const negated = await buildIRFromExtraction(
+      baseExtraction({ negatedOraclePhrases: ["gains life"] }),
+      "cards that don't gain life"
+    );
+    const nq = assembleQueryFromIR(negated);
+    check("negated verb phrase split", nq.includes('-o:"gain"') && nq.includes('-o:"life"'), nq);
   }
 
   // 2. Invalid types / subtypes are dropped, not fuzzy-corrected.
