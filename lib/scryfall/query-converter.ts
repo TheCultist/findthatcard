@@ -11,6 +11,7 @@ import {
 } from "@/lib/strategies/oracletagStrategies";
 import { hasCommanderDeckContext } from "@/lib/commander-context";
 import { maskSynergyWithComplements } from "@/lib/search-pipeline/synergyPartnerMask";
+import { isPauperCommanderContext, SCRYFALL_FORMATS, stripRedundantTypesForCommanderEligible } from "@/lib/scryfall/formats";
 import { escapeRegex } from "@/lib/utils/text";
 
 let openaiClient: OpenAI | null = null;
@@ -34,16 +35,7 @@ const MAX_SCRYFALL_QUERY_LENGTH = 1200;
 export const PREFER_BEST_PREFIX = "prefer:best "; // 12 characters
 export const EFFECTIVE_MAX_QUERY_LENGTH =
   MAX_SCRYFALL_QUERY_LENGTH - PREFER_BEST_PREFIX.length; // 588 characters
-const FORMAT_NAMES = [
-  "legacy",
-  "modern",
-  "standard",
-  "pioneer",
-  "vintage",
-  "pauper",
-  "commander",
-  "brawl",
-] as const;
+const FORMAT_NAMES = SCRYFALL_FORMATS;
 
 function normalizeFormatFunctionTags(query: string): string {
   return FORMAT_NAMES.reduce((acc, format) => {
@@ -275,6 +267,43 @@ function normalizeManaCostSymbolIntent(naturalQuery: string, query: string): str
 
 function normalizeCommanderIntent(naturalQuery: string, query: string): string {
   const lower = naturalQuery.toLowerCase();
+  const pdh = isPauperCommanderContext(naturalQuery, query);
+  // Strip PDH format phrasing before detecting "commanders" so "pauper commander
+  // legal removal" is treated as format-only, not commander-eligibility.
+  const withoutPdhFormat = lower
+    .replace(/\bpauper\s*(?:edh|commander)\b/gi, " ")
+    .replace(/\bp(?:e)?dh\b/gi, " ")
+    .replace(/\bpaupercommander\b/gi, " ")
+    .replace(/\bpaupermmander\b/gi, " ");
+  const wantsCommanders =
+    /\b(commanders?|commander cards?|commander creatures?|can be commanders?)\b/i.test(
+      pdh ? withoutPdhFormat : lower
+    ) &&
+    !hasCommanderDeckContext(naturalQuery) &&
+    // Exclude mechanic phrases — "commander's tax/damage/ninjutsu/eminence" refers to
+    // game mechanics, not commander creatures.
+    !/\bcommander[''s]*\s+(?:tax|damage|ninjutsu|eminence|storm)\b/i.test(lower);
+
+  // Pauper EDH / PDH is one format (f:paupercommander). Never split into f:pauper +
+  // f:commander, and use is:paupercommander (not is:commander) for commanders.
+  if (pdh) {
+    let updated = query
+      .replace(/\bf:pauper\b/gi, "f:paupercommander")
+      .replace(/\bf:commander\b/gi, "")
+      .replace(/\bis:commander\b/gi, "");
+    if (!/\bf:paupercommander\b/i.test(updated)) {
+      updated = `${updated} f:paupercommander`;
+    }
+    if (wantsCommanders) {
+      if (!/\bis:paupercommander\b/i.test(updated)) {
+        updated = `${updated} is:paupercommander`;
+      }
+    } else {
+      updated = updated.replace(/\bis:paupercommander\b/gi, "");
+    }
+    return normalizeWhitespace(updated);
+  }
+
   const wantsCommanderFormat =
     /\b(commander[-\s]?legal|legal\s+in\s+commander|for\s+commander|commander\s+format|in\s+commander|edh[-\s]?legal|legal\s+in\s+edh|for\s+edh|edh\s+format|in\s+edh)\b/i.test(
       lower
@@ -282,14 +311,11 @@ function normalizeCommanderIntent(naturalQuery: string, query: string): string {
     (/\blegal\b/i.test(lower) && /\bcommander\b/i.test(lower));
   const multipleFormats = (query.match(/\bf:[a-z]+\b/gi) || []).length >= 2;
   const myCommanderDeck = hasCommanderDeckContext(naturalQuery);
-  const wantsCommanders =
+  const wantsCommanderCreatures =
     !multipleFormats &&
-    /\b(commanders?|commander cards?|commander creatures?|can be commanders?)\b/i.test(lower) &&
+    wantsCommanders &&
     !wantsCommanderFormat &&
-    !myCommanderDeck &&
-    // Exclude mechanic phrases — "commander's tax/damage/ninjutsu/eminence" refers to
-    // game mechanics, not commander creatures.
-    !/\bcommander[''s]*\s+(?:tax|damage|ninjutsu|eminence|storm)\b/i.test(lower);
+    !myCommanderDeck;
 
   let updated = query;
 
@@ -301,7 +327,7 @@ function normalizeCommanderIntent(naturalQuery: string, query: string): string {
     return normalizeWhitespace(updated);
   }
 
-  if (wantsCommanders) {
+  if (wantsCommanderCreatures) {
     if (/\bf:commander\b/i.test(updated) && !/\bis:commander\b/i.test(updated)) {
       updated = updated.replace(/\bf:commander\b/gi, "is:commander");
     }
@@ -1963,6 +1989,8 @@ export function finalizeScryfallQuery(args: {
   normalizedQuery = dedupeTokens(normalizedQuery);
   // Second pass: dedupeTokens preserves "(", "or", ")" triples; strip empty (or) groups again.
   normalizedQuery = normalizeOrphanedOr(normalizedQuery);
+  // is:commander (and siblings) already imply type/supertype — drop redundant filters.
+  normalizedQuery = stripRedundantTypesForCommanderEligible(normalizedQuery);
 
   if (!normalizedQuery) {
     throw new Error("Failed to generate Scryfall query (empty response)");

@@ -1,3 +1,4 @@
+import { SCRYFALL_FORMAT_PROMPT_LIST } from "@/lib/scryfall/formats";
 import { getArchetypeMenu, type ArchetypeMenuEntry } from "@/lib/scryfall/query-converter";
 
 export type ExtractPromptArgs = {
@@ -51,7 +52,7 @@ export function buildExtractPrompt(args: ExtractPromptArgs): string {
     "- stats: mv=mana value/cmc, pow=power, tou=toughness, loy=loyalty. Map colloquials: cheap->mv<=2, expensive->mv>=6, big->pow>=5, small creatures->pow<=1.",
     "- rarity: codes is a list of c/u/r/m. 'common and uncommon' -> op ':' codes ['c','u']; 'rare' -> op ':' codes ['r']; 'uncommon or better' -> op '>=' codes ['u']. year: 4-digit printed year with a comparison op.",
     "- keywords: evergreen/named ability keywords the card ITSELF has (flying, lifelink, deathtouch, ward, flash...). NOT keywords it grants to others (that is oraclePhrases).",
-    "- format: standard, modern, legacy, vintage, pioneer, pauper, commander, brawl.",
+    `- format: one Scryfall format slug from this list only: ${SCRYFALL_FORMAT_PROMPT_LIST}. Compound names are ONE format — never emit two. "pauper edh" / "pauper commander" / "pdh" / "pedh" / "paupercommander" → paupercommander (NOT pauper + commander). "edh" alone → commander. "penny dreadful" → penny; "duel commander" → duel; "old school" / "93/94" → oldschool; "future standard" → future; "standard brawl" → standardbrawl; "competitive brawl" → competitivebrawl; "tiny leaders reborn" → tlr. For paupercommander commanders, still set format to paupercommander (do NOT force legendary — PDH commanders are uncommon creatures, not legendary). When searching for cards that can be a commander / brawler / oathbreaker / duel commander / pauper commander, do NOT put creature or legendary in typesAll/supertypes — eligibility is: flags already imply those.`,
     "- set: a set name or 3-letter code if the user constrained to a set/edition.",
     "- artist: illustrator name only.",
     "- artSubjects: things literally DEPICTED in the card art — ONLY when the user mentions art/illustration/depiction/artwork. Never use art for mechanics or types.",

@@ -184,6 +184,42 @@ async function main(): Promise<void> {
     check("negated verb phrase split", nq.includes('-o:"gain"') && nq.includes('-o:"life"'), nq);
   }
 
+  // 1e. Format allowlist + aliases (pauper edh → paupercommander; unknown dropped).
+  {
+    const pdh = await buildIRFromExtraction(
+      baseExtraction({ format: "pauper edh", keywords: ["double strike"] }),
+      "pauper edh legal commanders with double strike"
+    );
+    const pq = assembleQueryFromIR(pdh);
+    check("pauper edh → f:paupercommander", pq.includes("f:paupercommander"), pq);
+    check("pauper edh does not emit f:pauper", !/\bf:pauper\b/.test(pq), pq);
+    check("pauper edh does not emit f:commander", !/\bf:commander\b/.test(pq), pq);
+
+    const alias = await buildIRFromExtraction(
+      baseExtraction({ format: "pdh" }),
+      "pdh legal cards"
+    );
+    check("pdh alias → f:paupercommander", assembleQueryFromIR(alias).includes("f:paupercommander"));
+
+    const pedh = await buildIRFromExtraction(
+      baseExtraction({ format: "pedh" }),
+      "pedh legal cards"
+    );
+    check("pedh alias → f:paupercommander", assembleQueryFromIR(pedh).includes("f:paupercommander"));
+
+    const typo = await buildIRFromExtraction(
+      baseExtraction({ format: "paupermmander" }),
+      "paupermmander cards"
+    );
+    check("paupermmander typo → f:paupercommander", assembleQueryFromIR(typo).includes("f:paupercommander"));
+
+    const unknown = await buildIRFromExtraction(
+      baseExtraction({ format: "notarealformat" }),
+      "notarealformat cards"
+    );
+    check("unknown format dropped", !/\bf:/.test(assembleQueryFromIR(unknown)), assembleQueryFromIR(unknown));
+  }
+
   // 2. Invalid types / subtypes are dropped, not fuzzy-corrected.
   {
     const ir = await buildIRFromExtraction(

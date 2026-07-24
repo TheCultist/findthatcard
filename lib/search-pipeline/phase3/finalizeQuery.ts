@@ -3,6 +3,7 @@ import { applyKeywordFiltersFromNaturalQuery } from "@/lib/mtg-keywords";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
 import { Phase3Result, SearchPipelineIR } from "@/lib/search-pipeline/types";
 import { getCatalog } from "@/lib/scryfall/catalogs";
+import { isPauperCommanderContext, stripRedundantTypesForCommanderEligible } from "@/lib/scryfall/formats";
 import {
   EFFECTIVE_MAX_QUERY_LENGTH,
   OPPONENT_BURN_DAMAGE_FUNCTION_TAGS,
@@ -83,16 +84,27 @@ function applyDefaultGameFilter(query: string): string {
 
 function ensureCommanderCreatureFilter(naturalQuery: string, scryfallQuery: string): string {
   if (hasCommanderDeckContext(naturalQuery)) return scryfallQuery;
+  if (/\bis:paupercommander\b/i.test(scryfallQuery)) return scryfallQuery;
   if (/\bis:commander\b/i.test(scryfallQuery)) return scryfallQuery;
   // "for commander"/"in commander" means format context, not commander creatures.
   if (/\b(for|in)\s+commanders?\b/i.test(naturalQuery)) return scryfallQuery;
   // Commander mechanic phrases don't mean "find commander creatures".
   if (/\bcommander[''s]*\s+(?:tax|damage|ninjutsu|eminence|storm)\b/i.test(naturalQuery)) return scryfallQuery;
+  // Ignore "pauper commander" / PDH format phrasing when detecting commander eligibility.
+  const withoutPdhFormat = naturalQuery
+    .replace(/\bpauper\s*(?:edh|commander)\b/gi, " ")
+    .replace(/\bp(?:e)?dh\b/gi, " ")
+    .replace(/\bpaupercommander\b/gi, " ")
+    .replace(/\bpaupermmander\b/gi, " ");
   const wantsCommanderCreature =
     /\b(?:a|an|my)\s+(?:easy\s+)?commander\b|\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b|\bcan\s+be\s+commanders?\b|\bcommanders\b/i.test(
-      naturalQuery
+      withoutPdhFormat
     );
   if (!wantsCommanderCreature) return scryfallQuery;
+  // PDH commanders use is:paupercommander, not is:commander.
+  if (isPauperCommanderContext(naturalQuery, scryfallQuery)) {
+    return `${scryfallQuery.trim()} is:paupercommander`.trim();
+  }
   return `${scryfallQuery.trim()} is:commander`.trim();
 }
 
@@ -909,6 +921,8 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     query = await applyKeywordFiltersFromNaturalQuery(ir.naturalQuery, query);
     query = applyCommanderContextFromNaturalQuery(ir.naturalQuery, query);
     query = ensureCommanderCreatureFilter(ir.naturalQuery, query);
+    // ensureCommander may add is:commander after finalizeScryfallQuery — strip again.
+    query = stripRedundantTypesForCommanderEligible(query);
     query = removeTokenTypeFiltersForTokenGenerationIntent(ir.naturalQuery, query);
     query = removeDamageTargetTypeFilters(ir.naturalQuery, query);
     query = removeArchetypeTargetTypeFilters(ir.naturalQuery, query);

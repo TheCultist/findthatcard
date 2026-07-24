@@ -7,6 +7,11 @@ import {
   isScryfallQuery,
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
+import {
+  COMMANDER_ELIGIBLE_IS_FLAGS,
+  COMMANDER_FORMATS,
+  COMMANDER_FORMAT_TO_ELIGIBLE_IS,
+} from "@/lib/scryfall/formats";
 
 type FinalizeTestCase = {
   name: string;
@@ -40,7 +45,7 @@ const finalizeCases: FinalizeTestCase[] = [
     name: "strips o:fun and o:play when query is casual playgroup talk",
     naturalQuery: "casual commander pod zz",
     rawQuery: "o:casual o:fun o:play t:creature",
-    expected: "t:creature is:commander",
+    expected: "is:commander",
   },
   {
     name: "strips o:combo and o:\"combo with\" for colloquial synergy phrasing",
@@ -268,6 +273,78 @@ const finalizeCases: FinalizeTestCase[] = [
     expected: "function:impact-effect",
   },
   {
+    name: "pauper edh commanders → f:paupercommander is:paupercommander (not f:pauper+f:commander)",
+    naturalQuery: "pauper edh legal commanders with double strike",
+    rawQuery: "f:pauper kw:double-strike",
+    expected: "f:paupercommander kw:double-strike is:paupercommander",
+  },
+  {
+    name: "pauper commander format-only → f:paupercommander without is:paupercommander",
+    naturalQuery: "pauper commander legal blue cards",
+    rawQuery: "c:u",
+    expected: "c:u f:paupercommander",
+  },
+  {
+    name: "pdh alias → f:paupercommander",
+    naturalQuery: "pdh legal flying creatures",
+    rawQuery: "t:creature kw:flying",
+    expected: "t:creature kw:flying f:paupercommander",
+  },
+  {
+    name: "pedh alias → f:paupercommander",
+    naturalQuery: "pedh legal flying creatures",
+    rawQuery: "t:creature kw:flying",
+    expected: "t:creature kw:flying f:paupercommander",
+  },
+  {
+    name: "commander legal still uses f:commander (no PDH false positive)",
+    naturalQuery: "commander legal blue cards",
+    rawQuery: "c:u",
+    expected: "c:u f:commander",
+  },
+  {
+    name: "normalizes function:paupercommander to f:paupercommander",
+    naturalQuery: "zz",
+    rawQuery: "function:paupercommander kw:flying",
+    expected: "f:paupercommander kw:flying",
+  },
+  {
+    name: "strips redundant t:creature t:legendary when is:commander present",
+    naturalQuery: "commanders with flying",
+    rawQuery: "t:creature t:legendary kw:flying is:commander",
+    expected: "kw:flying is:commander",
+  },
+  {
+    name: "strips redundant types for is:paupercommander",
+    naturalQuery: "pauper edh legal commanders with double strike",
+    rawQuery: "t:creature t:legendary kw:double-strike f:paupercommander is:paupercommander",
+    expected: "kw:double-strike f:paupercommander is:paupercommander",
+  },
+  {
+    name: "strips redundant types for is:oathbreaker",
+    naturalQuery: "zz",
+    rawQuery: "t:creature t:legendary is:oathbreaker",
+    expected: "is:oathbreaker",
+  },
+  {
+    name: "strips redundant types for is:brawler",
+    naturalQuery: "zz",
+    rawQuery: "t:creature t:legendary is:brawler",
+    expected: "is:brawler",
+  },
+  {
+    name: "strips redundant types for is:duelcommander",
+    naturalQuery: "zz",
+    rawQuery: "t:creature t:legendary is:duelcommander",
+    expected: "is:duelcommander",
+  },
+  {
+    name: "keeps t:creature when no commander-eligible is: flag",
+    naturalQuery: "flying creatures",
+    rawQuery: "t:creature kw:flying",
+    expected: "t:creature kw:flying",
+  },
+  {
     name: "truncates overly long query",
     naturalQuery: "long query",
     rawQuery: "a".repeat(30),
@@ -390,12 +467,48 @@ function runTruncateTests() {
   return passed;
 }
 
+function runCommanderFormatCoverageTests() {
+  let passed = 0;
+  try {
+    const expectedFormats = [
+      "commander",
+      "oathbreaker",
+      "standardbrawl",
+      "brawl",
+      "competitivebrawl",
+      "paupercommander",
+      "duel",
+      "predh",
+      "tlr",
+    ];
+    assert.deepEqual([...COMMANDER_FORMATS].sort(), [...expectedFormats].sort());
+    assert.deepEqual(
+      [...COMMANDER_ELIGIBLE_IS_FLAGS].sort(),
+      ["brawler", "commander", "duelcommander", "oathbreaker", "paupercommander"].sort()
+    );
+    for (const fmt of COMMANDER_FORMATS) {
+      assert.ok(
+        COMMANDER_ELIGIBLE_IS_FLAGS.includes(COMMANDER_FORMAT_TO_ELIGIBLE_IS[fmt]),
+        `${fmt} maps to an is: flag in COMMANDER_ELIGIBLE_IS_FLAGS`
+      );
+    }
+    console.log("[PASS] commander formats cover all command-zone formats + is: flags");
+    passed += 1;
+  } catch (error) {
+    console.error("[FAIL] commander format coverage");
+    console.error(error);
+    throw error;
+  }
+  return passed;
+}
+
 function run() {
   const passed =
     runFinalizeTests() +
     runIsQueryTests() +
     runHateMagnetTagHelperTests() +
-    runTruncateTests();
+    runTruncateTests() +
+    runCommanderFormatCoverageTests();
   console.log(`query-converter tests passed (${passed} total)`);
 }
 

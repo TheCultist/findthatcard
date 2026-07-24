@@ -14,6 +14,7 @@ import {
   matchSubtype,
   matchSupertype,
 } from "@/lib/scryfall/catalog-index";
+import { normalizeFormatSlug } from "@/lib/scryfall/formats";
 import { fetchCardByName } from "@/lib/scryfall/lookup";
 import { lookupArchetypeTags } from "@/lib/scryfall/query-converter";
 import { validateTaggerTag } from "@/lib/tagger/validation";
@@ -252,9 +253,9 @@ export async function buildIRFromExtraction(
     if (slug) must.push({ value: `kw:${slug}`, source: "phase1:keyword" });
   }
 
-  // --- Format ---
+  // --- Format (allowlisted Scryfall slugs; aliases like "pauper edh" → paupercommander) ---
   if (extraction.format) {
-    const fmt = slugify(extraction.format);
+    const fmt = normalizeFormatSlug(extraction.format);
     if (fmt) must.push({ value: `f:${fmt}`, source: "phase1:format" });
   }
 
