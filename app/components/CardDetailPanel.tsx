@@ -17,14 +17,22 @@ import { getCardTraderLink, getCardTraderHomepageLink } from "@/lib/cardtrader/l
 interface CardDetailPanelProps {
   card: CardResult;
   onClose: () => void;
-  /** Position of `card` within the result set, used for the counter and animations. */
-  index?: number;
+  /** 1-based position of `card` across the whole result set, shown in the counter. */
+  position?: number;
   total?: number;
+  /**
+   * Whether a step is available in each direction. Owned by the parent because a
+   * step may cross a page boundary rather than move within the loaded page.
+   */
+  hasPrev?: boolean;
+  hasNext?: boolean;
   onPrev?: () => void;
   onNext?: () => void;
   /** Ids of the neighbouring cards, prefetched so navigation feels instant. */
   prevCardId?: string | null;
   nextCardId?: string | null;
+  /** True while the next/previous page of results is being fetched. */
+  isNavigating?: boolean;
 }
 
 /**
@@ -162,12 +170,15 @@ function CardFaceView({ face }: {
 export default function CardDetailPanel({
   card,
   onClose,
-  index = 0,
+  position = 1,
   total = 1,
+  hasPrev = false,
+  hasNext = false,
   onPrev,
   onNext,
   prevCardId = null,
   nextCardId = null,
+  isNavigating = false,
 }: CardDetailPanelProps) {
   const [detailData, setDetailData] = useState<CardDetailData | null>(
     () => detailCache.get(card.id) ?? null
@@ -192,8 +203,6 @@ export default function CardDetailPanel({
   const dragFromHandle = useRef(false);
   const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const hasPrev = Boolean(onPrev) && index > 0;
-  const hasNext = Boolean(onNext) && index < total - 1;
   const canNavigate = hasPrev || hasNext;
 
   useEffect(() => {
@@ -208,12 +217,14 @@ export default function CardDetailPanel({
 
   const navigate = useCallback(
     (direction: -1 | 1) => {
+      // Ignore input while a page is in flight so a fast swiper cannot queue jumps.
+      if (isNavigating) return;
       if (direction === -1 ? !hasPrev : !hasNext) return;
       setNavDirection(direction);
       if (direction === -1) onPrev?.();
       else onNext?.();
     },
-    [hasPrev, hasNext, onPrev, onNext]
+    [isNavigating, hasPrev, hasNext, onPrev, onNext]
   );
 
   const handleDragStart = useCallback((e: React.TouchEvent) => {
@@ -460,7 +471,7 @@ export default function CardDetailPanel({
             <div className="flex flex-shrink-0 items-center overflow-hidden rounded-xl border border-border bg-surface-muted">
               <button
                 onClick={() => navigate(-1)}
-                disabled={!hasPrev}
+                disabled={!hasPrev || isNavigating}
                 className="p-2 text-muted transition-colors hover:text-foreground hover:bg-accent-muted disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted"
                 aria-label="Previous card"
                 title="Previous card (←)"
@@ -470,7 +481,7 @@ export default function CardDetailPanel({
               <span className="w-px self-stretch bg-border" aria-hidden="true" />
               <button
                 onClick={() => navigate(1)}
-                disabled={!hasNext}
+                disabled={!hasNext || isNavigating}
                 className="p-2 text-muted transition-colors hover:text-foreground hover:bg-accent-muted disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted"
                 aria-label="Next card"
                 title="Next card (→)"
@@ -490,8 +501,20 @@ export default function CardDetailPanel({
           </div>
 
           {canNavigate && (
-            <span className="flex-shrink-0 text-xs tabular-nums text-muted-soft" aria-live="polite">
-              {index + 1} / {total}
+            <span
+              className="flex flex-shrink-0 items-center gap-1.5 text-xs tabular-nums text-muted-soft"
+              aria-live="polite"
+            >
+              {isNavigating && (
+                <span
+                  className="h-3 w-3 animate-spin rounded-full border-2 border-border border-t-accent"
+                  aria-hidden="true"
+                />
+              )}
+              <span>
+                {position.toLocaleString()} / {total.toLocaleString()}
+              </span>
+              <span className="sr-only">{isNavigating ? "Loading more results" : ""}</span>
             </span>
           )}
 
@@ -505,8 +528,10 @@ export default function CardDetailPanel({
         </div>
 
         <div
-          key={`${index}-${card.id}`}
-          className={`flex-1 overflow-y-auto overscroll-contain ${
+          key={`${position}-${card.id}`}
+          className={`flex-1 overflow-y-auto overscroll-contain transition-opacity ${
+            isNavigating ? "opacity-60" : ""
+          } ${
             navDirection === 1
               ? "animate-card-in-right"
               : navDirection === -1

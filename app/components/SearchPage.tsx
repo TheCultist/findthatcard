@@ -27,6 +27,12 @@ import BugReportButton from "@/app/components/BugReportButton";
 
 type SearchOptions = {
   updateUrl?: boolean;
+  /**
+   * Set for pagination, which re-runs the same query rather than starting a new
+   * one. Without it, landing back on page 1 would blank the grid, reset the
+   * edited Scryfall query, and tear down an open card detail panel.
+   */
+  keepResults?: boolean;
 };
 
 const isSimpleQuery = (value: string) => /^[a-zA-Z0-9 ]+$/.test(value);
@@ -90,6 +96,9 @@ export default function SearchPage() {
   const params = useParams<{ slug?: string | string[] }>();
   const lastUrlQueryRef = useRef("");
   const editableInputRef = useRef<HTMLTextAreaElement | null>(null);
+  /** Set when a page fetch was triggered by stepping past the edge of the panel. */
+  const pendingPanelEdgeRef = useRef<{ page: number; edge: "first" | "last" } | null>(null);
+  const panelOpenRef = useRef(false);
 
   const [query, setQuery] = useState("");
   const [editableQuery, setEditableQuery] = useState("");
@@ -139,9 +148,11 @@ export default function SearchPage() {
           }
         }
 
+        const isNewQuery = page === 1 && !options.keepResults;
+
         setLoading(true);
         setError(null);
-        if (page === 1) {
+        if (isNewQuery) {
           setResults(null);
           setEditableQuery("");
           setSourceQuery(searchQuery);
@@ -161,7 +172,7 @@ export default function SearchPage() {
           if (!response.ok) {
             const errorData = data as ErrorResponse;
             setError(formatErrorMessage(errorData.error ?? "An error occurred"));
-            if (errorData.scryfallQuery && page === 1) {
+            if (errorData.scryfallQuery && isNewQuery) {
               setEditableQuery(errorData.scryfallQuery);
             }
             return;
@@ -170,7 +181,7 @@ export default function SearchPage() {
           setResults(data as SearchResponse);
           setCurrentPage(data.page);
           setPageInput(String(data.page));
-          if (page === 1) {
+          if (isNewQuery) {
             setEditableQuery(data.scryfallQuery);
           }
         } catch (err) {
@@ -255,14 +266,17 @@ export default function SearchPage() {
     });
   };
 
-  const handlePageChange = (newPage: number) => {
+  /** Returns whether the page change was actually started. */
+  const handlePageChange = (newPage: number): boolean => {
     if (!results || newPage < 1 || (newPage > currentPage && !results.has_more)) {
-      return;
+      return false;
     }
     const searchQuery = editableQuery || query;
-    if (searchQuery) {
-      handleSearch(searchQuery, newPage, { updateUrl: false });
+    if (!searchQuery) {
+      return false;
     }
+    handleSearch(searchQuery, newPage, { updateUrl: false, keepResults: true });
+    return true;
   };
 
   const handleJumpToPage = () => {
@@ -287,6 +301,9 @@ export default function SearchPage() {
     if (results && !loading) {
       // Small delay to ensure DOM is updated before scrolling
       setTimeout(() => {
+        // A page fetched by stepping through the detail panel must not yank the
+        // page behind it around; the user is looking at the panel, not the grid.
+        if (panelOpenRef.current) return;
         const queryElement = document.getElementById("query-display");
         if (queryElement) {
           queryElement.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -302,14 +319,65 @@ export default function SearchPage() {
     }
   }, [results, loading]);
 
-  // A new result set (new search or new page) invalidates the open card's position.
+  // A new result set normally invalidates the open card's position and closes the
+  // panel — unless the page was fetched by stepping past the edge of the previous
+  // one, in which case we land on the card that continues the sequence.
   useEffect(() => {
+    const pending = pendingPanelEdgeRef.current;
+    pendingPanelEdgeRef.current = null;
+
+    if (!results || results.cards.length === 0) {
+      setSelectedIndex(null);
+      return;
+    }
+    if (pending && pending.page === results.page) {
+      setSelectedIndex(pending.edge === "first" ? 0 : results.cards.length - 1);
+      return;
+    }
     setSelectedIndex(null);
   }, [results]);
 
   const resultCards = results?.cards;
   const selectedCard =
     selectedIndex !== null ? resultCards?.[selectedIndex] ?? null : null;
+
+  panelOpenRef.current = selectedCard !== null;
+
+  const canStepBack =
+    selectedIndex !== null && !!results && (selectedIndex > 0 || results.page > 1);
+  const canStepForward =
+    selectedIndex !== null && !!results && !!resultCards &&
+    (selectedIndex < resultCards.length - 1 || results.has_more);
+
+  /** Move one card forward/back, crossing into the adjacent page when needed. */
+  const stepCard = (direction: -1 | 1) => {
+    if (selectedIndex === null || !results || !resultCards || loading) {
+      return;
+    }
+    const target = selectedIndex + direction;
+    if (target >= 0 && target < resultCards.length) {
+      setSelectedIndex(target);
+      return;
+    }
+    // Past the edge of the loaded page: pull the adjacent one and land on the
+    // card that continues the sequence.
+    const nextPage = direction === 1 ? results.page + 1 : results.page - 1;
+    if (direction === 1 ? !results.has_more : nextPage < 1) {
+      return;
+    }
+    pendingPanelEdgeRef.current = {
+      page: nextPage,
+      edge: direction === 1 ? "first" : "last",
+    };
+    if (!handlePageChange(nextPage)) {
+      pendingPanelEdgeRef.current = null;
+    }
+  };
+
+  const closePanel = () => {
+    pendingPanelEdgeRef.current = null;
+    setSelectedIndex(null);
+  };
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -887,18 +955,19 @@ export default function SearchPage() {
 
       <CookieBanner />
 
-      {selectedCard && selectedIndex !== null && resultCards && (
+      {selectedCard && selectedIndex !== null && resultCards && results && (
         <CardDetailPanel
           card={selectedCard}
-          index={selectedIndex}
-          total={resultCards.length}
-          onClose={() => setSelectedIndex(null)}
-          onPrev={() => setSelectedIndex((i) => Math.max(0, (i ?? 0) - 1))}
-          onNext={() =>
-            setSelectedIndex((i) => Math.min(resultCards.length - 1, (i ?? 0) + 1))
-          }
+          position={(results.page - 1) * results.per_page + selectedIndex + 1}
+          total={results.total}
+          hasPrev={canStepBack}
+          hasNext={canStepForward}
+          onClose={closePanel}
+          onPrev={() => stepCard(-1)}
+          onNext={() => stepCard(1)}
           prevCardId={resultCards[selectedIndex - 1]?.id ?? null}
           nextCardId={resultCards[selectedIndex + 1]?.id ?? null}
+          isNavigating={loading}
         />
       )}
 
