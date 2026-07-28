@@ -10,7 +10,7 @@ import {
   QueueListIcon,
   ChevronDownIcon,
 } from "@heroicons/react/24/outline";
-import { SearchResponse, ErrorResponse, CardResult } from "@/types/scryfall";
+import { SearchResponse, ErrorResponse } from "@/types/scryfall";
 import { getRandomExamples } from "@/lib/example-queries";
 import { getRandomProTip } from "@/lib/pro-tips";
 import CookieBanner from "@/app/components/CookieBanner";
@@ -102,7 +102,7 @@ export default function SearchPage() {
   const [proTip, setProTip] = useState("");
   const [sourceQuery, setSourceQuery] = useState("");
   const [isEditingQuery, setIsEditingQuery] = useState(false);
-  const [selectedCard, setSelectedCard] = useState<CardResult | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [faqExpandedIndex, setFaqExpandedIndex] = useState<number | null>(null);
   const adBlockDetected = useAdBlockDetection();
 
@@ -301,6 +301,15 @@ export default function SearchPage() {
       }, 100);
     }
   }, [results, loading]);
+
+  // A new result set (new search or new page) invalidates the open card's position.
+  useEffect(() => {
+    setSelectedIndex(null);
+  }, [results]);
+
+  const resultCards = results?.cards;
+  const selectedCard =
+    selectedIndex !== null ? resultCards?.[selectedIndex] ?? null : null;
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -734,7 +743,7 @@ export default function SearchPage() {
                         <CardCard
                           key={card.id}
                           card={card}
-                          onCardClick={setSelectedCard}
+                          onCardClick={() => setSelectedIndex(index)}
                         />
                       );
 
@@ -878,11 +887,18 @@ export default function SearchPage() {
 
       <CookieBanner />
 
-      {selectedCard && (
+      {selectedCard && selectedIndex !== null && resultCards && (
         <CardDetailPanel
-          key={selectedCard.id}
           card={selectedCard}
-          onClose={() => setSelectedCard(null)}
+          index={selectedIndex}
+          total={resultCards.length}
+          onClose={() => setSelectedIndex(null)}
+          onPrev={() => setSelectedIndex((i) => Math.max(0, (i ?? 0) - 1))}
+          onNext={() =>
+            setSelectedIndex((i) => Math.min(resultCards.length - 1, (i ?? 0) + 1))
+          }
+          prevCardId={resultCards[selectedIndex - 1]?.id ?? null}
+          nextCardId={resultCards[selectedIndex + 1]?.id ?? null}
         />
       )}
 
