@@ -13,6 +13,7 @@ import {
   ChevronRightIcon,
 } from "@heroicons/react/24/outline";
 import { getCardTraderLink, getCardTraderHomepageLink } from "@/lib/cardtrader/links";
+import { usePagerAnimation } from "@/app/hooks/usePagerAnimation";
 
 interface CardDetailPanelProps {
   card: CardResult;
@@ -69,8 +70,6 @@ function fetchCardDetail(id: string): Promise<CardDetailData | null> {
   return request;
 }
 
-/** Horizontal distance (px) a swipe must cover before it commits to a navigation. */
-const SWIPE_COMMIT_PX = 60;
 /** Movement (px) before a gesture locks to either the horizontal or vertical axis. */
 const AXIS_LOCK_PX = 8;
 
@@ -188,20 +187,19 @@ export default function CardDetailPanel({
   const [isCheckingLink, setIsCheckingLink] = useState(false);
   const [visible, setVisible] = useState(false);
   const [dragY, setDragY] = useState(0);
-  const [dragX, setDragX] = useState(0);
-  /** "settling" animates the body back to rest after a swipe that did not commit. */
-  const [swipeState, setSwipeState] = useState<"idle" | "dragging" | "settling">("idle");
   const [isSwipingAway, setIsSwipingAway] = useState(false);
-  /** Direction of the most recent navigation, so the incoming card slides in from the right side. */
-  const [navDirection, setNavDirection] = useState<-1 | 0 | 1>(0);
+
+  const pager = usePagerAnimation();
+  /** Set when a navigation is requested, and consumed once the new card renders. */
+  const pendingEnter = useRef<{ direction: -1 | 1; fromExit: boolean } | null>(null);
 
   const dragStartX = useRef(0);
   const dragStartY = useRef(0);
-  const dragXRef = useRef(0);
   const dragYRef = useRef(0);
   const dragAxis = useRef<"x" | "y" | null>(null);
   const dragFromHandle = useRef(false);
-  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** True once a horizontal gesture has actually taken hold of the body. */
+  const dragActive = useRef(false);
 
   const canNavigate = hasPrev || hasNext;
 
@@ -215,16 +213,24 @@ export default function CardDetailPanel({
     setTimeout(onClose, 200);
   }, [onClose]);
 
+  /** Returns whether the step was actually dispatched. */
   const navigate = useCallback(
-    (direction: -1 | 1) => {
+    (direction: -1 | 1, fromExit = false): boolean => {
       // Ignore input while a page is in flight so a fast swiper cannot queue jumps.
-      if (isNavigating) return;
-      if (direction === -1 ? !hasPrev : !hasNext) return;
-      setNavDirection(direction);
+      if (isNavigating) return false;
+      if (direction === -1 ? !hasPrev : !hasNext) return false;
+      pendingEnter.current = { direction, fromExit };
       if (direction === -1) onPrev?.();
       else onNext?.();
+      return true;
     },
     [isNavigating, hasPrev, hasNext, onPrev, onNext]
+  );
+
+  /** Whether stepping this way lands on the loaded page rather than fetching one. */
+  const stepIsImmediate = useCallback(
+    (direction: -1 | 1) => Boolean(direction === 1 ? nextCardId : prevCardId),
+    [nextCardId, prevCardId]
   );
 
   const handleDragStart = useCallback((e: React.TouchEvent) => {
@@ -232,6 +238,7 @@ export default function CardDetailPanel({
     dragStartX.current = touch.clientX;
     dragStartY.current = touch.clientY;
     dragAxis.current = null;
+    dragActive.current = false;
     const target = e.target;
     dragFromHandle.current =
       target instanceof Element && Boolean(target.closest("[data-drag-handle]"));
@@ -251,13 +258,15 @@ export default function CardDetailPanel({
       }
 
       if (dragAxis.current === "x") {
-        if (!canNavigate) return;
-        // Rubber-band at the ends of the result set.
+        // Leave an in-flight slide alone rather than snatching the element
+        // mid-animation and stranding it at a partial offset.
+        if (!canNavigate || isNavigating || pager.isBusy()) return;
+        if (!dragActive.current) {
+          dragActive.current = true;
+          pager.beginDrag();
+        }
         const atEnd = (deltaX > 0 && !hasPrev) || (deltaX < 0 && !hasNext);
-        const offset = atEnd ? deltaX * 0.25 : deltaX;
-        dragXRef.current = offset;
-        setDragX(offset);
-        setSwipeState("dragging");
+        pager.updateDrag(deltaX, atEnd);
         return;
       }
 
@@ -266,7 +275,7 @@ export default function CardDetailPanel({
       dragYRef.current = delta;
       setDragY(delta);
     },
-    [canNavigate, hasPrev, hasNext]
+    [canNavigate, isNavigating, hasPrev, hasNext, pager]
   );
 
   const handleDragEnd = useCallback(() => {
@@ -274,19 +283,26 @@ export default function CardDetailPanel({
     dragAxis.current = null;
 
     if (axis === "x") {
-      const deltaX = dragXRef.current;
-      dragXRef.current = 0;
-      setDragX(0);
-      const committed =
-        deltaX <= -SWIPE_COMMIT_PX ? 1 : deltaX >= SWIPE_COMMIT_PX ? -1 : 0;
-      if (committed) {
-        // The incoming card plays its own slide-in animation.
-        setSwipeState("idle");
-        navigate(committed);
-      } else if (deltaX !== 0) {
-        setSwipeState("settling");
-        if (settleTimer.current) clearTimeout(settleTimer.current);
-        settleTimer.current = setTimeout(() => setSwipeState("idle"), 200);
+      if (!dragActive.current) return;
+      dragActive.current = false;
+
+      const direction = pager.resolveDrag(hasPrev, hasNext);
+      if (!direction) {
+        pager.settle();
+        return;
+      }
+      if (stepIsImmediate(direction)) {
+        // Carry the card off in the direction it was thrown, then swap. If the
+        // step is refused in the meantime, slide the body back rather than
+        // leaving it parked off-screen.
+        pager.exit(direction, () => {
+          if (!navigate(direction, true)) pager.settle();
+        });
+      } else {
+        // Crossing a page boundary: the fetch has to land first, so hold the
+        // current card in place and let the spinner carry the wait.
+        pager.settle();
+        navigate(direction);
       }
       return;
     }
@@ -300,20 +316,30 @@ export default function CardDetailPanel({
 
     dragYRef.current = 0;
     setDragY(0);
-  }, [navigate, onClose]);
+  }, [pager, hasPrev, hasNext, stepIsImmediate, navigate, onClose]);
 
   const handleDragCancel = useCallback(() => {
     dragAxis.current = null;
-    dragXRef.current = 0;
     dragYRef.current = 0;
-    setDragX(0);
     setDragY(0);
-    setSwipeState("idle");
-  }, []);
+    if (dragActive.current) {
+      dragActive.current = false;
+      pager.settle();
+    }
+  }, [pager]);
 
-  useEffect(() => () => {
-    if (settleTimer.current) clearTimeout(settleTimer.current);
-  }, []);
+  // Play the incoming card in once React has committed its content.
+  useEffect(() => {
+    const pending = pendingEnter.current;
+    pendingEnter.current = null;
+    if (pending) {
+      pager.enter(pending.direction, pending.fromExit);
+    } else {
+      pager.reset();
+    }
+    // `pager` holds stable callbacks; only a new card should retrigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card.id]);
 
   useEffect(() => {
     const cached = detailCache.get(card.id);
@@ -527,35 +553,23 @@ export default function CardDetailPanel({
           </button>
         </div>
 
+        {/*
+          Deliberately not keyed by card: the element is reused across
+          navigations so a committed swipe can carry the outgoing card off
+          screen and bring the next one back in on the same node. Transform,
+          opacity and transition are written imperatively by usePagerAnimation
+          — React only ever sets `touchAction` here, so it leaves them alone.
+        */}
         <div
-          key={`${position}-${card.id}`}
-          className={`flex-1 overflow-y-auto overscroll-contain transition-opacity ${
+          ref={pager.nodeRef}
+          className={`flex-1 overflow-y-auto overscroll-contain ${
             isNavigating ? "opacity-60" : ""
-          } ${
-            navDirection === 1
-              ? "animate-card-in-right"
-              : navDirection === -1
-                ? "animate-card-in-left"
-                : ""
           }`}
           style={{
             // Repeated from the panel wrapper: a scroll container is where the browser
             // resolves the gesture, so `pan-y` has to be declared here to keep
             // horizontal swipes out of the browser's hands.
             touchAction: "pan-y",
-            ...(swipeState === "dragging"
-              ? {
-                  transform: `translateX(${dragX}px)`,
-                  transition: "none",
-                  opacity: Math.max(0.5, 1 - Math.abs(dragX) / 500),
-                }
-              : swipeState === "settling"
-                ? {
-                    transform: "translateX(0)",
-                    transition: "transform 200ms ease, opacity 200ms ease",
-                    opacity: 1,
-                  }
-                : null),
           }}
         >
           <div className="flex flex-col sm:flex-row gap-0 sm:gap-6 p-4 sm:p-6">

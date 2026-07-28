@@ -26,21 +26,11 @@ const config: Config = {
       },
       animation: {
         "fade-up": "fade-up 0.5s ease-out forwards",
-        "card-in-right": "card-in-right 0.22s ease-out",
-        "card-in-left": "card-in-left 0.22s ease-out",
       },
       keyframes: {
         "fade-up": {
           from: { opacity: "0", transform: "translateY(12px)" },
           to: { opacity: "1", transform: "translateY(0)" },
-        },
-        "card-in-right": {
-          from: { opacity: "0", transform: "translateX(32px)" },
-          to: { opacity: "1", transform: "translateX(0)" },
-        },
-        "card-in-left": {
-          from: { opacity: "0", transform: "translateX(-32px)" },
-          to: { opacity: "1", transform: "translateX(0)" },
         },
       },
     },
