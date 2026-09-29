@@ -6,13 +6,72 @@ import Image from "next/image";
 import ManaCost from "@/app/components/ManaCost";
 import OracleText from "@/app/components/OracleText";
 import KeywordWithTooltip from "@/app/components/KeywordWithTooltip";
-import { XMarkIcon, ArrowTopRightOnSquareIcon } from "@heroicons/react/24/outline";
+import {
+  XMarkIcon,
+  ArrowTopRightOnSquareIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "@heroicons/react/24/outline";
 import { getCardTraderLink, getCardTraderHomepageLink } from "@/lib/cardtrader/links";
+import { usePagerAnimation } from "@/app/hooks/usePagerAnimation";
 
 interface CardDetailPanelProps {
   card: CardResult;
   onClose: () => void;
+  /** 1-based position of `card` across the whole result set, shown in the counter. */
+  position?: number;
+  total?: number;
+  /**
+   * Whether a step is available in each direction. Owned by the parent because a
+   * step may cross a page boundary rather than move within the loaded page.
+   */
+  hasPrev?: boolean;
+  hasNext?: boolean;
+  onPrev?: () => void;
+  onNext?: () => void;
+  /** Ids of the neighbouring cards, prefetched so navigation feels instant. */
+  prevCardId?: string | null;
+  nextCardId?: string | null;
+  /** True while the next/previous page of results is being fetched. */
+  isNavigating?: boolean;
 }
+
+/**
+ * Card details are immutable for a given Scryfall id, so they are cached for the
+ * lifetime of the page. This keeps prev/next navigation instant and lets us warm
+ * the neighbours of the card currently on screen.
+ */
+const detailCache = new Map<string, CardDetailData>();
+const inflightDetails = new Map<string, Promise<CardDetailData | null>>();
+
+function fetchCardDetail(id: string): Promise<CardDetailData | null> {
+  const cached = detailCache.get(id);
+  if (cached) return Promise.resolve(cached);
+
+  const inflight = inflightDetails.get(id);
+  if (inflight) return inflight;
+
+  const request = (async () => {
+    try {
+      const response = await fetch(`/api/card/${id}`);
+      if (!response.ok) return null;
+      const data: CardDetailData = await response.json();
+      detailCache.set(id, data);
+      return data;
+    } catch (err) {
+      console.error("[CardDetailPanel] Failed to fetch card details:", err);
+      return null;
+    } finally {
+      inflightDetails.delete(id);
+    }
+  })();
+
+  inflightDetails.set(id, request);
+  return request;
+}
+
+/** Movement (px) before a gesture locks to either the horizontal or vertical axis. */
+const AXIS_LOCK_PX = 8;
 
 const RARITY_COLORS: Record<string, string> = {
   common: "text-gray-500 dark:text-gray-400",
@@ -107,17 +166,42 @@ function CardFaceView({ face }: {
   );
 }
 
-export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps) {
-  const [detailData, setDetailData] = useState<CardDetailData | null>(null);
-  const [loading, setLoading] = useState(true);
+export default function CardDetailPanel({
+  card,
+  onClose,
+  position = 1,
+  total = 1,
+  hasPrev = false,
+  hasNext = false,
+  onPrev,
+  onNext,
+  prevCardId = null,
+  nextCardId = null,
+  isNavigating = false,
+}: CardDetailPanelProps) {
+  const [detailData, setDetailData] = useState<CardDetailData | null>(
+    () => detailCache.get(card.id) ?? null
+  );
+  const [loading, setLoading] = useState(() => !detailCache.has(card.id));
   const [activeFace, setActiveFace] = useState(0);
   const [isCheckingLink, setIsCheckingLink] = useState(false);
   const [visible, setVisible] = useState(false);
   const [dragY, setDragY] = useState(0);
   const [isSwipingAway, setIsSwipingAway] = useState(false);
+
+  const pager = usePagerAnimation();
+  /** Set when a navigation is requested, and consumed once the new card renders. */
+  const pendingEnter = useRef<{ direction: -1 | 1; fromExit: boolean } | null>(null);
+
+  const dragStartX = useRef(0);
   const dragStartY = useRef(0);
   const dragYRef = useRef(0);
-  const isDragging = useRef(false);
+  const dragAxis = useRef<"x" | "y" | null>(null);
+  const dragFromHandle = useRef(false);
+  /** True once a horizontal gesture has actually taken hold of the body. */
+  const dragActive = useRef(false);
+
+  const canNavigate = hasPrev || hasNext;
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 10);
@@ -129,67 +213,187 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
     setTimeout(onClose, 200);
   }, [onClose]);
 
+  /** Returns whether the step was actually dispatched. */
+  const navigate = useCallback(
+    (direction: -1 | 1, fromExit = false): boolean => {
+      // Ignore input while a page is in flight so a fast swiper cannot queue jumps.
+      if (isNavigating) return false;
+      if (direction === -1 ? !hasPrev : !hasNext) return false;
+      pendingEnter.current = { direction, fromExit };
+      if (direction === -1) onPrev?.();
+      else onNext?.();
+      return true;
+    },
+    [isNavigating, hasPrev, hasNext, onPrev, onNext]
+  );
+
+  /** Whether stepping this way lands on the loaded page rather than fetching one. */
+  const stepIsImmediate = useCallback(
+    (direction: -1 | 1) => Boolean(direction === 1 ? nextCardId : prevCardId),
+    [nextCardId, prevCardId]
+  );
+
   const handleDragStart = useCallback((e: React.TouchEvent) => {
-    dragStartY.current = e.touches[0].clientY;
-    isDragging.current = true;
+    const touch = e.touches[0];
+    dragStartX.current = touch.clientX;
+    dragStartY.current = touch.clientY;
+    dragAxis.current = null;
+    dragActive.current = false;
+    const target = e.target;
+    dragFromHandle.current =
+      target instanceof Element && Boolean(target.closest("[data-drag-handle]"));
   }, []);
 
-  const handleDragMove = useCallback((e: React.TouchEvent) => {
-    if (!isDragging.current) return;
-    const delta = Math.max(0, e.touches[0].clientY - dragStartY.current);
-    dragYRef.current = delta;
-    setDragY(delta);
-  }, []);
+  const handleDragMove = useCallback(
+    (e: React.TouchEvent) => {
+      const touch = e.touches[0];
+      const deltaX = touch.clientX - dragStartX.current;
+      const deltaY = touch.clientY - dragStartY.current;
+
+      // Lock to a single axis on first meaningful movement: horizontal swipes
+      // navigate, vertical ones either dismiss (from the handle) or scroll.
+      if (dragAxis.current === null) {
+        if (Math.abs(deltaX) < AXIS_LOCK_PX && Math.abs(deltaY) < AXIS_LOCK_PX) return;
+        dragAxis.current = Math.abs(deltaX) > Math.abs(deltaY) ? "x" : "y";
+      }
+
+      if (dragAxis.current === "x") {
+        // Leave an in-flight slide alone rather than snatching the element
+        // mid-animation and stranding it at a partial offset.
+        if (!canNavigate || isNavigating || pager.isBusy()) return;
+        if (!dragActive.current) {
+          dragActive.current = true;
+          pager.beginDrag();
+        }
+        const atEnd = (deltaX > 0 && !hasPrev) || (deltaX < 0 && !hasNext);
+        pager.updateDrag(deltaX, atEnd);
+        return;
+      }
+
+      if (!dragFromHandle.current) return;
+      const delta = Math.max(0, deltaY);
+      dragYRef.current = delta;
+      setDragY(delta);
+    },
+    [canNavigate, isNavigating, hasPrev, hasNext, pager]
+  );
 
   const handleDragEnd = useCallback(() => {
-    isDragging.current = false;
-    if (dragYRef.current > 80) {
+    const axis = dragAxis.current;
+    dragAxis.current = null;
+
+    if (axis === "x") {
+      if (!dragActive.current) return;
+      dragActive.current = false;
+
+      const direction = pager.resolveDrag(hasPrev, hasNext);
+      if (!direction) {
+        pager.settle();
+        return;
+      }
+      if (stepIsImmediate(direction)) {
+        // Carry the card off in the direction it was thrown, then swap. If the
+        // step is refused in the meantime, slide the body back rather than
+        // leaving it parked off-screen.
+        pager.exit(direction, () => {
+          if (!navigate(direction, true)) pager.settle();
+        });
+      } else {
+        // Crossing a page boundary: the fetch has to land first, so hold the
+        // current card in place and let the spinner carry the wait.
+        pager.settle();
+        navigate(direction);
+      }
+      return;
+    }
+
+    if (axis === "y" && dragFromHandle.current && dragYRef.current > 80) {
       dragYRef.current = 0;
       setIsSwipingAway(true);
       setTimeout(onClose, 220);
-    } else {
-      dragYRef.current = 0;
-      setDragY(0);
+      return;
     }
-  }, [onClose]);
 
-  const handleDragCancel = useCallback(() => {
-    isDragging.current = false;
     dragYRef.current = 0;
     setDragY(0);
-  }, []);
+  }, [pager, hasPrev, hasNext, stepIsImmediate, navigate, onClose]);
 
+  const handleDragCancel = useCallback(() => {
+    dragAxis.current = null;
+    dragYRef.current = 0;
+    setDragY(0);
+    if (dragActive.current) {
+      dragActive.current = false;
+      pager.settle();
+    }
+  }, [pager]);
+
+  // Play the incoming card in once React has committed its content.
   useEffect(() => {
-    const fetchCardData = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(`/api/card/${card.id}`);
-        if (response.ok) {
-          const data: CardDetailData = await response.json();
-          setDetailData(data);
-        }
-      } catch (err) {
-        console.error("[CardDetailPanel] Failed to fetch card details:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchCardData();
+    const pending = pendingEnter.current;
+    pendingEnter.current = null;
+    if (pending) {
+      pager.enter(pending.direction, pending.fromExit);
+    } else {
+      pager.reset();
+    }
+    // `pager` holds stable callbacks; only a new card should retrigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [card.id]);
 
   useEffect(() => {
+    const cached = detailCache.get(card.id);
+    setActiveFace(0);
+    if (cached) {
+      setDetailData(cached);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setDetailData(null);
+    setLoading(true);
+    fetchCardDetail(card.id).then((data) => {
+      if (cancelled) return;
+      setDetailData(data);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [card.id]);
+
+  // Warm the neighbours so arrow/swipe navigation lands on rendered details.
+  useEffect(() => {
+    if (prevCardId) void fetchCardDetail(prevCardId);
+    if (nextCardId) void fetchCardDetail(nextCardId);
+  }, [prevCardId, nextCardId]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
+      if (e.key === "Escape") {
+        handleClose();
+      } else if (e.key === "ArrowLeft") {
+        navigate(-1);
+      } else if (e.key === "ArrowRight") {
+        navigate(1);
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleClose]);
+  }, [handleClose, navigate]);
 
   useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const { body, documentElement: root } = document;
+    const prevOverflow = body.style.overflow;
+    // Horizontal swipes navigate between cards, so they must not chain up to the
+    // document and trigger the browser's swipe-to-go-back gesture.
+    const prevOverscroll = root.style.overscrollBehaviorX;
+    body.style.overflow = "hidden";
+    root.style.overscrollBehaviorX = "none";
     return () => {
-      document.body.style.overflow = prev;
+      body.style.overflow = prevOverflow;
+      root.style.overscrollBehaviorX = prevOverscroll;
     };
   }, []);
 
@@ -260,35 +464,60 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
             ? "opacity-100 translate-y-0 sm:scale-100"
             : "opacity-0 translate-y-8 sm:scale-95"
         }`}
-        style={
-          isSwipingAway
+        style={{
+          // Horizontal swipes are handled by us; vertical panning stays with the browser
+          // so the details body can still scroll normally.
+          touchAction: "pan-y",
+          ...(isSwipingAway
             ? { transform: "translateY(100%)", transition: "transform 220ms ease" }
             : dragY > 0
               ? { transform: `translateY(${dragY}px)`, transition: "none", opacity: Math.max(0.4, 1 - dragY / 400) }
-              : undefined
-        }
+              : null),
+        }}
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleDragStart}
+        onTouchMove={handleDragMove}
+        onTouchEnd={handleDragEnd}
+        onTouchCancel={handleDragCancel}
       >
         <div
           className="sm:hidden flex justify-center pt-3 pb-1 flex-shrink-0 select-none"
           style={{ touchAction: "none" }}
-          onTouchStart={handleDragStart}
-          onTouchMove={handleDragMove}
-          onTouchEnd={handleDragEnd}
-          onTouchCancel={handleDragCancel}
+          data-drag-handle
         >
           <div className="h-1.5 w-12 rounded-full bg-border" />
         </div>
 
         <div
-          className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0 sm:pt-3"
+          className="flex items-center gap-2 px-3 py-2.5 border-b border-border flex-shrink-0 sm:px-4 sm:py-3"
           style={{ touchAction: "none" }}
-          onTouchStart={handleDragStart}
-          onTouchMove={handleDragMove}
-          onTouchEnd={handleDragEnd}
-          onTouchCancel={handleDragCancel}
+          data-drag-handle
         >
-          <div className="flex items-center gap-2 min-w-0">
+          {canNavigate && (
+            <div className="flex flex-shrink-0 items-center overflow-hidden rounded-xl border border-border bg-surface-muted">
+              <button
+                onClick={() => navigate(-1)}
+                disabled={!hasPrev || isNavigating}
+                className="p-2 text-muted transition-colors hover:text-foreground hover:bg-accent-muted disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted"
+                aria-label="Previous card"
+                title="Previous card (←)"
+              >
+                <ChevronLeftIcon className="w-5 h-5" />
+              </button>
+              <span className="w-px self-stretch bg-border" aria-hidden="true" />
+              <button
+                onClick={() => navigate(1)}
+                disabled={!hasNext || isNavigating}
+                className="p-2 text-muted transition-colors hover:text-foreground hover:bg-accent-muted disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted"
+                aria-label="Next card"
+                title="Next card (→)"
+              >
+                <ChevronRightIcon className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <h2 className="text-base font-bold text-foreground truncate">{card.name}</h2>
             {detailData?.rarity && (
               <span className={`text-xs font-medium flex-shrink-0 ${rarityColor}`}>
@@ -296,16 +525,53 @@ export default function CardDetailPanel({ card, onClose }: CardDetailPanelProps)
               </span>
             )}
           </div>
+
+          {canNavigate && (
+            <span
+              className="flex flex-shrink-0 items-center gap-1.5 text-xs tabular-nums text-muted-soft"
+              aria-live="polite"
+            >
+              {isNavigating && (
+                <span
+                  className="h-3 w-3 animate-spin rounded-full border-2 border-border border-t-accent"
+                  aria-hidden="true"
+                />
+              )}
+              <span>
+                {position.toLocaleString()} / {total.toLocaleString()}
+              </span>
+              <span className="sr-only">{isNavigating ? "Loading more results" : ""}</span>
+            </span>
+          )}
+
           <button
             onClick={handleClose}
-            className="flex-shrink-0 ml-3 -mr-1 p-2.5 rounded-xl text-muted hover:text-foreground hover:bg-surface-muted transition-colors"
+            className="flex-shrink-0 -mr-1 p-2.5 rounded-xl text-muted hover:text-foreground hover:bg-surface-muted transition-colors"
             aria-label="Close"
           >
             <XMarkIcon className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto overscroll-contain">
+        {/*
+          Deliberately not keyed by card: the element is reused across
+          navigations so a committed swipe can carry the outgoing card off
+          screen and bring the next one back in on the same node. Transform,
+          opacity and transition are written imperatively by usePagerAnimation
+          — React only ever sets `touchAction` here, so it leaves them alone.
+        */}
+        <div
+          ref={pager.nodeRef}
+          className={`flex-1 overflow-y-auto overscroll-contain ${
+            isNavigating ? "opacity-60" : ""
+          }`}
+          style={{
+            // Repeated from the panel wrapper: a scroll container is where the browser
+            // resolves the gesture, so `pan-y` has to be declared here to keep
+            // horizontal swipes out of the browser's hands.
+            touchAction: "pan-y",
+          }}
+        >
           <div className="flex flex-col sm:flex-row gap-0 sm:gap-6 p-4 sm:p-6">
             <div className="flex-shrink-0 flex flex-col items-center gap-3 sm:w-64 lg:w-72">
               <div className="w-56 sm:w-full aspect-[5/7] relative rounded-lg overflow-hidden border border-border bg-surface-muted shadow-lg">
