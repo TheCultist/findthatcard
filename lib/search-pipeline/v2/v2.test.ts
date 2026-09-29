@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import { ensureCatalogIndex } from "@/lib/scryfall/catalog-index";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
 import { splitCompoundQuery } from "@/lib/search-pipeline/compound";
+import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
 import { buildIRFromExtraction } from "@/lib/search-pipeline/v2/buildIR";
 import { recognizeCardNames, runPrePass } from "@/lib/search-pipeline/v2/prePass";
 import type { V2Extraction } from "@/lib/search-pipeline/v2/schema";
@@ -118,6 +119,16 @@ async function main(): Promise<void> {
     );
     check("color alternatives OR-grouped", assembleQueryFromIR(orColors).includes("(c:r or c:g)"), assembleQueryFromIR(orColors));
 
+    // Identity alternatives must survive finalize: the id-hoisting normalizer used to
+    // strip every id: token when more than one was present, leaving "( or or )".
+    const orIdentity = await buildIRFromExtraction(
+      baseExtraction({ colors: { mode: "identity", op: ":", letters: "wub", combine: "or" }, functionTags: ["draw"] }),
+      "white, blue, or black cards that draw cards"
+    );
+    const orIdQ = (await finalizeQuery(orIdentity)).queryForLogs;
+    check("identity alternatives kept through finalize", orIdQ.includes("(id:w or id:u or id:b)"), orIdQ);
+    check("no empty OR group left behind", !/\(\s*or/.test(orIdQ), orIdQ);
+
     const andColors = await buildIRFromExtraction(
       baseExtraction({ colors: { mode: "identity", op: ":", letters: "rg", combine: "and" } }),
       "gruul cards"
@@ -175,6 +186,13 @@ async function main(): Promise<void> {
     );
     const tq = assembleQueryFromIR(trigger);
     check("non-verb-initial phrase kept whole", tq.includes('o:"whenever you cast"'), tq);
+
+    const numeric = await buildIRFromExtraction(
+      baseExtraction({ oraclePhrases: ["tap", "two", "3"] }),
+      "mana rocks that tap for two"
+    );
+    const numQ = assembleQueryFromIR(numeric);
+    check("bare number oracle tokens dropped", numQ.includes('o:"tap"') && !numQ.includes('o:"two"') && !numQ.includes('o:"3"'), numQ);
 
     const negated = await buildIRFromExtraction(
       baseExtraction({ negatedOraclePhrases: ["gains life"] }),
@@ -275,14 +293,62 @@ async function main(): Promise<void> {
     check("negated oracle becomes -o:", q.includes('-o:"can\'t block"'), q);
   }
 
-  // 5. Named-card intent routes the card name for the intent resolver.
+  // 5. Named-card intent routes the card name for the intent resolver — and keeps
+  // every other constraint the user appended (the resolver is not a bypass).
   {
     const ir = await buildIRFromExtraction(
-      baseExtraction({ intent: "similar-cards", cardName: "Lightning Bolt" }),
-      "cards like lightning bolt"
+      baseExtraction({ intent: "similar-cards", cardName: "Lightning Bolt", negatedTypes: ["instant"], format: "modern" }),
+      "cards like lightning bolt that aren't instants in modern"
     );
     check("similar-cards intent set", ir.intent === "similar-cards");
     check("similar card name resolved", ir.similarToCardName === "Lightning Bolt", ir.similarToCardName);
+    const q = assembleQueryFromIR(ir);
+    check("named intent keeps negated type", q.includes("-t:instant"), q);
+    check("named intent keeps format", q.includes("f:modern"), q);
+    check("named intent emits no literal name clause", !q.includes("name:"), q);
+  }
+
+  // 5b. The schema only requires `intent`: a partial / malformed object must not crash the builder.
+  {
+    const ir = await buildIRFromExtraction(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { intent: "search", typesAll: "creature", keywords: null, stats: { field: "mv", op: "<", value: 3 } } as any,
+      "cheap creatures"
+    );
+    const q = assembleQueryFromIR(ir);
+    check("partial extraction: scalar type coerced", q.includes("t:creature"), q);
+    check("partial extraction: scalar stat coerced", q.includes("mv<3"), q);
+  }
+
+  // 5c. Function tags emitted alongside an archetype fold into the archetype's OR
+  // family instead of AND-ing a second function clause (Haiku emits both routinely).
+  {
+    const ir = await buildIRFromExtraction(
+      baseExtraction({ functionTags: ["removal"], archetypes: [{ name: "removal", qualifier: null }] }),
+      "red removal"
+    );
+    check("fn tag folded into archetype fragment", ir.resolvedFragments[0]?.tags.includes("function:removal"));
+    check("no standalone function must-clause", !ir.mustClauses.some((c) => c.value.startsWith("function:")));
+    const p3 = await finalizeQuery(ir);
+    const standalone = p3.queryForLogs.replace(/\([^)]*\)/g, "");
+    check("finalized query has no AND-ed function tag", !/function:/.test(standalone), p3.queryForLogs);
+
+    const noArch = await buildIRFromExtraction(baseExtraction({ functionTags: ["removal"] }), "removal");
+    check("fn tag without archetype still a must-clause", assembleQueryFromIR(noArch).includes("function:removal"));
+  }
+
+  // 5d. Keywords and artists are validated against catalogs, not emitted verbatim.
+  {
+    const ir = await buildIRFromExtraction(
+      baseExtraction({ keywords: ["flying", "notakeyword"], artist: "Guay" }),
+      "flying cards by guay"
+    );
+    const q = assembleQueryFromIR(ir);
+    check("known keyword kept", q.includes("kw:flying"), q);
+    check("unknown keyword dropped", !q.includes("notakeyword"), q);
+    check("partial artist name kept (Scryfall a: is substring)", q.includes('a:"Guay"'), q);
+    const bogus = await buildIRFromExtraction(baseExtraction({ artist: "Zzqxnotanartist" }), "art by nobody");
+    check("unknown artist dropped", !assembleQueryFromIR(bogus).includes("a:"), assembleQueryFromIR(bogus));
   }
 
   // 6. Card-name recognition finds multi-word catalog names (protecting them from filters).

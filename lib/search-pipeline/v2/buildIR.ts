@@ -8,7 +8,9 @@
  * `resolveIntentClauses` + Phase 3 finalizer the legacy pipeline uses.
  */
 
+import { getMtgKeywordList } from "@/lib/mtg-keywords";
 import {
+  getArtistIndex,
   lookupCardName,
   lookupCardNameFuzzy,
   matchSubtype,
@@ -46,8 +48,70 @@ function toStringArray(value: unknown): string[] {
   return arr.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
 }
 
+function toObjectArray<T>(value: unknown): T[] {
+  const arr = Array.isArray(value) ? value : value == null ? [] : [value];
+  return arr.filter((v): v is T => v !== null && typeof v === "object");
+}
+
+/**
+ * The schema only requires `intent`; every other field may be missing, null,
+ * a scalar where an array was expected, or an array where a scalar was. Coerce
+ * the whole object once so the rest of the builder can assume the declared shape.
+ */
+function normalizeExtraction(raw: Partial<V2Extraction> | null | undefined): V2Extraction {
+  const e = (raw ?? {}) as Record<string, unknown>;
+  const scalar = <T>(v: unknown): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null)) as T | null;
+  return {
+    intent: (typeof e.intent === "string" ? e.intent : "search") as V2Extraction["intent"],
+    cardName: typeof scalar(e.cardName) === "string" ? scalar<string>(e.cardName) : null,
+    colors: scalar<V2Extraction["colors"]>(e.colors),
+    typesAll: toStringArray(e.typesAll),
+    typesAny: toStringArray(e.typesAny),
+    negatedTypes: toStringArray(e.negatedTypes),
+    subtypes: toStringArray(e.subtypes),
+    supertypes: toStringArray(e.supertypes),
+    stats: toObjectArray<V2Extraction["stats"][number]>(e.stats),
+    rarity: scalar<V2Extraction["rarity"]>(e.rarity),
+    year: scalar<V2Extraction["year"]>(e.year),
+    keywords: toStringArray(e.keywords),
+    format: typeof scalar(e.format) === "string" ? scalar<string>(e.format) : null,
+    set: typeof scalar(e.set) === "string" ? scalar<string>(e.set) : null,
+    artist: typeof scalar(e.artist) === "string" ? scalar<string>(e.artist) : null,
+    artSubjects: toStringArray(e.artSubjects),
+    functionTags: toStringArray(e.functionTags),
+    archetypes: toObjectArray<V2Extraction["archetypes"][number]>(e.archetypes).filter(
+      (a) => typeof a.name === "string"
+    ),
+    oraclePhrases: toStringArray(e.oraclePhrases),
+    negatedOraclePhrases: toStringArray(e.negatedOraclePhrases),
+  };
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+let keywordSlugsPromise: Promise<Set<string>> | null = null;
+/** Slugified MTG keyword names (flying, double-strike, …) for validating `kw:`. */
+function getKeywordSlugs(): Promise<Set<string>> {
+  keywordSlugsPromise ??= getMtgKeywordList().then((list) => new Set(list.map(slugify)));
+  return keywordSlugsPromise;
+}
+
+/**
+ * Scryfall `a:` is a substring match, so a partial like "Guay" is a valid user
+ * request. Accept exact catalog names (canonicalized) or any substring of one;
+ * drop names no illustrator contains.
+ */
+function resolveArtist(raw: string): string | null {
+  const needle = raw.trim().toLowerCase();
+  if (!needle) return null;
+  const index = getArtistIndex();
+  if (!index) return raw.trim();
+  const exact = index.get(needle);
+  if (exact) return exact;
+  for (const key of index.keys()) if (key.includes(needle)) return raw.trim();
+  return null;
 }
 
 function normalizeType(raw: string): string | null {
@@ -73,6 +137,11 @@ const INFLECTABLE_ORACLE_VERBS = new Set([
   "tap", "untap", "cast", "die", "fight", "mill", "scry", "attack", "block",
   "become", "get", "have", "cost", "prevent", "copy", "trigger",
 ]);
+
+// A bare number as an oracle token ("tap for two" → o:"two") is noise: rules text
+// writes amounts as symbols ({C}{C}) or in phrases the token can't anchor to.
+const BARE_NUMBER_TOKEN =
+  /^(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|x)$/i;
 
 /**
  * "lose all abilities" → ["lose", "all abilities"]; "loses all abilities" →
@@ -131,14 +200,18 @@ async function resolveCardName(raw: string | null, allowRemote: boolean): Promis
 }
 
 export async function buildIRFromExtraction(
-  extraction: V2Extraction,
+  rawExtraction: Partial<V2Extraction>,
   naturalQuery: string
 ): Promise<SearchPipelineIR> {
+  const extraction = normalizeExtraction(rawExtraction);
   const ir = emptyIR(naturalQuery);
   const must: QueryClause[] = ir.mustClauses;
   const mustNot: QueryClause[] = ir.mustNotClauses;
 
   // --- Named-card intents: hand the card name to resolveIntentClauses ---
+  // The intent resolver is a pipeline step, not a bypass: every other field the
+  // user expressed ("…that aren't instants", "…in modern") is still built below
+  // and AND-ed with the resolver's clause.
   if (
     extraction.intent === "similar-cards" ||
     extraction.intent === "art-like-cards" ||
@@ -151,17 +224,12 @@ export async function buildIRFromExtraction(
       if (extraction.intent === "similar-cards") ir.similarToCardName = name;
       if (extraction.intent === "art-like-cards") ir.artLikeCardName = name;
       if (extraction.intent === "synergy-with-card") ir.synergyWithCardName = name;
-      return ir; // remaining user constraints are re-derived by Phase 3 from naturalQuery
     }
-    // No usable card name — fall through and treat as a normal search.
-  }
-
-  if (extraction.intent === "commander-deck") {
-    ir.intent = "commander-deck";
+    // No usable card name — treat as a normal search.
   }
 
   // --- Literal card-name search ---
-  if (extraction.intent === "search" && extraction.cardName) {
+  if (ir.intent === "search" && extraction.cardName) {
     const canonical = await resolveCardName(extraction.cardName, true);
     if (canonical) {
       must.push({ value: `name:"${canonical}"`, source: "phase1:cardname" });
@@ -247,10 +315,13 @@ export async function buildIRFromExtraction(
     }
   }
 
-  // --- Keywords (validated names emitted as kw:) ---
-  for (const kw of extraction.keywords) {
-    const slug = slugify(kw);
-    if (slug) must.push({ value: `kw:${slug}`, source: "phase1:keyword" });
+  // --- Keywords (validated against the MTG keyword catalog, emitted as kw:) ---
+  if (extraction.keywords.length > 0) {
+    const known = await getKeywordSlugs();
+    for (const kw of extraction.keywords) {
+      const slug = slugify(kw);
+      if (slug && known.has(slug)) must.push({ value: `kw:${slug}`, source: "phase1:keyword" });
+    }
   }
 
   // --- Format (allowlisted Scryfall slugs; aliases like "pauper edh" → paupercommander) ---
@@ -259,9 +330,10 @@ export async function buildIRFromExtraction(
     if (fmt) must.push({ value: `f:${fmt}`, source: "phase1:format" });
   }
 
-  // --- Artist ---
+  // --- Artist (must match or be contained in a catalog illustrator name) ---
   if (extraction.artist) {
-    must.push({ value: `a:"${extraction.artist.trim()}"`, source: "phase1:artist" });
+    const artist = resolveArtist(extraction.artist);
+    if (artist) must.push({ value: `a:"${artist}"`, source: "phase1:artist" });
   }
 
   // --- Art subjects (validated against art vocabulary, OR-grouped) ---
@@ -286,34 +358,13 @@ export async function buildIRFromExtraction(
     const slug = slugify(tag);
     if (slug && (await validateTaggerTag("function", slug))) fnTags.push(`function:${slug}`);
   }
-  if (fnTags.length === 1) {
-    must.push({ value: fnTags[0], source: "phase1:function" });
-  } else if (fnTags.length > 1) {
-    must.push({ value: `(${fnTags.join(" or ")})`, source: "phase1:function" });
-  }
-
-  // --- Oracle phrases (verb-initial phrases split so inflections still match) ---
-  for (const phrase of extraction.oraclePhrases) {
-    const p = phrase.trim().replace(/^["']|["']$/g, "");
-    if (!p) continue;
-    for (const part of splitInflectedVerbPhrase(p)) {
-      must.push({ value: `o:"${part}"`, source: "phase1:oracle" });
-    }
-  }
-  for (const phrase of extraction.negatedOraclePhrases) {
-    const p = phrase.trim().replace(/^["']|["']$/g, "");
-    if (!p) continue;
-    for (const part of splitInflectedVerbPhrase(p)) {
-      mustNot.push({ value: `o:"${part}"`, source: "phase1:oracle" });
-    }
-  }
 
   // --- Archetypes (validated; routed through resolvedFragments so Phase 3 injects them) ---
   const unresolved: UnresolvedFragment[] = ir.unresolvedFragments;
   const resolved: ResolvedFragment[] = ir.resolvedFragments;
   extraction.archetypes.forEach((arch, i) => {
     const name = arch.name.trim().toLowerCase();
-    const qualifier = arch.qualifier?.trim().toLowerCase() || undefined;
+    const qualifier = typeof arch.qualifier === "string" ? arch.qualifier.trim().toLowerCase() || undefined : undefined;
     if (!name) return;
     if (!lookupArchetypeTags(name, qualifier)) return; // unknown archetype — drop
     const key = `__archetype_${i}_${name}${qualifier ? `_${qualifier}` : ""}`;
@@ -327,6 +378,38 @@ export async function buildIRFromExtraction(
       qualifier,
     });
   });
+
+  // Function tags are alternative gameplay roles for one concept → OR-grouped.
+  // When the model ALSO chose an archetype (it is told to pick one channel but
+  // small models routinely emit both — "removal" + archetype removal), the tags
+  // describe the same concept as the archetype: fold them into the archetype's
+  // OR family instead of AND-ing a second function clause that over-narrows.
+  // ponytail: assumes archetype + tags = one concept; a query that genuinely
+  // wants archetype AND an orthogonal tag ("tokens" + "cast-trigger-you") is
+  // re-narrowed by finalize's dedicated injectors, not here.
+  if (fnTags.length > 0 && resolved.length > 0) {
+    resolved[0].tags.push(...fnTags);
+  } else if (fnTags.length === 1) {
+    must.push({ value: fnTags[0], source: "phase1:function" });
+  } else if (fnTags.length > 1) {
+    must.push({ value: `(${fnTags.join(" or ")})`, source: "phase1:function" });
+  }
+
+  // --- Oracle phrases (verb-initial phrases split so inflections still match) ---
+  for (const phrase of extraction.oraclePhrases) {
+    const p = phrase.trim().replace(/^["']|["']$/g, "");
+    if (!p || BARE_NUMBER_TOKEN.test(p)) continue;
+    for (const part of splitInflectedVerbPhrase(p)) {
+      must.push({ value: `o:"${part}"`, source: "phase1:oracle" });
+    }
+  }
+  for (const phrase of extraction.negatedOraclePhrases) {
+    const p = phrase.trim().replace(/^["']|["']$/g, "");
+    if (!p) continue;
+    for (const part of splitInflectedVerbPhrase(p)) {
+      mustNot.push({ value: `o:"${part}"`, source: "phase1:oracle" });
+    }
+  }
 
   // --- Safety net: never hand Phase 3 a completely empty IR ---
   if (must.length === 0 && mustNot.length === 0 && resolved.length === 0) {

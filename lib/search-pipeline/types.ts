@@ -23,8 +23,6 @@ export type ClauseSource =
 
 export type QueryIntent =
   | "search"
-  | "commander-deck"
-  | "commander-creature"
   | "direct-scryfall"
   | "similar-cards"
   | "art-like-cards"

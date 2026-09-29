@@ -13,12 +13,16 @@ export type ColorOp = ":" | "=" | ">=" | "<=";
 
 export type V2Intent =
   | "search"
-  | "commander-deck"
   | "similar-cards"
   | "art-like-cards"
   | "synergy-with-card"
   | "direct-scryfall";
 
+/**
+ * Fully-populated extraction. The model is allowed to OMIT any field except
+ * `intent` (see `V2_EXTRACTION_SCHEMA`), so what actually arrives from the AI
+ * is `Partial<V2Extraction>` — `buildIRFromExtraction` normalizes it.
+ */
 export interface V2Extraction {
   /** High-level query intent. `direct-scryfall` is set by the pre-pass, never the AI. */
   intent: V2Intent;
@@ -67,40 +71,19 @@ export interface V2Extraction {
 }
 
 /**
- * JSON Schema (strict) shared by OpenAI json_schema mode and Claude tool use.
- * Strict mode requires every property to be listed in `required` and every
- * object to set `additionalProperties: false`; optionality is expressed via
- * nullable unions.
+ * JSON Schema for Claude tool use. Only `intent` is required: Claude honours
+ * `required` literally, so listing every key made Haiku emit ~300 tokens of
+ * `[]` / `null` scaffolding per call (most of the latency). Omitted fields are
+ * defaulted in `buildIRFromExtraction`.
  */
 export const V2_EXTRACTION_SCHEMA: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: [
-    "intent",
-    "cardName",
-    "colors",
-    "typesAll",
-    "typesAny",
-    "negatedTypes",
-    "subtypes",
-    "supertypes",
-    "stats",
-    "rarity",
-    "year",
-    "keywords",
-    "format",
-    "set",
-    "artist",
-    "artSubjects",
-    "functionTags",
-    "archetypes",
-    "oraclePhrases",
-    "negatedOraclePhrases",
-  ],
+  required: ["intent"],
   properties: {
     intent: {
       type: "string",
-      enum: ["search", "commander-deck", "similar-cards", "art-like-cards", "synergy-with-card"],
+      enum: ["search", "similar-cards", "art-like-cards", "synergy-with-card"],
     },
     cardName: { type: ["string", "null"] },
     colors: {
@@ -171,6 +154,15 @@ export const V2_EXTRACTION_SCHEMA: Record<string, unknown> = {
     oraclePhrases: { type: "array", items: { type: "string" } },
     negatedOraclePhrases: { type: "array", items: { type: "string" } },
   },
+};
+
+/**
+ * OpenAI json_schema strict mode rejects optional properties: every key must be
+ * listed in `required` (optionality via nullable unions only).
+ */
+export const V2_EXTRACTION_SCHEMA_STRICT: Record<string, unknown> = {
+  ...V2_EXTRACTION_SCHEMA,
+  required: Object.keys(V2_EXTRACTION_SCHEMA.properties as Record<string, unknown>),
 };
 
 export const V2_SCHEMA_NAME = "mtg_query_extraction";

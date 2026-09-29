@@ -183,8 +183,11 @@ async function callClaudeStructured<T>(
 
   // Forced tool use is Claude's structured-output mechanism: the model must call
   // the single provided tool, and its `input` conforms to the JSON Schema.
+  // temperature 0: extraction must be deterministic — at the default 1.0 Haiku
+  // returned different (and sometimes contradictory) constraints for the same query.
   const response = await getAnthropicClient().messages.create({
     model,
+    temperature: 0,
     ...(params.system ? { system: params.system } : {}),
     messages: [{ role: "user", content: params.user }],
     max_tokens: params.max_output_tokens,
@@ -198,6 +201,11 @@ async function callClaudeStructured<T>(
     tool_choice: { type: "tool", name: params.schemaName },
   });
 
+  if (response.stop_reason === "max_tokens") {
+    throw new Error(
+      `Claude structured call truncated at max_tokens=${params.max_output_tokens} (schema ${params.schemaName})`
+    );
+  }
   const toolUse = response.content.find(
     (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
   );

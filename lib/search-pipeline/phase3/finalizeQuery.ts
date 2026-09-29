@@ -703,11 +703,12 @@ function normalizeIdentityScopeInOrChains(query: string): string {
   const normalizedIds = Array.from(
     new Set(idMatches.map((m) => m.toLowerCase().replace(/\s+/g, "")))
   );
-  let updated = query.replace(idPattern, " ").replace(/\s{2,}/g, " ").trim();
-  if (normalizedIds.length === 1) {
-    updated = `(${updated}) ${normalizedIds[0]}`.replace(/\s{2,}/g, " ").trim();
-  }
-  return updated;
+  // Only a single identity can be hoisted to scope the whole query. Several
+  // distinct ids (e.g. "(id:w or id:u or id:b)" — colour alternatives) are
+  // already correctly placed; stripping them left "( or or )" behind.
+  if (normalizedIds.length !== 1) return query;
+  const updated = query.replace(idPattern, " ").replace(/\s{2,}/g, " ").trim();
+  return `(${updated}) ${normalizedIds[0]}`.replace(/\s{2,}/g, " ").trim();
 }
 
 function prependPreferBest(value: string): string {
@@ -792,7 +793,14 @@ function injectArchetypeTagsFromResolvedFragments(
       if (!unresolved.orConnected) flushArchetypeOrGroup();
       continue;
     }
-    const orChain = tags.map((t) => `function:${t}`);
+    // Function tags the extractor attached to this archetype describe the same
+    // concept (buildIR folds them in) → they join the archetype's OR family.
+    const orChain = [
+      ...new Set([
+        ...tags.map((t) => `function:${t}`),
+        ...fragment.tags.filter((t) => /^function:/i.test(t.trim())).map((t) => t.trim().toLowerCase()),
+      ]),
+    ];
     if (unresolved.orConnected && orGroupChains.length > 0) {
       orGroupChains.push(orChain);
     } else {
@@ -800,11 +808,10 @@ function injectArchetypeTagsFromResolvedFragments(
       orGroupChains.push(orChain);
     }
 
-    // Extra tags from Phase 2 (e.g. function:cast-trigger-you alongside archetype:tokens)
-    // are AND conditions that narrow the archetype — append them directly after flushing.
-    // Strip any t:/type: tags — card-type filters must never come from Phase 2.
+    // Any other extra tags are AND conditions that narrow the archetype — append them
+    // directly after flushing. Strip t:/type: tags — card-type filters never come from here.
     const extraTags = fragment.tags.filter(
-      (t) => t.trim().length > 0 && !/^(?:t|type):/i.test(t)
+      (t) => t.trim().length > 0 && !/^(?:t|type|function):/i.test(t.trim())
     );
     if (extraTags.length > 0 && !unresolved.orConnected) {
       flushArchetypeOrGroup();
