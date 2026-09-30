@@ -85,6 +85,14 @@ function check(name: string, cond: boolean, detail?: string): void {
 
   const unknown = getPreferSelector("prefer:foo t:artifact");
   check("unknown prefer surfaced as option", unknown.options.some((o) => o.value === "foo" && o.current));
+
+  // Scryfall applies the last prefer: token; the selector must read that one and collapse the rest.
+  const dup = getPreferSelector("prefer:best t:artifact game:paper prefer:usd-low");
+  check("duplicate prefer → last wins", dup.current === "usd-low");
+  const dupOldest = dup.options.find((o) => o.value === "oldest")!;
+  check("duplicate prefer collapsed to one", dupOldest.query === "t:artifact game:paper prefer:oldest", dupOldest.query);
+  const dupNone = dup.options.find((o) => o.value === "")!;
+  check("duplicate prefer all removed", dupNone.query === "t:artifact game:paper", dupNone.query);
 }
 
 console.log(`\nAll ${passed} query-token self-checks passed.`);

@@ -61,6 +61,12 @@ const buildSearchUrl = (searchQuery: string) => {
   return `/search?q=${encodeURIComponent(trimmed)}`;
 };
 
+/** What the URL-driven effect will read back from a URL produced by buildSearchUrl. */
+const queryFromSearchUrl = (url: string) =>
+  url.startsWith("/search/")
+    ? getQueryFromSlug(url.slice("/search/".length))
+    : decodeURIComponent(url.split("?q=")[1] ?? "");
+
 const getQueryFromSlug = (slug: string | string[]) => {
   const slugValue = Array.isArray(slug) ? slug.join(" ") : slug;
   return slugValue.replace(/-/g, " ");
@@ -95,6 +101,8 @@ export default function SearchPage() {
   const searchParams = useSearchParams();
   const params = useParams<{ slug?: string | string[] }>();
   const lastUrlQueryRef = useRef("");
+  /** Monotonic id of the most recent /api/search call; older responses are dropped. */
+  const searchSeqRef = useRef(0);
   const editableInputRef = useRef<HTMLTextAreaElement | null>(null);
   /** Set when a page fetch was triggered by stepping past the edge of the panel. */
   const pendingPanelEdgeRef = useRef<{ page: number; edge: "first" | "last" } | null>(null);
@@ -142,6 +150,8 @@ export default function SearchPage() {
           const nextUrl = buildSearchUrl(searchQuery);
           const currentUrl = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`;
           if (nextUrl !== currentUrl) {
+            // We run this search ourselves; stop the URL effect from firing a duplicate.
+            lastUrlQueryRef.current = queryFromSearchUrl(nextUrl);
             await Promise.resolve(router.push(nextUrl, { scroll: false })).catch((e) => {
               console.warn("[Search] router.push failed:", e);
             });
@@ -149,6 +159,10 @@ export default function SearchPage() {
         }
 
         const isNewQuery = page === 1 && !options.keepResults;
+        // Only the latest request may touch state; a slower, older response must not
+        // overwrite a newer one (e.g. the Printings selector picked while a search was in flight).
+        const seq = ++searchSeqRef.current;
+        const isStale = () => seq !== searchSeqRef.current;
 
         setLoading(true);
         setError(null);
@@ -168,6 +182,7 @@ export default function SearchPage() {
           });
 
           const data = await response.json();
+          if (isStale()) return;
 
           if (!response.ok) {
             const errorData = data as ErrorResponse;
@@ -185,6 +200,7 @@ export default function SearchPage() {
             setEditableQuery(data.scryfallQuery);
           }
         } catch (err) {
+          if (isStale()) return;
           const message =
             err instanceof TypeError
               ? "Failed to connect to the server. Please try again."
@@ -192,7 +208,7 @@ export default function SearchPage() {
           setError(message);
           console.error("Search error:", err);
         } finally {
-          setLoading(false);
+          if (!isStale()) setLoading(false);
         }
       } catch (err) {
         console.error("[Search] handleSearch failed:", err);

@@ -215,8 +215,8 @@ const PREFER_ALIASES: Record<string, string> = {
   notub: "notuniversesbeyond",
 };
 
-/** First un-negated prefer: token anywhere in the query. */
-const PREFER_TOKEN_RE = /(?<![\w-])prefer:([\w-]+)/i;
+/** Un-negated prefer: tokens anywhere in the query. */
+const PREFER_TOKEN_RE = /(?<![\w-])prefer:([\w-]+)/gi;
 
 export type PreferSelectorOption = PreferOption & { query: string; current: boolean };
 
@@ -232,13 +232,19 @@ export type PreferSelector = {
  * "" option removes it. Aliases (prefer:ub) are recognized as their long form.
  */
 export function getPreferSelector(query: string): PreferSelector {
-  const match = query.match(PREFER_TOKEN_RE);
-  const raw = match?.[1].toLowerCase() ?? "";
+  // Scryfall honours the LAST prefer: token when several are present, so that is the
+  // effective one; rewriting drops the others so the query ends up with exactly one.
+  const last = [...query.matchAll(PREFER_TOKEN_RE)].at(-1);
+  const raw = last?.[1].toLowerCase() ?? "";
   const current = PREFER_ALIASES[raw] ?? raw;
 
   const rewrite = (value: string): string => {
     const token = value ? `prefer:${value}` : "";
-    const next = match ? query.replace(match[0], token) : token ? `${token} ${query}` : query;
+    const next = last
+      ? query.replace(PREFER_TOKEN_RE, (m, _v, offset: number) => (offset === last.index ? token : ""))
+      : token
+        ? `${token} ${query}`
+        : query;
     return next.replace(/\s{2,}/g, " ").trim();
   };
 
