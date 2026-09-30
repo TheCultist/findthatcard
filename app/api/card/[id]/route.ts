@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CardDetailData } from "@/types/scryfall";
+import { mergeKeywordMentions } from "@/lib/keyword-mentions";
+import { getKeywordDefinitionsMap, getMtgKeywordList } from "@/lib/mtg-keywords";
 
 const SCRYFALL_BASE_URL = "https://api.scryfall.com";
 const SCRYFALL_USER_AGENT =
@@ -35,6 +37,15 @@ export async function GET(
     }
 
     const data: CardDetailData = await response.json();
+    try {
+      const [names, definitions] = await Promise.all([getMtgKeywordList(), getKeywordDefinitionsMap()]);
+      const oracle = [data.oracle_text, ...(data.card_faces ?? []).map((f) => f.oracle_text)]
+        .filter(Boolean)
+        .join("\n");
+      data.keywords = mergeKeywordMentions(data.keywords ?? [], oracle, names, definitions);
+    } catch (error) {
+      console.warn("[Card API] Keyword mention scan failed:", error);
+    }
     return NextResponse.json(data);
   } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

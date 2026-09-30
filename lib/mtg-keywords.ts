@@ -4,6 +4,7 @@ import { getCacheDir } from "@/lib/cache-paths";
 import { ensureScryfallCatalogCache, getCatalog } from "@/lib/scryfall/catalogs";
 import { formatTodayStamp, shouldSkipUpdate } from "@/lib/utils/cache";
 import { escapeRegex } from "@/lib/utils/text";
+import { fetchWikiReminder } from "@/lib/keyword-wiki";
 
 type MtgKeywordEntry = {
   name: string;
@@ -28,6 +29,9 @@ const KEYWORD_REMINDERS_FILE_PATH = path.join(
   "data",
   "mtg-keyword-reminders.json",
 );
+
+/** Same basename in the cache dir: locally that resolves to the tracked data/ file itself. */
+const LEARNED_REMINDERS_FILE_PATH = path.join(getCacheDir(), "mtg-keyword-reminders.json");
 
 const SCRYFALL_USER_AGENT =
   process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
@@ -335,6 +339,10 @@ async function initializeKeywordCache(): Promise<void> {
       `[MTG Keywords] Cache updated (${keywordCacheUpdatedAt}): ${merged.length} keywords`,
     );
 
+    await learnMissingReminders(merged).catch((error) =>
+      console.warn("[MTG Keywords] Reminder learning failed:", error),
+    );
+
     if (addedSlugs.length > 0 || renamed.length > 0) {
       if (addedSlugs.length > 0) {
         console.log(
@@ -394,17 +402,66 @@ export async function getMtgKeywordList(): Promise<string[]> {
  * Returns a map of keyword slug -> reminder text for tooltips.
  * Reads from data/mtg-keyword-reminders.json, a manually maintained static catalog.
  */
-export async function getKeywordDefinitionsMap(): Promise<Record<string, string>> {
+async function readReminderFile(filePath: string): Promise<Record<string, string>> {
   try {
-    const raw = await fs.readFile(KEYWORD_REMINDERS_FILE_PATH, "utf-8");
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(await fs.readFile(filePath, "utf-8"));
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as Record<string, string>;
     }
   } catch (error) {
-    console.warn("[MTG Keywords] Failed to read keyword reminders file:", error);
+    if (!(isErrnoException(error) && error.code === "ENOENT")) {
+      console.warn(`[MTG Keywords] Failed to read reminders file ${filePath}:`, error);
+    }
   }
   return {};
+}
+
+let definitionsMap: Record<string, string> | null = null;
+export async function getKeywordDefinitionsMap(): Promise<Record<string, string>> {
+  if (definitionsMap) return definitionsMap;
+  const base = await readReminderFile(KEYWORD_REMINDERS_FILE_PATH);
+  const learned =
+    LEARNED_REMINDERS_FILE_PATH === KEYWORD_REMINDERS_FILE_PATH
+      ? {}
+      : await readReminderFile(LEARNED_REMINDERS_FILE_PATH);
+  definitionsMap = { ...base, ...learned };
+  return definitionsMap;
+}
+
+/** ponytail: sequential wiki fetches, capped per refresh; a backlog drains over a few nightly runs. */
+const MAX_REMINDER_LOOKUPS_PER_RUN = 25;
+
+/**
+ * Fills in reminder text for catalog keywords that have no definition yet, from
+ * the MTG Wiki. Misses are stored as "" so they aren't re-fetched every night
+ * (the tooltip treats "" as "no definition"). Locally the cache dir IS data/, so
+ * learned entries land in the tracked reminders file; on serverless they go to a
+ * /tmp overlay merged on read.
+ */
+async function learnMissingReminders(entries: MtgKeywordEntry[]): Promise<void> {
+  const defs = await getKeywordDefinitionsMap();
+  const missing = entries.filter((e) => !(e.slug in defs)).slice(0, MAX_REMINDER_LOOKUPS_PER_RUN);
+  if (missing.length === 0) return;
+
+  const learned: Record<string, string> = {};
+  for (const entry of missing) {
+    learned[entry.slug] = (await fetchWikiReminder(entry.name)) ?? "";
+    await new Promise((r) => setTimeout(r, 250));
+  }
+
+  definitionsMap = { ...defs, ...learned };
+  const existing = await readReminderFile(LEARNED_REMINDERS_FILE_PATH);
+  const payload = Object.fromEntries(
+    Object.entries({ ...existing, ...learned }).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  await fs.mkdir(path.dirname(LEARNED_REMINDERS_FILE_PATH), { recursive: true });
+  await fs.writeFile(LEARNED_REMINDERS_FILE_PATH, JSON.stringify(payload, null, 2) + "\n", "utf-8");
+
+  const found = Object.entries(learned).filter(([, v]) => v);
+  console.log(
+    `[MTG Keywords] Learned ${found.length}/${missing.length} reminder texts from MTG Wiki` +
+      (found.length ? `: ${found.map(([k]) => `"${k}"`).join(", ")}` : ""),
+  );
 }
 
 function hasKeywordGrantIntent(naturalQuery: string): boolean {
