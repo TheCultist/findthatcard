@@ -36,7 +36,7 @@ const PREFER_BEST_RE = /^prefer:best\s+/i;
 
 const NAMED_CARD_INTENTS = new Set(["similar-cards", "art-like-cards", "synergy-with-card"]);
 
-function buildDirectIR(query: string): SearchPipelineIR {
+export function buildDirectIR(query: string): SearchPipelineIR {
   return {
     naturalQuery: query,
     intent: "direct-scryfall",

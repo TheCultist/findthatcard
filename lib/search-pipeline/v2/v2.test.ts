@@ -15,6 +15,7 @@ import { splitCompoundQuery } from "@/lib/search-pipeline/compound";
 import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
 import { buildIRFromExtraction } from "@/lib/search-pipeline/v2/buildIR";
 import { recognizeCardNames, runPrePass } from "@/lib/search-pipeline/v2/prePass";
+import { buildDirectIR } from "@/lib/search-pipeline/v2/runV2";
 import type { V2Extraction } from "@/lib/search-pipeline/v2/schema";
 import { extractTaggerTags } from "@/lib/tagger/validation";
 
@@ -361,10 +362,24 @@ async function main(): Promise<void> {
     );
   }
 
-  // 7. Direct Scryfall syntax is detected by the pre-pass.
+  // 7. Direct Scryfall syntax is detected by the pre-pass and passed through as typed:
+  //    prefer:best is a default for generated queries only, never forced onto raw input.
   {
     const pp = runPrePass('name:"Lightning Bolt" game:paper');
     check("pre-pass flags direct scryfall", pp.direct === true);
+
+    const bare = (await finalizeQuery(buildDirectIR("t:artifact cmc=1 game:paper"))).queryForScryfall;
+    check("direct query: prefer:best not re-added", bare === "t:artifact cmc=1 game:paper", bare);
+
+    const kept = (await finalizeQuery(buildDirectIR("prefer:best t:artifact game:paper"))).queryForScryfall;
+    check("direct query: user's prefer:best kept", kept === "prefer:best t:artifact game:paper", kept);
+
+    const swapped = (await finalizeQuery(buildDirectIR("prefer:usd-low t:artifact game:paper"))).queryForScryfall;
+    check("direct query: other prefer: left alone", swapped === "prefer:usd-low t:artifact game:paper", swapped);
+
+    const generated = await buildIRFromExtraction(baseExtraction({ typesAll: ["artifact"] }), "artifacts");
+    const gen = (await finalizeQuery(generated)).queryForScryfall;
+    check("generated query: prefer:best still added", /^prefer:best /.test(gen), gen);
   }
 
   // 8. Empty extraction still yields a non-empty IR (safety net) so Phase 3 never gets nothing.

@@ -19,7 +19,7 @@ import useAdBlockDetection from "@/app/hooks/useAdBlockDetection";
 import CardCard from "@/app/components/CardCard";
 import AdBanner from "@/app/components/AdBanner";
 import QueryTokenPreview from "@/app/components/QueryTokenPreview";
-import { getColorSemanticSelectors } from "@/lib/query-tokens";
+import { getColorSemanticSelectors, getPreferSelector } from "@/lib/query-tokens";
 import { formatErrorMessage } from "@/lib/utils/errors";
 import CardDetailPanel from "@/app/components/CardDetailPanel";
 import ThemeToggle from "@/app/components/ThemeToggle";
@@ -758,6 +758,43 @@ export default function SearchPage() {
                 ))}
               </div>
             ))}
+            {(() => {
+              const prefer = getPreferSelector(editableQuery);
+              const groups = [...new Set(prefer.options.map((o) => o.group))];
+              return (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
+                  <label htmlFor="prefer-select" className="text-muted-soft">
+                    Printings:
+                  </label>
+                  <select
+                    id="prefer-select"
+                    value={prefer.current}
+                    disabled={loading}
+                    onChange={(e) => {
+                      const next = prefer.options.find((o) => o.value === e.target.value);
+                      if (!next || next.current) return;
+                      setEditableQuery(next.query);
+                      setCurrentPage(1);
+                      setPageInput("1");
+                      handleSearch(next.query, 1, { updateUrl: false });
+                    }}
+                    className="rounded-lg border border-border bg-surface-muted px-3 py-1 text-sm font-medium text-foreground transition-colors hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {groups.map((group) => (
+                      <optgroup key={group} label={group}>
+                        {prefer.options
+                          .filter((o) => o.group === group)
+                          .map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+              );
+            })()}
           </div>
         )}
 

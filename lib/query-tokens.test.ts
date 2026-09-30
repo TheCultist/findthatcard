@@ -5,7 +5,7 @@
  */
 
 import assert from "node:assert/strict";
-import { getColorSemanticSelectors } from "@/lib/query-tokens";
+import { getColorSemanticSelectors, getPreferSelector } from "@/lib/query-tokens";
 
 let passed = 0;
 function check(name: string, cond: boolean, detail?: string): void {
@@ -62,6 +62,29 @@ function check(name: string, cond: boolean, detail?: string): void {
   check("both fields detected", both.length === 2);
   check("negated ignored", getColorSemanticSelectors("-c:r t:creature").length === 0);
   check("no color → no selector", getColorSemanticSelectors("t:creature o:draw").length === 0);
+}
+
+// Printing preference selector: replaces in place, prepends when absent, "" removes, aliases canonicalized.
+{
+  const withBest = getPreferSelector("prefer:best t:artifact game:paper");
+  check("prefer current = best", withBest.current === "best");
+  const cheap = withBest.options.find((o) => o.value === "eur-low")!;
+  check("prefer replaced in place", cheap.query === "prefer:eur-low t:artifact game:paper", cheap.query);
+  const none = withBest.options.find((o) => o.value === "")!;
+  check("prefer removable", none.query === "t:artifact game:paper", none.query);
+
+  const absent = getPreferSelector("t:artifact game:paper");
+  check("no prefer → current empty", absent.current === "" && absent.options.find((o) => o.current)?.value === "");
+  const oldest = absent.options.find((o) => o.value === "oldest")!;
+  check("prefer prepended when absent", oldest.query === "prefer:oldest t:artifact game:paper", oldest.query);
+
+  const mid = getPreferSelector("t:artifact prefer:ub game:paper");
+  check("prefer alias canonicalized", mid.current === "universesbeyond");
+  const newest = mid.options.find((o) => o.value === "newest")!;
+  check("mid-query prefer replaced", newest.query === "t:artifact prefer:newest game:paper", newest.query);
+
+  const unknown = getPreferSelector("prefer:foo t:artifact");
+  check("unknown prefer surfaced as option", unknown.options.some((o) => o.value === "foo" && o.current));
 }
 
 console.log(`\nAll ${passed} query-token self-checks passed.`);

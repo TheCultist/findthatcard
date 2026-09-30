@@ -1,5 +1,4 @@
 import { ScryfallError, ScryfallSearchResponse } from "@/types/scryfall";
-import { PREFER_BEST_PREFIX } from "@/lib/scryfall/query-converter";
 
 const SCRYFALL_BASE_URL = "https://api.scryfall.com";
 const SCRYFALL_USER_AGENT =
@@ -22,25 +21,18 @@ function calculateScryfallPage(ourPage: number): { scryfallPage: number; offset:
   return { scryfallPage, offset };
 }
 
-function buildQueryWithPrefer(query: string): string {
+/**
+ * Final touch-ups before the request. The pipeline owns the `prefer:` prefix (added to
+ * generated queries in finalize, left alone for raw Scryfall input), so it is NOT forced here.
+ */
+function buildScryfallQuery(query: string): string {
   const trimmed = query.trim();
-  const hasPreferBest = /^prefer:best\s+/i.test(trimmed);
-  const queryBody = hasPreferBest
-    ? trimmed.replace(/^prefer:best\s+/i, "").trim()
-    : trimmed;
-  let queryWithPrefer = hasPreferBest
-    ? `prefer:best ${queryBody}`
-    : `${PREFER_BEST_PREFIX}${queryBody}`;
-  const queryLower = queryBody.toLowerCase();
-  if (
-    queryLower.includes("is:dfc") &&
-    !queryLower.includes("-is:art") &&
-    !queryLower.includes("is:art") &&
-    !queryLower.includes("t:art")
-  ) {
-    queryWithPrefer = `prefer:best ${queryBody} -is:art`;
+  const lower = trimmed.toLowerCase();
+  // Double-faced searches pick up art-series cards; exclude them unless the query addresses art.
+  if (lower.includes("is:dfc") && !lower.includes("is:art") && !lower.includes("t:art")) {
+    return `${trimmed} -is:art`;
   }
-  return queryWithPrefer;
+  return trimmed;
 }
 
 /**
@@ -52,7 +44,7 @@ export async function searchScryfall(
   page: number = 1
 ): Promise<{ response: ScryfallSearchResponse; offset: number }> {
   const { scryfallPage, offset } = calculateScryfallPage(page);
-  const queryWithPrefer = buildQueryWithPrefer(query);
+  const queryWithPrefer = buildScryfallQuery(query);
 
   const url = new URL(`${SCRYFALL_BASE_URL}/cards/search`);
   url.searchParams.set("q", queryWithPrefer);

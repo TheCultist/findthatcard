@@ -181,6 +181,82 @@ export function getColorSemanticSelectors(query: string): ColorSemanticSelector[
   return selectors;
 }
 
+// ---------------------------------------------------------------------------
+// Printing preference selector (prefer: clause)
+// ---------------------------------------------------------------------------
+
+export type PreferOption = {
+  /** Scryfall prefer: value; "" means no prefer: clause (Scryfall's own default). */
+  value: string;
+  label: string;
+  group: "Default" | "Age" | "Price" | "Style";
+};
+
+export const PREFER_OPTIONS: ReadonlyArray<PreferOption> = [
+  { value: "best", label: "Best printing (default)", group: "Default" },
+  { value: "", label: "No preference (Scryfall default)", group: "Default" },
+  { value: "oldest", label: "Oldest printing", group: "Age" },
+  { value: "newest", label: "Newest printing", group: "Age" },
+  { value: "usd-low", label: "Cheapest (USD)", group: "Price" },
+  { value: "usd-high", label: "Most expensive (USD)", group: "Price" },
+  { value: "eur-low", label: "Cheapest (EUR)", group: "Price" },
+  { value: "eur-high", label: "Most expensive (EUR)", group: "Price" },
+  { value: "tix-low", label: "Cheapest (MTGO tix)", group: "Price" },
+  { value: "tix-high", label: "Most expensive (MTGO tix)", group: "Price" },
+  { value: "promo", label: "Promo printings", group: "Style" },
+  { value: "default", label: "Default Magic frame", group: "Style" },
+  { value: "atypical", label: "Atypical frames", group: "Style" },
+  { value: "universesbeyond", label: "Universes Beyond", group: "Style" },
+  { value: "notuniversesbeyond", label: "Not Universes Beyond", group: "Style" },
+];
+
+const PREFER_ALIASES: Record<string, string> = {
+  ub: "universesbeyond",
+  notub: "notuniversesbeyond",
+};
+
+/** First un-negated prefer: token anywhere in the query. */
+const PREFER_TOKEN_RE = /(?<![\w-])prefer:([\w-]+)/i;
+
+export type PreferSelectorOption = PreferOption & { query: string; current: boolean };
+
+export type PreferSelector = {
+  /** Canonical current value ("" when the query has no prefer: clause). */
+  current: string;
+  options: PreferSelectorOption[];
+};
+
+/**
+ * Reads the query's prefer: clause and offers every alternative with the full
+ * rewritten query. Replaces the existing clause in place, or prepends one; the
+ * "" option removes it. Aliases (prefer:ub) are recognized as their long form.
+ */
+export function getPreferSelector(query: string): PreferSelector {
+  const match = query.match(PREFER_TOKEN_RE);
+  const raw = match?.[1].toLowerCase() ?? "";
+  const current = PREFER_ALIASES[raw] ?? raw;
+
+  const rewrite = (value: string): string => {
+    const token = value ? `prefer:${value}` : "";
+    const next = match ? query.replace(match[0], token) : token ? `${token} ${query}` : query;
+    return next.replace(/\s{2,}/g, " ").trim();
+  };
+
+  const options: PreferOption[] = PREFER_OPTIONS.some((o) => o.value === current)
+    ? [...PREFER_OPTIONS]
+    : [...PREFER_OPTIONS, { value: current, label: `prefer:${current}`, group: "Default" }];
+
+  return {
+    current,
+    options: options.map((o) => ({ ...o, query: rewrite(o.value), current: o.value === current })),
+  };
+}
+
+const preferLabel = (value: string): string => {
+  const canonical = PREFER_ALIASES[value.toLowerCase()] ?? value.toLowerCase();
+  return PREFER_OPTIONS.find((o) => o.value === canonical)?.label ?? value;
+};
+
 const FORMAT_NAMES: Record<string, string> = {
   standard: "Standard",
   future: "Future Standard",
@@ -393,8 +469,9 @@ const FIELD_DESCRIPTIONS: Record<
   prefer: {
     title: "Prefer",
     description:
-      "Instructs Scryfall how to deduplicate results when a card appears in multiple sets. prefer:best returns the highest-quality printing.",
-    tip: "prefer:best is added automatically. Remove it to see all printings.",
+      "Chooses which printing represents a card that appears in multiple sets. prefer:best picks the highest-quality printing; " +
+      "other values pick by age, price, or frame style.",
+    tip: "prefer:best is added automatically. Use the Printings selector below the query to change it.",
   },
   order: {
     title: "Sort Order",
@@ -1117,7 +1194,7 @@ export const getTokenMetadata = (token: QueryToken, sourceQuery: string): TokenM
     if (canonicalField === "prefer") {
       return {
         ...token,
-        title: `Prefer: ${val}`,
+        title: `Printing: ${preferLabel(val)}`,
         description: FIELD_DESCRIPTIONS.prefer?.description ?? "Controls how Scryfall selects among duplicate printings.",
         reason: buildReason(token, sourceQuery),
         tip: FIELD_DESCRIPTIONS.prefer?.tip,

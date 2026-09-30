@@ -827,7 +827,10 @@ function injectArchetypeTagsFromResolvedFragments(
 
 export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result> {
   const baseQuery = assembleQueryFromIR(ir);
-  const queryWithoutPrefer = stripPreferBestPrefix(baseQuery);
+  // `prefer:best` is a default we add to generated queries. Raw Scryfall syntax is the
+  // user's own: keep it exactly as typed, whether they kept, removed, or swapped the prefer:.
+  const isDirect = ir.intent === "direct-scryfall";
+  const queryWithoutPrefer = isDirect ? baseQuery : stripPreferBestPrefix(baseQuery);
   // Archetype-resolved Phase 2 fragments are injected here, not in assembleQueryFromIR,
   // so the emptiness check must come after injection — the base alone can be empty when
   // the entire query meaning comes from Phase 2 archetypes (e.g. "deal damage to any target").
@@ -967,7 +970,7 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     }
   }
 
-  const queryForScryfall = prependPreferBest(query);
+  const queryForScryfall = isDirect ? query : prependPreferBest(query);
   return {
     queryForScryfall,
     queryForLogs: query,
