@@ -1,9 +1,10 @@
 "use client";
 
 import { CardResult } from "@/types/scryfall";
-import { getCardTraderLink, getCardTraderHomepageLink } from "@/lib/cardtrader/links";
+import { getStoreOffers, prefersTcgPlayer, STORE_BUTTON_CLASS } from "@/lib/prices";
 import ManaCost from "@/app/components/ManaCost";
 import Image from "next/image";
+import { track } from "@vercel/analytics";
 import { useState, useEffect } from "react";
 
 interface CardCardProps {
@@ -12,10 +13,11 @@ interface CardCardProps {
 }
 
 export default function CardCard({ card, onCardClick }: CardCardProps) {
-  const [isCheckingLink, setIsCheckingLink] = useState(false);
   const [activeFaceIndex, setActiveFaceIndex] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
   const [isFlipping, setIsFlipping] = useState(false);
+  // Results arrive from a client fetch, so this never runs during SSR.
+  const [tcgFirst] = useState(prefersTcgPlayer);
   
   const hasFaces = card.card_faces && card.card_faces.length > 1;
   
@@ -37,6 +39,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
   }, [activeFaceIndex]);
 
   const handleClick = () => {
+    track("card_open", { card: card.name });
     if (onCardClick) {
       onCardClick(card);
     } else {
@@ -57,47 +60,8 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
     }
   };
 
-  const handleCardTraderClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const cardtraderUrl = getCardTraderLink(
-      card.name,
-      card.set_name,
-      card.set_code,
-      card.collector_number
-    );
-
-    setIsCheckingLink(true);
-    try {
-      const response = await fetch(`/api/check-link?url=${encodeURIComponent(cardtraderUrl)}`);
-      const data = await response.json();
-
-      if (data.is404) {
-        // Redirect to CardTrader homepage with share code
-        const homepageUrl = getCardTraderHomepageLink();
-        window.open(homepageUrl, "_blank", "noopener,noreferrer");
-      } else {
-        // Link is valid, open it
-        window.open(cardtraderUrl, "_blank", "noopener,noreferrer");
-      }
-    } catch (error) {
-      console.error("[CardCard] Error checking CardTrader link:", error);
-      const homepageUrl = getCardTraderHomepageLink();
-      window.open(homepageUrl, "_blank", "noopener,noreferrer");
-    } finally {
-      setIsCheckingLink(false);
-    }
-  };
-
-  const tcgPlayerUrl = card.tcgplayer_link;
-
-  const handleTcgPlayerClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.stopPropagation();
-    if (!tcgPlayerUrl) {
-      e.preventDefault();
-    }
-  };
+  // Each price is itself the buy link: one click from the grid to the store.
+  const offers = getStoreOffers(card, tcgFirst).filter((o) => o.price);
 
   return (
     <div
@@ -154,7 +118,7 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
         </div>
       )}
 
-      <div className="mb-2 flex items-start justify-between gap-1 sm:mb-3 sm:gap-2">
+      <div className="flex items-start justify-between gap-1 sm:gap-2">
         <h3 className="flex-1 min-w-0 text-xs font-semibold text-foreground line-clamp-2 group-hover:text-accent sm:text-base sm:pr-2">
           {card.name}
         </h3>
@@ -167,61 +131,41 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
         </div>
       </div>
 
-      <div className="hidden text-center text-xs font-semibold uppercase tracking-wide text-muted sm:block">
-        Buy this card
-      </div>
-      <div className="mt-1 flex gap-1.5 sm:mt-2 sm:gap-2">
-        <a
-          href={getCardTraderLink(
-            card.name,
-            card.set_name,
-            card.set_code,
-            card.collector_number
-          )}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={handleCardTraderClick}
-          className={`flex flex-1 items-center justify-center rounded-lg border border-stone-400/60 bg-stone-600 p-2 transition-colors hover:border-stone-400 hover:bg-stone-500 dark:border-stone-600 dark:bg-stone-700 dark:hover:bg-stone-600 sm:p-3 ${
-            isCheckingLink ? "cursor-wait opacity-60" : ""
-          }`}
-          aria-label="Buy on CardTrader"
-          aria-disabled={isCheckingLink}
-        >
-          <span className="sr-only">
-            {isCheckingLink ? "Checking CardTrader link" : "Buy on CardTrader"}
-          </span>
-          <Image
-            src="/brand/cardtrader.svg"
-            alt="CardTrader"
-            width={120}
-            height={24}
-            unoptimized
-            className="h-4 w-auto sm:h-6"
-          />
-        </a>
-
-        <a
-          href={tcgPlayerUrl || "#"}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={handleTcgPlayerClick}
-          className={`flex flex-1 items-center justify-center rounded-lg border border-stone-400/60 bg-stone-600 p-2 transition-colors hover:border-stone-400 hover:bg-stone-500 dark:border-stone-600 dark:bg-stone-700 dark:hover:bg-stone-600 sm:p-3 ${
-            !tcgPlayerUrl ? "cursor-not-allowed opacity-50" : ""
-          }`}
-          aria-label="Buy on TCGPlayer"
-          aria-disabled={!tcgPlayerUrl}
-        >
-          <span className="sr-only">Buy on TCGPlayer</span>
-          <Image
-            src="/brand/tcgplayer.svg"
-            alt="TCGPlayer"
-            width={120}
-            height={24}
-            unoptimized
-            className="h-4 w-auto sm:h-6"
-          />
-        </a>
-      </div>
+      {offers.length > 0 && (
+        <div className="mt-2 flex gap-1.5 sm:mt-3 sm:gap-2">
+          {offers.map((o) => (
+            <a
+              key={o.id}
+              href={o.href ?? "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Buy on ${o.name} from ${o.price}`}
+              aria-disabled={!o.href}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!o.href) {
+                  e.preventDefault();
+                  return;
+                }
+                track("buy_click", { store: o.id, surface: "grid", card: card.name });
+              }}
+              className={`${STORE_BUTTON_CLASS} flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-2 py-1.5 ${
+                o.href ? "" : "cursor-not-allowed opacity-50"
+              }`}
+            >
+              <span className="text-xs font-semibold tabular-nums text-white sm:text-sm">{o.price}</span>
+              <Image
+                src={o.logo}
+                alt={o.name}
+                width={100}
+                height={20}
+                unoptimized
+                className="h-3 w-auto max-w-full object-contain sm:h-3.5"
+              />
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -27,6 +27,20 @@ export interface ScryfallPurchaseUris {
   tcgplayer?: string;
 }
 
+/** Scryfall reports prices as decimal strings, null when the market has no listing. */
+export interface ScryfallPrices {
+  usd?: string | null;
+  usd_foil?: string | null;
+  eur?: string | null;
+  eur_foil?: string | null;
+}
+
+/** Cheapest listed price per currency, as a decimal string. */
+export interface CardPrices {
+  usd: string | null;
+  eur: string | null;
+}
+
 export interface ScryfallCard {
   id: string;
   name: string;
@@ -45,6 +59,7 @@ export interface ScryfallCard {
   all_parts?: ScryfallRelatedCard[]; // Related cards (tokens, meld parts, etc.)
   tcgplayer_id?: number; // TCGPlayer product ID for this printing
   purchase_uris?: ScryfallPurchaseUris; // Purchase links for this card
+  prices?: ScryfallPrices;
 }
 
 export interface ScryfallSearchResponse {
@@ -99,6 +114,7 @@ export interface CardResult {
   set_code: string | null; // Set code (e.g., "lea", "war")
   tcgplayer_id: number | null; // TCGPlayer product ID for this printing
   tcgplayer_link: string | null; // TCGPlayer partner link for this printing
+  prices: CardPrices;
 }
 
 export interface ErrorResponse {

@@ -127,12 +127,3 @@ export function getCardTraderLink(
   // Fallback to homepage
   return `https://www.cardtrader.com/en/magic?share_code=${shareCode}`;
 }
-
-/**
- * Gets the CardTrader homepage URL with share code
- */
-export function getCardTraderHomepageLink(): string {
-  const shareCode =
-    process.env.NEXT_PUBLIC_CARDTRADER_SHARE_CODE || "thecultist";
-  return `https://www.cardtrader.com/en/magic?share_code=${shareCode}`;
-}

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "tsx lib/scryfall/query-converter.test.ts && tsx lib/search-pipeline/synergy-cards.test.ts && tsx lib/search-pipeline/synergyPartnerMask.test.ts && tsx lib/search-pipeline/v2/v2.test.ts && tsx lib/query-tokens.test.ts",
+    "test": "tsx lib/scryfall/query-converter.test.ts && tsx lib/search-pipeline/synergy-cards.test.ts && tsx lib/search-pipeline/synergyPartnerMask.test.ts && tsx lib/search-pipeline/v2/v2.test.ts && tsx lib/query-tokens.test.ts && tsx lib/prices.test.ts",
     "test:queries": "tsx lib/scryfall/query-converter.test.ts && tsx lib/search-pipeline/v2/v2.test.ts",
     "search:qa": "tsx scripts/search-qabot.ts"
   },

@@ -12,7 +12,8 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@heroicons/react/24/outline";
-import { getCardTraderLink, getCardTraderHomepageLink } from "@/lib/cardtrader/links";
+import { getStoreOffers, prefersTcgPlayer, STORE_BUTTON_CLASS } from "@/lib/prices";
+import { track } from "@vercel/analytics";
 import { usePagerAnimation } from "@/app/hooks/usePagerAnimation";
 
 interface CardDetailPanelProps {
@@ -72,6 +73,9 @@ function fetchCardDetail(id: string): Promise<CardDetailData | null> {
 
 /** Movement (px) before a gesture locks to either the horizontal or vertical axis. */
 const AXIS_LOCK_PX = 8;
+
+/** Logo flush left, price flush right: the two stores read as a small comparison table. */
+const BUY_BUTTON_CLASS = `${STORE_BUTTON_CLASS} flex flex-1 items-center justify-between gap-3 px-4 py-2.5`;
 
 const RARITY_COLORS: Record<string, string> = {
   common: "text-gray-500 dark:text-gray-400",
@@ -184,10 +188,11 @@ export default function CardDetailPanel({
   );
   const [loading, setLoading] = useState(() => !detailCache.has(card.id));
   const [activeFace, setActiveFace] = useState(0);
-  const [isCheckingLink, setIsCheckingLink] = useState(false);
   const [visible, setVisible] = useState(false);
   const [dragY, setDragY] = useState(0);
   const [isSwipingAway, setIsSwipingAway] = useState(false);
+  // The panel only ever mounts client-side (after a click), so reading navigator here is safe.
+  const [tcgFirst] = useState(prefersTcgPlayer);
 
   const pager = usePagerAnimation();
   /** Set when a navigation is requested, and consumed once the new card renders. */
@@ -397,28 +402,6 @@ export default function CardDetailPanel({
     };
   }, []);
 
-  const handleCardTraderClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const cardtraderUrl = getCardTraderLink(
-      card.name,
-      card.set_name,
-      card.set_code,
-      card.collector_number
-    );
-    setIsCheckingLink(true);
-    try {
-      const response = await fetch(`/api/check-link?url=${encodeURIComponent(cardtraderUrl)}`);
-      const data = await response.json();
-      const url = data.is404 ? getCardTraderHomepageLink() : cardtraderUrl;
-      window.open(url, "_blank", "noopener,noreferrer");
-    } catch {
-      window.open(getCardTraderHomepageLink(), "_blank", "noopener,noreferrer");
-    } finally {
-      setIsCheckingLink(false);
-    }
-  };
-
   const getFaceImage = (): string | null => {
     if (detailData) {
       const hasFaces = detailData.card_faces && detailData.card_faces.length > 1;
@@ -443,17 +426,15 @@ export default function CardDetailPanel({
     ? (RARITY_COLORS[detailData.rarity] ?? "text-gray-400")
     : "text-gray-400";
 
-  const tcgPlayerUrl = card.tcgplayer_link;
-  const cardtraderUrl = getCardTraderLink(
-    card.name,
-    card.set_name,
-    card.set_code,
-    card.collector_number
-  );
+  // Plain links on purpose: CardTrader fuzzy-redirects any name+set slug to its nearest blueprint,
+  // but only for browser-like requests, so a server-side pre-check sees 404s the user never would.
+  // A plain anchor also keeps the navigation inside the user gesture (Safari blocks it after an await).
+  const offers = getStoreOffers(card, tcgFirst);
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-200 ${
+      // Above the z-50 floating bug/scroll-to-top buttons, which otherwise overlap the buy row.
+      className={`fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-200 ${
         visible && !isSwipingAway ? "bg-foreground/60 backdrop-blur-sm" : "bg-transparent pointer-events-none"
       }`}
       onClick={handleClose}
@@ -788,50 +769,45 @@ export default function CardDetailPanel({
         </div>
 
         <div className="flex-shrink-0 border-t border-border px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-surface sm:pb-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-soft text-center mb-2">
-            Buy here and support the project
-          </p>
-          <div className="flex flex-row gap-2">
-            <a
-              href={cardtraderUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={handleCardTraderClick}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border border-stone-400/60 bg-stone-600 px-3 py-2.5 transition-colors hover:border-stone-400 hover:bg-stone-500 dark:border-stone-600 dark:bg-stone-700 dark:hover:bg-stone-600 ${
-                isCheckingLink ? "cursor-wait opacity-60" : ""
-              }`}
-            >
-              <Image
-                src="/brand/cardtrader.svg"
-                alt="CardTrader"
-                width={100}
-                height={20}
-                unoptimized
-                className="h-4 w-auto"
-              />
-              <span className="sr-only">Buy on CardTrader</span>
-            </a>
-
-            <a
-              href={tcgPlayerUrl || "#"}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => { if (!tcgPlayerUrl) e.preventDefault(); e.stopPropagation(); }}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-lg border border-stone-400/60 bg-stone-600 px-3 py-2.5 transition-colors hover:border-stone-400 hover:bg-stone-500 dark:border-stone-600 dark:bg-stone-700 dark:hover:bg-stone-600 ${
-                !tcgPlayerUrl ? "cursor-not-allowed opacity-50" : ""
-              }`}
-            >
-              <Image
-                src="/brand/tcgplayer.svg"
-                alt="TCGPlayer"
-                width={100}
-                height={20}
-                unoptimized
-                className="h-4 w-auto"
-              />
-              <span className="sr-only">Buy on TCGPlayer</span>
-            </a>
+          {/* DOM order follows the preferred store so tab order matches what's on screen. */}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {offers.map((store) => (
+              <a
+                key={store.id}
+                href={store.href ?? "#"}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (!store.href) {
+                    e.preventDefault();
+                    return;
+                  }
+                  track("buy_click", { store: store.id, surface: "panel", card: card.name });
+                }}
+                aria-label={store.price ? `Buy on ${store.name} from ${store.price}` : `Buy on ${store.name}`}
+                aria-disabled={!store.href}
+                className={`${BUY_BUTTON_CLASS} ${store.href ? "" : "cursor-not-allowed opacity-50"}`}
+              >
+                <Image
+                  src={store.logo}
+                  alt={store.name}
+                  width={100}
+                  height={20}
+                  unoptimized
+                  className="h-4 w-auto"
+                />
+                {store.price ? (
+                  <span className="text-sm font-semibold tabular-nums text-white">{store.price}</span>
+                ) : (
+                  <ArrowTopRightOnSquareIcon className="h-4 w-4 text-white/70" aria-hidden="true" />
+                )}
+              </a>
+            ))}
           </div>
+          <p className="mt-2 text-center text-[11px] leading-snug text-muted-soft">
+            Affiliate links. Buying through them supports the site at no extra cost to you.
+          </p>
         </div>
       </div>
     </div>

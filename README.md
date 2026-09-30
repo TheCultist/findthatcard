@@ -154,7 +154,6 @@ findthatcard/
 │       ├── catalogs/route.ts
 │       ├── keywords/route.ts
 │       ├── keyword-definitions/route.ts
-│       ├── check-link/route.ts     # HEAD-checks CardTrader links before navigation
 │       ├── report-bug/route.ts     # Sends bug reports via Resend
 │       └── cron/midnight/route.ts  # Vercel cron job (daily cache refresh)
 ├── lib/

@@ -303,6 +303,11 @@ export async function transformScryfallResponse(
           tcgplayerId: card.tcgplayer_id ?? null,
           destinationUrl: card.purchase_uris?.tcgplayer ?? null,
         }),
+        prices: {
+          // Foil-only printings have no non-foil listing; fall back so the card still shows a price.
+          usd: card.prices?.usd ?? card.prices?.usd_foil ?? null,
+          eur: card.prices?.eur ?? card.prices?.eur_foil ?? null,
+        },
       };
     })
   );
