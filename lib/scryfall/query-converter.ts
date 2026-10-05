@@ -4,14 +4,7 @@ import {
 } from "@/lib/prompts";
 import { buildSystemPrompt, selectPacks } from "@/lib/prompts/promptModules";
 import { TaggerTagContext, extractArtKeywords } from "@/lib/tagger/context";
-import {
-  expandStrategyTags,
-  resolveStrategyName,
-  STRATEGY_ORACLETAGS,
-} from "@/lib/strategies/oracletagStrategies";
-import { hasCommanderDeckContext } from "@/lib/commander-context";
-import { maskSynergyWithComplements } from "@/lib/search-pipeline/synergyPartnerMask";
-import { isPauperCommanderContext, SCRYFALL_FORMATS, stripRedundantTypesForCommanderEligible } from "@/lib/scryfall/formats";
+import { SCRYFALL_FORMATS, stripRedundantTypesForCommanderEligible } from "@/lib/scryfall/formats";
 import { escapeRegex } from "@/lib/utils/text";
 
 let openaiClient: OpenAI | null = null;
@@ -206,47 +199,6 @@ function dedupeTokens(query: string): string {
   return normalizeWhitespace(result.join(" "));
 }
 
-function normalizeCounterspellIntent(naturalQuery: string, query: string): string {
-  const wantsCounterspells = /\bcounter\s*spells?\b|\bcounterspells?\b/i.test(naturalQuery);
-  if (!wantsCounterspells) {
-    return query;
-  }
-
-  let updated = query;
-  const hasCounterspellTag = /\bfunction:counterspell\b/i.test(updated);
-  if (!hasCounterspellTag) {
-    updated = `${updated} function:counterspell`;
-  }
-
-  // If the user asked for counterspells, remove ability counter tags and oracle "counter" text.
-  updated = updated.replace(/\bfunction:ability-counter\b/gi, "");
-  updated = updated.replace(/\bo:"counterspell"\b/gi, "");
-  updated = updated.replace(/\bo:"counter"\b/gi, "");
-  updated = updated.replace(/\bo:counter\b/gi, "");
-  updated = updated.replace(/\bo:"counter target spell"\b/gi, "");
-  updated = updated.replace(/\bo:"counter target spell\."\b/gi, "");
-
-  return normalizeWhitespace(updated);
-}
-
-function normalizeNotRedRequirement(naturalQuery: string, query: string): string {
-  const wantsExcludeRed = /\b(not in|without|no|non[-\s]?|excluding|exclude)\s+red\b/i.test(
-    naturalQuery
-  );
-  if (!wantsExcludeRed) {
-    return query;
-  }
-
-  let updated = query;
-  updated = updated.replace(/\b-?function:red-hate\b/gi, "");
-  updated = updated.replace(/-c:r(?!ù)/gi, "-c:r");
-  if (!/\b-c:r\b/i.test(updated)) {
-    updated = `${updated} -c:r`;
-  }
-
-  return normalizeWhitespace(updated);
-}
-
 function normalizeManaCostSymbolIntent(naturalQuery: string, query: string): string {
   const wantsXInCost =
     /\b(x|x's)\b/i.test(naturalQuery) &&
@@ -263,81 +215,6 @@ function normalizeManaCostSymbolIntent(naturalQuery: string, query: string): str
   updated = updated.replace(/\bfunction:converted-mana-cost-matters\b/gi, "");
 
   return normalizeWhitespace(updated);
-}
-
-function normalizeCommanderIntent(naturalQuery: string, query: string): string {
-  const lower = naturalQuery.toLowerCase();
-  const pdh = isPauperCommanderContext(naturalQuery, query);
-  // Strip PDH format phrasing before detecting "commanders" so "pauper commander
-  // legal removal" is treated as format-only, not commander-eligibility.
-  const withoutPdhFormat = lower
-    .replace(/\bpauper\s*(?:edh|commander)\b/gi, " ")
-    .replace(/\bp(?:e)?dh\b/gi, " ")
-    .replace(/\bpaupercommander\b/gi, " ")
-    .replace(/\bpaupermmander\b/gi, " ");
-  const wantsCommanders =
-    /\b(commanders?|commander cards?|commander creatures?|can be commanders?)\b/i.test(
-      pdh ? withoutPdhFormat : lower
-    ) &&
-    !hasCommanderDeckContext(naturalQuery) &&
-    // Exclude mechanic phrases — "commander's tax/damage/ninjutsu/eminence" refers to
-    // game mechanics, not commander creatures.
-    !/\bcommander[''s]*\s+(?:tax|damage|ninjutsu|eminence|storm)\b/i.test(lower);
-
-  // Pauper EDH / PDH is one format (f:paupercommander). Never split into f:pauper +
-  // f:commander, and use is:paupercommander (not is:commander) for commanders.
-  if (pdh) {
-    let updated = query
-      .replace(/\bf:pauper\b/gi, "f:paupercommander")
-      .replace(/\bf:commander\b/gi, "")
-      .replace(/\bis:commander\b/gi, "");
-    if (!/\bf:paupercommander\b/i.test(updated)) {
-      updated = `${updated} f:paupercommander`;
-    }
-    if (wantsCommanders) {
-      if (!/\bis:paupercommander\b/i.test(updated)) {
-        updated = `${updated} is:paupercommander`;
-      }
-    } else {
-      updated = updated.replace(/\bis:paupercommander\b/gi, "");
-    }
-    return normalizeWhitespace(updated);
-  }
-
-  const wantsCommanderFormat =
-    /\b(commander[-\s]?legal|legal\s+in\s+commander|for\s+commander|commander\s+format|in\s+commander|edh[-\s]?legal|legal\s+in\s+edh|for\s+edh|edh\s+format|in\s+edh)\b/i.test(
-      lower
-    ) ||
-    (/\blegal\b/i.test(lower) && /\bcommander\b/i.test(lower));
-  const multipleFormats = (query.match(/\bf:[a-z]+\b/gi) || []).length >= 2;
-  const myCommanderDeck = hasCommanderDeckContext(naturalQuery);
-  const wantsCommanderCreatures =
-    !multipleFormats &&
-    wantsCommanders &&
-    !wantsCommanderFormat &&
-    !myCommanderDeck;
-
-  let updated = query;
-
-  if (wantsCommanderFormat || multipleFormats) {
-    updated = updated.replace(/\bis:commander\b/gi, "");
-    if (!/\bf:commander\b/i.test(updated) && wantsCommanderFormat) {
-      updated = `${updated} f:commander`;
-    }
-    return normalizeWhitespace(updated);
-  }
-
-  if (wantsCommanderCreatures) {
-    if (/\bf:commander\b/i.test(updated) && !/\bis:commander\b/i.test(updated)) {
-      updated = updated.replace(/\bf:commander\b/gi, "is:commander");
-    }
-    if (!/\bis:commander\b/i.test(updated)) {
-      updated = `${updated} is:commander`;
-    }
-    return normalizeWhitespace(updated);
-  }
-
-  return updated;
 }
 
 function normalizeGameChangerIntent(naturalQuery: string, query: string): string {
@@ -418,51 +295,10 @@ function normalizeInstantSorceryTypeChain(query: string): string {
   return normalizeWhitespace(`(t:instant or t:sorcery) ${updated}`);
 }
 
-/** Reserved for future burn-tag selection logic. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function pickBurnFunctionTag(
-  naturalQuery: string,
-  tagContext?: TaggerTagContext
-): string {
-  const candidates =
-    tagContext?.function.filter((tag) => tag.toLowerCase().startsWith("burn")) || [];
-  if (candidates.length === 0) {
-    return "burn";
-  }
-
-  const query = naturalQuery.toLowerCase();
-  const selectors: Array<{ keyword: string; tokens: string[]; weight: number }> = [
-    { keyword: "player", tokens: ["player", "players"], weight: 2 },
-    { keyword: "opponent", tokens: ["opponent", "opponents"], weight: 2 },
-    { keyword: "creature", tokens: ["creature", "creatures"], weight: 2 },
-    { keyword: "planeswalker", tokens: ["planeswalker", "planeswalkers"], weight: 2 },
-    { keyword: "any-target", tokens: ["any target"], weight: 1 },
-    { keyword: "face", tokens: ["face"], weight: 1 },
-  ];
-
-  let best = candidates[0];
-  let bestScore = -1;
-  for (const tag of candidates) {
-    const lower = tag.toLowerCase();
-    let score = 0;
-    for (const selector of selectors) {
-      if (selector.tokens.some((token) => query.includes(token)) && lower.includes(selector.keyword)) {
-        score += selector.weight;
-      }
-    }
-    if (score > bestScore || (score === bestScore && tag.length < best.length)) {
-      best = tag;
-      bestScore = score;
-    }
-  }
-
-  return best;
-}
-
 type DamageTarget = "opponent" | "creature" | "planeswalker" | "player" | "any" | "battle" | "general";
 
 /**
- * Function tags for opponent- / player-target burn and direct life-loss (normalizeBurnIntent).
+ * Function tags for opponent- / player-target burn and direct life-loss (damage archetype).
  * Single source for `DAMAGE_TAG_FAMILIES.opponent` / `player` and Phase 3 spell-cast ping fixes.
  */
 export const OPPONENT_BURN_DAMAGE_FUNCTION_TAGS = [
@@ -497,90 +333,16 @@ const DAMAGE_TAG_FAMILIES: Record<DamageTarget, string[]> = {
   ],
 };
 
-const STRAY_DAMAGE_TAG_PATTERN = /\bfunction:(burn(?:-[a-z0-9-]+)?|opponent-loses-life|life-drain|drain-life|lifegain-to-damage|combat-neutral-damage-trigger|damage-[a-z0-9-]+|spite-damage|retaliate-(?:to-)?damage|fractional-life-damage|transcendental-life-damage|removal-(?:creature-)?burn|removal-(?:planeswalker-)?burn|removal-(?:battle-)?burn|single-target-spell)\b/gi;
-
-function detectDamageTarget(naturalQuery: string): DamageTarget | null {
-  const lower = naturalQuery.toLowerCase();
-  const hasDamageIntent =
-    /\b(direct damage|burn)\b/i.test(lower) ||
-    /\bdeal[st]?\s+.*?\bdamage\b/i.test(lower) ||
-    /\bdamage[sd]?\s+(?:target\s+)?(?:opponent|creature|player|planeswalker|battle|any|each)\b/i.test(lower) ||
-    /\bthat\s+damage[sd]?\b/i.test(lower) ||
-    /\bdamage[sd]?\s+(?:the|a|an|each|target)\b/i.test(lower);
-  if (!hasDamageIntent) return null;
-  const hasDisqualifier = /\b(prevent|prevention|redirect|redirection|multiply|multiplier)\b/i.test(lower);
-  if (hasDisqualifier) return null;
-
-  if (/\bany\s+target\b/i.test(lower)) return "any";
-  if (/\bopponents?\b/i.test(lower)) return "opponent";
-  if (/\bcreatures?\b/i.test(lower) && /\bdamage\b/i.test(lower)) return "creature";
-  if (/\bplaneswalkers?\b/i.test(lower)) return "planeswalker";
-  if (/\bplayers?\b/i.test(lower)) return "player";
-  if (/\bbattles?\b/i.test(lower)) return "battle";
-  return "general";
-}
-
-function normalizeBurnIntent(
-  naturalQuery: string,
-  query: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Reserved for future tag-aware burn selection
-  _tagContext?: TaggerTagContext
-): string {
-  const target = detectDamageTarget(naturalQuery);
-  if (!target) return query;
-
-  let updated = query;
-  const desiredTags = DAMAGE_TAG_FAMILIES[target];
-
-  for (const tag of desiredTags) {
-    if (!new RegExp(`\\bfunction:${escapeRegex(tag)}\\b`, "i").test(updated)) {
-      updated = `${updated} function:${tag}`;
-    }
-  }
-
-  const desiredSet = new Set(desiredTags);
-  const chainTags: string[] = [];
-  let strayMatch: RegExpExecArray | null;
-  while ((strayMatch = STRAY_DAMAGE_TAG_PATTERN.exec(updated)) !== null) {
-    const slug = (strayMatch[1] || "").toLowerCase();
-    if (!slug) continue;
-    if (desiredSet.has(slug)) {
-      chainTags.push(`function:${slug}`);
-    }
-  }
-
-  const dedupedChainTags = Array.from(new Set(chainTags));
-  if (dedupedChainTags.length >= 2) {
-    updated = updated.replace(STRAY_DAMAGE_TAG_PATTERN, " ");
-    updated = normalizeWhitespace(updated);
-    updated = normalizeWhitespace(`${updated} (${dedupedChainTags.join(" or ")})`);
-  }
-
-  updated = updated.replace(/\bo:"[^"]*damage[^"]*"\b/gi, "");
-  updated = updated.replace(/\bo:damage\b/gi, "");
-  updated = updated.replace(/\bo:"?(player|opponent|any target|target)"?\b/gi, "");
-
-  return normalizeWhitespace(updated);
-}
-
 type ArchetypeQualifier = {
   name: string;
-  detect: RegExp;
   tags: string[];
-  suppressTypes?: string[];
 };
 
 type ArchetypeEntry = {
   name: string;
   description: string;
-  detect: RegExp;
-  disqualify?: RegExp;
   defaultTags: string[];
   qualifiers?: ArchetypeQualifier[];
-  strayPattern?: RegExp;
-  /** If the assembled Scryfall query already contains this kw:X token, skip injecting
-   *  function: tags — Phase 1 already expressed the intent more precisely. */
-  skipIfKw?: string;
 };
 
 /**
@@ -632,692 +394,460 @@ export function hateMagnetFunctionTagsExcluding(
 const ARCHETYPE_REGISTRY: ArchetypeEntry[] = [
   {
     name: "removal",
-    description: "Destroy, exile, bounce, or tuck permanents",
-    detect: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?|kill\s+spell|kill\s+spells)\b/i,
-    // "exile" used as a zone name (preceded by "from" or "in") is a zone-reference,
-    // not targeted removal — e.g. "cast from exile", "cards in exile", "from the exile zone".
-    // "library" / "top of" / "top card" indicate mill-exile or play-from-top, also not removal.
-    // Exile-for-delayed-use is impulse/exile-utility, not removal: "exile and can be
-    // used/cast/played later", "for later", or a named delayed-cast mechanic
-    // (warp, foretell, suspend, plot, impulse).
-    disqualify: /\b(graveyard|reanimate|return|recursion|library|from\s+(?:the\s+)?top|top\s+(?:card|of)|(?:from|in)\s+(?:the\s+)?exile|(?:cast|play|use)[a-z]*[^,;.]{0,20}later|(?:for|until)\s+later|warp|foretell|suspend|plot|impulse)\b/i,
+    description:
+      "Destroy, exile, bounce, or tuck permanents (not exile as a zone: 'cast from exile', impulse, foretell, suspend)",
     defaultTags: ["removal", "spot-removal", "repeatable-removal", "oblivion-ring-effect"],
     qualifiers: [
       {
         name: "creature",
-        detect: /\bcreature\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile|kill)\s+(?:target\s+|a\s+|the\s+)?creatures?\b/i,
         tags: ["removal-creature", "removal-creature-burn", "removal-creature-fight", "removal-exile", "removal-destroy", "spot-removal"],
-        suppressTypes: ["creature"],
       },
       {
         name: "enchantment",
-        detect: /\benchantment\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?enchantments?\b/i,
         tags: ["removal-enchantment"],
-        suppressTypes: ["enchantment"],
       },
       {
         name: "artifact",
-        detect: /\bartifact\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?artifacts?\b/i,
         tags: ["removal-artifact"],
-        suppressTypes: ["artifact"],
       },
       {
         name: "planeswalker",
-        detect: /\bplaneswalker\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?planeswalkers?\b/i,
         tags: ["removal-planeswalker", "removal-planeswalker-burn"],
-        suppressTypes: ["planeswalker"],
       },
       {
         name: "land",
-        detect: /\bland\s+(removal|destroy)|(?:removal|remove|destroy)\s+(?:target\s+|a\s+|the\s+)?lands?\b/i,
         tags: ["removal-land"],
-        suppressTypes: ["land"],
       },
       {
         name: "permanent",
-        detect: /\bpermanent\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?permanents?\b/i,
         tags: ["removal-permanent", "removal-exile", "removal-destroy", "removal-bounce"],
       },
       {
         name: "noncreature",
-        detect: /\bnon-?creature\s+(removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?non-?creatures?\b/i,
         tags: ["removal-noncreature", "removal-enchantment", "removal-artifact", "removal-planeswalker", "removal-land"],
       },
       {
         name: "any",
-        detect: /\b(?:any(?:\s+target)?|anything|flexible|versatile)\s+(?:removal|remove[sd]?|destroy[sd]?|exile[sd]?)|(?:removal|remove[sd]?|destroy[sd]?|exile[sd]?)\s+(?:any(?:thing)?|anything)\b/i,
         tags: ["removal-exile", "removal-destroy", "removal-bounce", "removal-permanent", "spot-removal"],
       },
     ],
-    strayPattern: /\bfunction:(removal(?:-[a-z0-9-]+)?|spot-removal|repeatable-removal|swap-removal|mass-removal|multi-removal|creature-removal|artifact-removal|enchantment-removal|land-removal|planeswalker-removal)\b/gi,
   },
   {
     name: "ramp",
     description: "Accelerate mana production or cheat mana costs",
-    detect: /\b(ramp|mana\s+ramp|mana\s+accel(?:eration)?|ramp\s+(?:spells?|cards?|effects?))\b/i,
     defaultTags: ["ramp", "mana-ramp"],
   },
   {
     name: "tokens",
     description: "Create or multiply creature/artifact/treasure tokens",
-    detect: /\b(token\s+(?:generat(?:or|ion|e|es|ing)|creat(?:or|ion|e|es|ing)|mak(?:er?|es?|ing))|(?:make|create|generate|produce)s?\s+tokens?)\b/i,
     defaultTags: ["repeatable-token-generator", "repeatable-creature-tokens", "young-pyromancer-ability"],
     qualifiers: [
       {
         name: "treasure",
-        detect: /\btreasure\s+tokens?\b/i,
         tags: ["repeatable-token-generator", "repeatable-artifact-tokens"],
       },
       {
         name: "creature",
-        detect: /\bcreature\s+tokens?\b/i,
         tags: ["repeatable-token-generator", "repeatable-creature-tokens"],
       },
       {
         name: "artifact",
-        detect: /\bartifact\s+tokens?\b/i,
         tags: ["repeatable-token-generator", "repeatable-artifact-tokens"],
       },
       {
         name: "noncreature",
-        detect: /\bnon-?creature\s+tokens?\b/i,
         tags: ["repeatable-token-generator", "repeatable-noncreature-tokens"],
       },
     ],
-    strayPattern: /\bfunction:(repeatable-(?:token-generator|creature-tokens|artifact-tokens|noncreature-tokens)|token-doubler|token-increaser|tokenfall)\b/gi,
   },
   {
     name: "reanimator",
     description: "Return permanents from graveyard to battlefield",
-    detect: /\b(reanimate[sd]?|reanimation|reanimate\s+(?:creature|artifact|permanent)|graveyard\s+(?:recursion|return|recur)|return(?:s|ed|ing)?\s+from\s+(?:the\s+)?graveyard|raise\s+dead)\b/i,
     defaultTags: ["reanimate", "reanimate-creature", "reanimate-permanent", "reanimate-from-any"],
     qualifiers: [
       {
         name: "creature",
-        detect: /\breanimate\s+creatures?\b|\bcreature\s+reanima/i,
         tags: ["reanimate", "reanimate-creature", "reanimate-from-any"],
       },
       {
         name: "artifact",
-        detect: /\breanimate\s+artifacts?\b|\bartifact\s+reanima/i,
         tags: ["reanimate", "reanimate-artifact", "reanimate-from-any"],
       },
       {
         name: "self",
-        detect: /\breanimate\s+(?:it)?self\b|\bself-reanimate\b|\breturn\s+(?:it)?self\s+from\s+(?:the\s+)?graveyard\b/i,
         tags: ["reanimate-self", "self-reanimate"],
       },
     ],
-    strayPattern: /\bfunction:(reanimate(?:-[a-z0-9-]+)?|self-reanimate|graveyard-fuel(?:-[a-z0-9-]+)?)\b/gi,
   },
   {
     name: "mill",
     description: "Put cards from libraries into graveyards",
-    // detect runs on the natural query. skipIfKw ensures we don't inject function:mill-* tags
-    // when Phase 1 already emitted kw:mill — they would AND together and over-restrict results.
-    detect: /\b(mill(?:s|ed|ing)?)\b/i,
-    skipIfKw: "mill",
-    disqualify: /\b(windmill|sawmill|treadmill)\b/i,
     defaultTags: ["mill", "mill-opponent", "mill-any"],
     qualifiers: [
       {
         name: "self",
-        detect: /\bself[- ]?mill\b|\bmill\s+(?:your)?self\b|\bmill\s+(?:your\s+own\s+)?(?:library|deck)\b/i,
         tags: ["mill-self", "self-mill", "mill"],
       },
       {
         name: "opponent",
-        detect: /\bmill\s+(?:the\s+|your\s+)?opponents?\b|\bmill\s+(?:their|enemy)\b/i,
         tags: ["mill-opponent", "mill", "mill-any"],
       },
       {
         name: "each",
-        detect: /\bmill\s+each\b|\beveryone\s+mills?\b/i,
         tags: ["mill-each", "mill", "mill-any"],
       },
     ],
-    strayPattern: /\bfunction:(mill(?:-[a-z0-9-]+)?|self-mill)\b/gi,
   },
   {
     name: "blink",
     description: "Exile a permanent and return it to the battlefield to re-trigger ETB effects",
-    detect: /\b(blink(?:s|ed|ing)?|flicker(?:s|ed|ing)?|exile\s+(?:and|then)\s+return)\b/i,
     defaultTags: ["blink", "flicker", "flicker-creature", "flicker-permanent"],
     qualifiers: [
       {
         name: "creature",
-        detect: /\b(?:blink|flicker)\s+creatures?\b|\bcreature\s+(?:blink|flicker)/i,
         tags: ["blink", "flicker", "flicker-creature"],
       },
       {
         name: "artifact",
-        detect: /\b(?:blink|flicker)\s+artifacts?\b/i,
         tags: ["blink", "flicker", "flicker-artifact"],
       },
       {
         name: "permanent",
-        detect: /\b(?:blink|flicker)\s+permanents?\b/i,
         tags: ["blink", "flicker", "flicker-permanent", "flicker-nonland"],
       },
       {
         name: "self",
-        detect: /\b(?:blink|flicker)\s+(?:it)?self\b|\bself[- ]?(?:blink|flicker)/i,
         tags: ["flicker-self"],
       },
     ],
-    strayPattern: /\bfunction:(blink(?:-[a-z0-9-]+)?|flicker(?:-[a-z0-9-]+)?|graveflicker)\b/gi,
   },
   {
     name: "discard",
     description: "Force discarding cards or benefit from discarding",
-    detect: /\b(discard(?:s|ed|ing)?|hand\s+disruption|hand\s+attack)\b/i,
     defaultTags: ["discard", "discard-outlet", "discard-matters"],
     qualifiers: [
       {
         name: "self",
-        detect: /\bself[- ]?discard\b|\bdiscard\s+(?:your\s+own|your|my)\b|\bdiscard\s+outlet\b|\bloot(?:s|ed|ing)?\b/i,
         tags: ["discard", "discard-outlet", "free-discard-outlet", "self-discard-matters"],
       },
       {
         name: "opponent",
-        detect: /\b(?:discard|hand\s+disruption|hand\s+attack)\s+.*opponents?\b|\bopponents?\s+discards?\b|\bforced?\s+discard\b/i,
         tags: ["discard", "opponent-discard-matters", "random-discard", "specter-ability", "thoughtseize"],
       },
     ],
-    strayPattern: /\bfunction:(discard(?:-[a-z0-9-]+)?|free-discard-outlet|self-discard-matters|opponent-discard-matters|random-discard|discarded-type-matters)\b/gi,
   },
   {
     name: "card-draw",
     description: "Draw extra cards or generate card advantage",
-    detect: /\b(card\s+draw|draw\s+(?:engine|cards?|spells?)|draw(?:ing)?\s+(?:a\s+)?(?:lot|tons?|extra)\b|card\s+advantage)\b/i,
-    disqualify: /\bcantrips?\b/i,
     defaultTags: ["draw-engine", "repeatable-draw", "pure-draw", "impulse-draw", "burst-draw", "card-advantage"],
-    strayPattern: /\bfunction:(draw(?:-[a-z0-9-]+)?|repeatable-draw|pure-draw|repeatable-pure-draw|impulse-draw|impulsive-draw|repeatable-impulsive-draw|burst-draw|draw-engine|drawlink|force-draw)\b/gi,
   },
   {
     name: "cantrip",
     description: "Spells that replace themselves by drawing a card (e.g. Brainstorm, Ponder, Opt)",
-    detect: /\bcantrips?\b/i,
     defaultTags: ["cantrip"],
-    // When cantrip intent is detected, strip any draw-engine tags injected by a
-    // prior card-draw archetype classification and replace with function:cantrip.
-    strayPattern: /\bfunction:(draw(?:-[a-z0-9-]+)?|repeatable-draw|pure-draw|repeatable-pure-draw|impulse-draw|impulsive-draw|burst-draw|draw-engine|card-advantage)\b/gi,
   },
   {
     name: "counterspell",
     description: "Counter spells and permission magic (hard and soft counters)",
-    detect: /\bcounterspells\b|\bcounter\s+spells?\b/i,
     defaultTags: ["counterspell"],
-    strayPattern: /\bfunction:(counterspell(?:-[a-z0-9-]+)?)\b/gi,
   },
   {
     name: "recursion",
     description: "Graveyard recursion and self-recursion effects",
-    detect: /\brecursion\b/i,
     defaultTags: ["recursion"],
-    strayPattern: /\bfunction:recursion\b/gi,
   },
   {
     name: "mana-dork",
     description: "Creatures that tap to produce mana (e.g. Llanowar Elves, Birds of Paradise)",
-    detect: /\bmana[\s-]?dorks?\b/i,
     defaultTags: ["mana-dork"],
-    strayPattern: /\bfunction:mana-dork\b/gi,
   },
   {
     name: "anthem",
     description: "Permanent effects that buff all creatures you control (e.g. Glorious Anthem)",
-    detect: /\banthems?\b/i,
     defaultTags: ["anthem"],
-    strayPattern: /\bfunction:anthem\b/gi,
   },
   {
     name: "lord",
     description: "Tribal lords that grant +1/+1 or abilities to creatures of a specific type",
-    detect: /\b(?:tribal\s+)?lords?\b/i,
-    disqualify: /\blord\s+of\s+the\b|\btime\s+lords?\b/i,
     defaultTags: ["lord"],
-    strayPattern: /\bfunction:lord\b/gi,
   },
   {
     name: "voltron",
     description: "Buff a single creature with equipment or auras to win via commander damage",
-    detect: /\b(voltron|equipment\s+(?:matters?|synerg|deck|theme)|aura\s+(?:matters?|synerg|deck|theme))\b/i,
     defaultTags: ["synergy-equipment", "synergy-aura", "sneak-equipment", "sneak-aura"],
-    strayPattern: /\bfunction:(synergy-equipment(?:-[a-z0-9-]+)?|synergy-aura|sneak-equipment|sneak-aura)\b/gi,
   },
   {
     name: "stax",
     description: "Tax or restrict opponents' actions (casting, attacking, untapping)",
-    detect: /\b(stax|tax\s+(?:effects?|spells?|cards?)|hatebears?|hate\s+bears?)\b/i,
     defaultTags: ["tax", "tax-attack", "tax-block", "cast-tax", "kismet-effect"],
-    strayPattern: /\bfunction:(tax(?:-[a-z0-9-]+)?|cast-tax)\b/gi,
   },
   {
     name: "landfall",
     description: "Trigger effects when lands enter the battlefield",
-    detect: /\b(landfall|lands?\s+matter|lands?\s+entering)\b/i,
     defaultTags: ["landfall", "landfall-other"],
-    strayPattern: /\bfunction:(landfall(?:-[a-z0-9-]+)?|islandfall)\b/gi,
   },
   {
     name: "infect",
     description: "Deal damage as poison counters or infect/toxic mechanics",
-    detect: /\b(infect|poison(?:\s+counters?)?|toxic|poisonous)\b/i,
-    disqualify: /\b(poison\s+(?:ivy|dart|frog|breath))\b/i,
-    defaultTags: ["infect", "poison", "poison-opponents", "gives-infect", "synergy-infect", "synergy-poison"],
-    strayPattern: /\bfunction:(infect|poison(?:-[a-z0-9-]+)?|gives-infect|gives-poisonous|synergy-infect|synergy-poison|gains-infect)\b/gi,
+    // Infect / toxic / poisonous are keywords — Tagger has no function:infect or function:poison.
+    defaultTags: ["kw:infect", "kw:toxic", "kw:poisonous", "poison-opponents", "gives-infect", "synergy-infect", "synergy-poison"],
   },
   {
     name: "storm",
     description: "Copy spells based on number of spells cast this turn",
-    detect: /\b(storm(?:\s+(?:count|deck|off|cards?))?)\b/i,
-    disqualify: /\b(storm\s+(?:crow|herald|fleet|breath|entity|scale|seeker|sewer|the\s+vault))\b/i,
-    defaultTags: ["storm", "storm-like", "storm-count-matters", "gives-storm"],
-    strayPattern: /\bfunction:(storm(?:-[a-z0-9-]+)?|gives-storm|commander-storm)\b/gi,
+    defaultTags: ["kw:storm", "storm-like", "storm-count-matters", "gives-storm"],
   },
   {
     name: "extra-combat",
     description: "Grant additional combat phases in a turn",
-    detect: /\b(extra\s+combat|additional\s+combat|multiple\s+combats?)\b/i,
     defaultTags: ["extra-combat", "extra-combat-phase"],
-    strayPattern: /\bfunction:(extra-combat(?:-[a-z0-9-]+)?)\b/gi,
   },
   {
     name: "pillow-fort",
     description: "Prevent or tax opponents from attacking you",
-    detect: /\b(pillow\s*fort|prevent(?:s|ed|ing)?\s+(?:players?\s+from\s+)?attack(?:s|ed|ing)?|stop\s+attack(?:s|ing)?|(?:tax|cost)\s+(?:to\s+)?attack(?:s|ing)?|can'?t\s+(?:be\s+)?attack(?:ed|ing)?|attack\s+(?:prevention|tax|cost|restrict))\b/i,
     defaultTags: ["prevent-attack", "prevent-attacker", "tax-attack"],
-    strayPattern: /\bfunction:(prevent-attack(?:er)?|tax-attack)\b/gi,
   },
   {
     name: "enchantress",
     description: "Draw a card whenever an enchantment is cast or enters; enchantress-effect payoffs",
-    detect: /\benchantress(?:\s+(?:cards?|deck|theme|payoff|synerg(?:y|ies)|effects?|commander))?\b/i,
     defaultTags: ["enchantress"],
-    strayPattern: /\bfunction:enchantress\b/gi,
   },
   {
     name: "tutor",
     description: "Search, fetch, or find specific cards from your library or deck",
-    detect: /\b(tutor(?:s|ed|ing)?|(?:acts?|works?|functions?)\s+like\s+a\s+tutor|fetch(?:es|ed|ing)?\s+(?:a\s+)?card|find\s+(?:a\s+)?card\s+(?:from|in)\s+(?:your\s+)?(?:library|deck))\b/i,
     defaultTags: ["tutor", "tutor-to-hand"],
     qualifiers: [
       {
         name: "creature",
-        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?creatures?\b|\bcreatures?\s+tutors?\b/i,
         tags: ["tutor-creature"],
       },
       {
         name: "enchantment",
-        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?enchantments?\b|\benchantments?\s+tutors?\b/i,
         tags: ["tutor-enchantment"],
       },
       {
         name: "land",
-        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?lands?\b|\blands?\s+tutors?\b/i,
         tags: ["tutor-land"],
       },
       {
         name: "artifact",
-        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?artifacts?\b|\bartifacts?\s+tutors?\b/i,
         tags: ["tutor-artifact"],
       },
       {
         name: "instant",
-        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?instants?\b|\binstants?\s+tutors?\b/i,
         tags: ["tutor-instant"],
       },
       {
         name: "sorcery",
-        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?sorcer(?:y|ies)\b|\bsorcer(?:y|ies)\s+tutors?\b/i,
         tags: ["tutor-sorcery"],
       },
       {
         name: "planeswalker",
-        detect: /\b(?:tutors?|fetch(?:es)?|finds?)\s+(?:for\s+)?(?:an?\s+)?planeswalkers?\b|\bplaneswalkers?\s+tutors?\b/i,
         tags: ["tutor-planeswalker"],
       },
     ],
-    strayPattern: /\bfunction:(tutor(?!-land)(?:-[a-z0-9-]+)?|hate-tutor)\b/gi,
   },
   {
     name: "finisher",
     description: "End the game on the spot: 'you win the game' effects, Craterhoof-style overrun pumps, or primary win conditions",
-    detect: /\b(?:finishers?|game[-\s]enders?|win[-\s]?cons?|win\s+conditions?|wincons?|close(?:s|d|ing)?\s+(?:out\s+)?(?:the\s+)?game|end(?:s|ed|ing)?\s+(?:the\s+)?game|alpha\s+strikes?|overrun\s+effects?|craterhoof\s+effects?|swing\s+(?:for\s+)?(?:lethal|the\s+win)|lethal\s+(?:blow|damage|swing|attack)|seal(?:s|ed|ing)?\s+(?:the\s+)?game)\b/i,
     defaultTags: ["win-condition", "alternate-win-condition", "automatic-win", "overrun"],
-    strayPattern: /\bfunction:(win-condition|alternate-win-condition|automatic-win|overrun)\b/gi,
   },
   {
     name: "aristocrats",
     description: "Sacrifice creatures for value: sacrifice outlets, death triggers, and payoffs when creatures die",
-    detect: /\baristo(?:cra(?:ts?|cts?|tic)|arts?)\b/i,
     defaultTags: ["sacrifice-outlet", "sac-outlet", "death-trigger", "death-trigger-self", "synergy-sacrifice", "blood-artist-ability"],
-    strayPattern: /\bfunction:(?:sacrifice-outlet|sac-outlet|death-trigger-self|death-trigger|synergy-sacrifice|sacrifice-self|alternate-cost-sacrifice)\b/gi,
   },
   {
     name: "group-slug",
     description: "Deal damage or impose costs on all opponents simultaneously",
-    detect: /\bgroup[-\s]slug\b/i,
     defaultTags: ["group-slug"],
-    strayPattern: /\bfunction:group-slug\b/gi,
   },
   {
     name: "group-hug",
     description: "Benefit all players equally: draw cards for everyone, accelerate everyone's mana, etc.",
-    detect: /\b(?:group[-\s]hug|benefit\s+(?:all|every(?:one)?|each)\s+(?:players?|opponents?)|(?:draw|give|gain)\s+(?:cards?|mana|life)\s+for\s+(?:everyone|all\s+players?)|everyone\s+(?:draws?|gets?|gains?)|politic(?:al)?\s+(?:card|deck|effect)|makes?\s+friends?|be\s+(?:the\s+)?nice\s+(?:player|guy))\b/i,
     defaultTags: ["group-hug", "selective-group-hug"],
-    strayPattern: /\bfunction:(group-hug|selective-group-hug)\b/gi,
   },
   {
     name: "hate-magnet",
     description: "Cards that make you the archenemy: group slug, stax, extra turns, land destruction, lockdown, storm, or infect strategies that antagonise the whole table",
-    detect: /\b(?:archenemy\s+(?:card|effect|magnet|effect)|make\s+(?:everyone|all\s+(?:players?|opponents?))\s+(?:hate|target|attack)\s+(?:you|me)|paint\s+a\s+target\s+on\s+(?:your|my)\s+back|everyone\s+hates?\s+(?:you|me)|become\s+(?:the\s+)?archenemy|table\s+(?:archenemy|target|hate)|make\s+(?:people|opponents?|players?)\s+hate\s+(?:you|me)|cards?\s+(?:that\s+)?(?:everyone|people|opponents?)\s+hates?|most\s+hated\s+cards?|most\s+annoying\s+cards?)\b/i,
     defaultTags: [...HATE_MAGNET_FUNCTION_TAGS],
-    strayPattern: /\bfunction:(group-slug|extra-turn|mass-land-denial|lockdown(?:-[a-z0-9-]+)?|storm(?:-[a-z0-9-]+)?|tax|cast-tax|infect)\b/gi,
   },
   // ── Hate archetypes ────────────────────────────────────────────────────────
   {
     name: "hate-etb",
     description: "Prevent or punish opponents' creatures from triggering enters-the-battlefield abilities",
-    detect: /\b(?:hate-?etb|etb-?hate|stop\s+(?:opponents?'?s?\s+)?etb|prevent(?:s|ed|ing)?\s+etb|anti-?etb|etb\s+(?:hate|hosers?|prevention|stopper?)|suppress(?:es|ed|ing)?\s+etb|stop\s+etb\s+triggers?)\b/i,
     defaultTags: ["hate-etb"],
-    strayPattern: /\bfunction:hate-etb\b/gi,
   },
   {
     name: "graveyard-hate",
     description: "Exile or permanently neutralize opponents' graveyards",
-    detect: /\b(?:graveyard[-\s]hate|hate[-\s]graveyard|anti[-\s]graveyard|punish(?:es|ing)?\s+graveyard|stop\s+graveyard\s+(?:strategies?|decks?|play)|graveyard\s+(?:hate|hosers?|prevention)|exile\s+opponents?'?s?\s+graveyard)\b/i,
     defaultTags: ["graveyard-hate", "hate-graveyard", "hate-graveyard-cast"],
-    strayPattern: /\bfunction:(graveyard-hate|hate-graveyard(?:-[a-z0-9-]+)?)\b/gi,
   },
   {
     name: "artifact-hate",
     description: "Punish, restrict, or hate against artifacts and artifact strategies",
-    detect: /\b(?:artifact[-\s]hate|hate[-\s]artifacts?|anti[-\s]artifact|punish(?:es|ing)?\s+artifacts?|hate\s+against\s+artifacts?)\b/i,
     defaultTags: ["hate-artifact", "hate-artifact-creature", "hate-artifact-land"],
-    strayPattern: /\bfunction:hate-artifact(?:-[a-z0-9-]+)?\b/gi,
   },
   {
     name: "enchantment-hate",
     description: "Punish, restrict, or hate against enchantments",
-    detect: /\b(?:enchantment[-\s]hate|hate[-\s]enchantments?|anti[-\s]enchantment|punish(?:es|ing)?\s+enchantments?|hate\s+against\s+enchantments?)\b/i,
     defaultTags: ["hate-enchantment", "hate-enchantment-creature"],
-    strayPattern: /\bfunction:hate-enchantment(?:-[a-z0-9-]+)?\b/gi,
   },
   {
     name: "token-hate",
     description: "Prevent or punish opponents from creating or benefiting from tokens",
-    detect: /\b(?:token[-\s]hate|hate[-\s]tokens?|anti[-\s]token|punish(?:es|ing)?\s+tokens?|stop\s+tokens?|hate\s+(?:against\s+)?tokens?)\b/i,
     defaultTags: ["hate-token", "hate-token-creature"],
-    strayPattern: /\bfunction:hate-token(?:-[a-z0-9-]+)?\b/gi,
   },
   {
     name: "draw-hate",
     description: "Punish or restrict opponents from drawing extra cards",
-    detect: /\b(?:draw[-\s]hate|hate[-\s]draw|anti[-\s]draw|punish(?:es|ing)?\s+(?:card\s+)?draw(?:ing)?|stop\s+(?:opponents?'?s?\s+)?(?:card\s+)?draw(?:ing)?|hate\s+(?:against\s+)?(?:card\s+)?draw(?:ing)?)\b/i,
     defaultTags: ["hate-draw", "draw-hate"],
-    strayPattern: /\bfunction:(hate-draw|draw-hate)\b/gi,
   },
   {
     name: "lifegain-hate",
     description: "Prevent or punish opponents from gaining life",
-    detect: /\b(?:lifegain[-\s]hate|hate[-\s]lifegain|life\s*gain[-\s]hate|anti[-\s]lifegain|punish(?:es|ing)?\s+(?:life\s+)?gain(?:ing)?|stop\s+(?:opponents?'?s?\s+)?(?:life\s+)?gain(?:ing)?|prevent(?:s|ed|ing)?\s+(?:opponents?'?s?\s+)?life\s*gain)\b/i,
     defaultTags: ["hate-lifegain"],
-    strayPattern: /\bfunction:hate-lifegain\b/gi,
   },
   {
     name: "storm-hate",
     description: "Shut down or punish storm and spell-copy strategies",
-    detect: /\b(?:storm[-\s]hate|hate[-\s]storm|anti[-\s]storm|punish(?:es|ing)?\s+storm|stop\s+storm|hate\s+(?:against\s+)?storm)\b/i,
     defaultTags: ["hate-storm"],
-    strayPattern: /\bfunction:hate-storm\b/gi,
   },
   {
     name: "ramp-hate",
     description: "Punish or restrict mana ramp and mana acceleration",
-    detect: /\b(?:ramp[-\s]hate|hate[-\s]ramp|anti[-\s]ramp|punish(?:es|ing)?\s+ramp(?:ing)?|stop\s+ramp(?:ing)?|hate\s+(?:against\s+)?ramp(?:ing)?)\b/i,
     defaultTags: ["hate-ramp"],
-    strayPattern: /\bfunction:hate-ramp\b/gi,
   },
   {
     name: "nonbasic-hate",
     description: "Punish or restrict non-basic lands",
-    detect: /\b(?:non-?basic[-\s](?:land[-\s])?hate|hate[-\s]non-?basic\s+lands?|anti[-\s]non-?basic|punish(?:es|ing)?\s+non-?basic\s+lands?|non-?basic\s+land\s+hate)\b/i,
     defaultTags: ["hate-nonbasic-land"],
-    strayPattern: /\bfunction:hate-nonbasic-land\b/gi,
   },
   {
     name: "flying-hate",
     description: "Punish or destroy creatures with flying",
-    detect: /\b(?:flying[-\s]hate|hate[-\s]flying|anti[-\s]flying|punish(?:es|ing)?\s+flying|hate\s+(?:against\s+)?flying)\b/i,
     defaultTags: ["hate-flying", "flying-hate"],
-    strayPattern: /\bfunction:(hate-flying|flying-hate)\b/gi,
   },
   {
     name: "flash-hate",
     description: "Prevent or punish opponents from playing spells at instant speed",
-    detect: /\b(?:flash[-\s]hate|hate[-\s]flash|anti[-\s]flash|punish(?:es|ing)?\s+flash|stop\s+flash|hate\s+(?:against\s+)?flash)\b/i,
     defaultTags: ["hate-flash"],
-    strayPattern: /\bfunction:hate-flash\b/gi,
   },
   {
     name: "hexproof-hate",
     description: "Bypass, remove, or punish hexproof on permanents",
-    detect: /\b(?:hexproof[-\s]hate|hate[-\s]hexproof|anti[-\s]hexproof|punish(?:es|ing)?\s+hexproof|bypass(?:es|ed|ing)?\s+hexproof|ignore\s+hexproof)\b/i,
     defaultTags: ["hate-hexproof"],
-    strayPattern: /\bfunction:hate-hexproof\b/gi,
   },
   {
     name: "indestructible-hate",
     description: "Bypass or punish indestructible permanents",
-    detect: /\b(?:indestructible[-\s]hate|hate[-\s]indestructible|anti[-\s]indestructible|punish(?:es|ing)?\s+indestructible|bypass(?:es|ed|ing)?\s+indestructible|ignore\s+indestructible)\b/i,
     defaultTags: ["hate-indestructible"],
-    strayPattern: /\bfunction:hate-indestructible\b/gi,
   },
   {
     name: "copy",
     description: "Create token copies of permanents or copy spells on the stack",
-    detect: /\b(?:cop(?:y|ies|ying)|clone[sd]?|cloning|create[sd]?\s+(?:a\s+)?cop(?:y|ies)|fork(?:ing|s)?)\b/i,
-    disqualify: /\b(?:copy\s+of\s+a\s+card|copy\s+opponent|copy\s+target\s+(?:instant|sorcery)|graveyard\s+cop)\b/i,
     defaultTags: ["clone", "copy-permanent", "copy-spell", "creates-oracle-copy"],
     qualifiers: [
       {
         name: "spell",
-        detect: /\bcop(?:y|ies|ying)\s+(?:a\s+)?(?:instant|sorcery|spells?)\b|\bfork(?:ing|s)?\b|\bspell\s+cop(?:y|ies)\b/i,
         tags: ["copy-spell", "copy-instant", "copy-sorcery"],
       },
       {
         name: "creature",
-        detect: /\bcop(?:y|ies|ying)\s+(?:a\s+)?creatures?\b|\bclone[sd]?\s+(?:a\s+)?creatures?\b|\bcreature\s+cop(?:y|ies)\b/i,
         tags: ["clone", "copy-creature"],
       },
       {
         name: "permanent",
-        detect: /\bcop(?:y|ies|ying)\s+(?:a\s+)?permanents?\b|\bpermanent\s+cop(?:y|ies)\b/i,
         tags: ["copy-permanent", "clone"],
       },
       {
         name: "artifact",
-        detect: /\bcop(?:y|ies|ying)\s+(?:a\s+)?artifacts?\b|\bartifact\s+cop(?:y|ies)\b/i,
         tags: ["copy-artifact"],
       },
       {
         name: "enchantment",
-        detect: /\bcop(?:y|ies|ying)\s+(?:a\s+)?enchantments?\b|\benchantment\s+cop(?:y|ies)\b/i,
         tags: ["copy-enchantment"],
       },
     ],
-    strayPattern: /\bfunction:(?:clone|copy-(?:permanent|creature|spell|instant|sorcery|artifact|enchantment|token|legendary|nonland|noncreature)|creates-oracle-copy)\b/gi,
   },
   // ── Card-name effect archetypes ─────────────────────────────────────────
   // Card names that have become generic shorthand for an effect category.
   {
     name: "fog",
     description: "Prevent all combat damage this turn (Fog effects)",
-    detect: /\b(?:fog(?:s|ged|ging)?(?:\s+(?:effects?|like|style))?|prevent(?:s|ed|ing)?\s+(?:all\s+)?combat\s+damage)\b/i,
-    disqualify: /\bfog\s+(?:bank|patch|elemental|of\s+(?:war|gnomes))\b/i,
     defaultTags: ["fog", "fog-limited", "fog-selective", "pseudo-fog"],
-    strayPattern: /\bfunction:(?:fog(?:-[a-z0-9-]+)?|pseudo-fog)\b/gi,
   },
   {
     name: "wheel",
     description: "Each player discards their hand and draws a new hand (Wheel of Fortune effects)",
-    detect: /\bwheels?(?:\s+(?:effects?|like|style|of\s+fortune))?\b/i,
-    disqualify: /\bwheel\s+of\s+(?:sun|fate)\b/i,
     defaultTags: ["wheel"],
-    strayPattern: /\bfunction:wheel\b/gi,
   },
   {
     name: "curiosity",
     description: "Draw a card whenever a creature deals combat damage to a player (Curiosity effects)",
-    detect: /\bcuriosity\s+(?:effects?|like|style|triggers?)\b|\bdraw\s+(?:a\s+)?cards?\s+(?:when(?:ever)?\s+)?(?:deals?|combat)\s+damage/i,
     defaultTags: ["curiosity", "curiosity-like"],
-    strayPattern: /\bfunction:curiosity(?:-[a-z0-9-]+)?\b/gi,
   },
   {
     name: "brainstorm",
     description: "Draw cards and put cards back on top of your library (Brainstorm-style card selection)",
-    detect: /\bbrainstorms?(?:\s+(?:effects?|like|style))?\b/i,
     defaultTags: ["brainstorm"],
-    strayPattern: /\bfunction:brainstorm\b/gi,
   },
   {
     name: "impact-tremors",
     description: "Deal damage to opponents whenever a creature enters the battlefield (Impact Tremors effects)",
-    detect: /\bimpact\s*tremors?\s*(?:effects?|like)?\b|\bdamage\s+(?:when(?:ever)?\s+)?(?:a\s+)?creatures?\s+enters?\b/i,
     defaultTags: ["impact-effect"],
-    strayPattern: /\bfunction:impact-effect\b/gi,
+  },
+  // ── Deck strategies ─────────────────────────────────────────────────────
+  // Tags may be full Scryfall tokens (o:"…", kw:…); bare slugs mean function:<slug>.
+  {
+    name: "lifegain",
+    description: "Gain life and payoffs that care about gaining life",
+    defaultTags: ["lifegain", "lifegain-matters", "soul-warden-ability", "pridemate"],
+  },
+  {
+    name: "sacrifice",
+    description: "Sacrifice outlets and payoffs for sacrificing permanents",
+    defaultTags: ["sacrifice-outlet", "synergy-sacrifice"],
+  },
+  {
+    name: "counters",
+    description: "+1/+1 counters: put them on creatures and payoffs that care about them",
+    defaultTags: ["counters-matter", "gives-pp-counters"],
+  },
+  {
+    name: "board-wipe",
+    description: "Destroy, exile, or bounce all (or most) creatures or permanents at once",
+    defaultTags: ["boardwipe", "wrath-of-god"],
+  },
+  {
+    name: "control",
+    description: "Counterspells, removal, and board wipes to control the game",
+    defaultTags: ["counterspell", "removal", "boardwipe"],
+  },
+  {
+    name: "spellslinger",
+    description: "Cast many instants and sorceries; payoffs that trigger on casting them",
+    defaultTags: [
+      "copy-spell",
+      "affinity-for-spells",
+      "second-spell-matters",
+      "prowess-anthem",
+      "gains-prowess",
+      "gives-prowess",
+      "grants-prowess",
+      "storm-like",
+      'o:"whenever you cast an instant or sorcery"',
+      'o:"whenever a player casts an instant or sorcery"',
+      'o:"whenever you cast an instant"',
+      'o:"whenever a player casts an instant"',
+      'o:"whenever you cast a sorcery"',
+      'o:"whenever a player casts a sorcery"',
+      'o:"whenever a player casts a spell"',
+      'o:"whenever you cast a spell"',
+      "kw:prowess",
+    ],
   },
 ];
-
-function normalizeArchetypeIntents(
-  naturalQuery: string,
-  query: string
-): string {
-  // If Phase 1 resolved the query to a specific card name, skip archetype injection —
-  // "flicker" should be either the card OR the mechanic, not both ANDed together.
-  if (/\bname:/i.test(query)) {
-    return query;
-  }
-
-  const lower = maskSynergyWithComplements(naturalQuery).toLowerCase();
-  let updated = query;
-
-  for (const archetype of ARCHETYPE_REGISTRY) {
-    if (!archetype.detect.test(lower)) continue;
-    if (archetype.disqualify?.test(lower)) continue;
-
-    // Detect qualifier match before checking skipIfKw so that a refined intent (e.g.
-    // "self mill") can override the Phase-1 kw:X token rather than being suppressed by it.
-    let desiredTags = archetype.defaultTags;
-    let qualifierMatched = false;
-
-    if (archetype.qualifiers) {
-      for (const qualifier of archetype.qualifiers) {
-        if (qualifier.detect.test(lower)) {
-          desiredTags = qualifier.tags;
-          qualifierMatched = true;
-          break;
-        }
-      }
-    }
-
-    if (archetype.skipIfKw) {
-      const kwPattern = new RegExp(`(?:^|\\s)kw:${archetype.skipIfKw}\\b`, "i");
-      if (kwPattern.test(updated)) {
-        if (!qualifierMatched) {
-          // Phase 1 already expressed the general intent via kw:X; don't AND with function: tags.
-          continue;
-        }
-        // A qualifier refines the intent beyond what kw:X captures — replace kw:X with the
-        // qualifier-specific function: tags instead of AND-ing both together.
-        updated = updated.replace(
-          new RegExp(`\\bkw:${archetype.skipIfKw}\\b`, "gi"),
-          " ",
-        );
-        updated = normalizeWhitespace(updated);
-      }
-    }
-
-    // Before stripping, record any specific (non-default) qualifier tags already in the query.
-    // These were emitted by Phase 1 or Phase 2 for targets that the detect regexes below may
-    // not pick up (e.g. "remove enchantments and artifacts" → both removal-enchantment and
-    // removal-artifact are present, but the qualifier loop only matches the first one).
-    // We preserve them so they are not silently lost when the strayPattern strips them.
-    const defaultTagSet = new Set(archetype.defaultTags);
-    const preservedSpecificTags: string[] = [];
-    if (archetype.strayPattern) {
-      const findPattern = new RegExp(archetype.strayPattern.source, "gi");
-      let pm: RegExpExecArray | null;
-      while ((pm = findPattern.exec(updated)) !== null) {
-        const slug = pm[1]?.toLowerCase();
-        if (slug && !defaultTagSet.has(slug)) {
-          preservedSpecificTags.push(slug);
-        }
-      }
-    }
-
-    // When specific qualifier tags are already present but no qualifier pattern matched
-    // (desiredTags is still the default set), skip the generic tag expansion entirely and
-    // just restore the specific tags as an OR group. This prevents double-tagging like:
-    //   (function:removal or ...) function:removal-enchantment function:removal-artifact
-    // and ensures the restored tags are OR'd (not AND'd) since they represent alternative
-    // removal methods, not cumulative requirements.
-    const qualifierWasDetected = desiredTags !== archetype.defaultTags;
-    if (!qualifierWasDetected && preservedSpecificTags.length > 0) {
-      if (archetype.strayPattern) {
-        const cleanPattern = new RegExp(archetype.strayPattern.source, archetype.strayPattern.flags);
-        updated = updated.replace(cleanPattern, " ");
-      }
-      updated = updated.replace(/\(\s*(?:-?(?:and|or)\s*)*\)/gi, " ");
-      updated = normalizeWhitespace(updated);
-      const orChain = preservedSpecificTags.map((slug) => `function:${slug}`);
-      if (orChain.length >= 2) {
-        updated = `${updated} (${orChain.join(" or ")})`;
-      } else {
-        updated = `${updated} ${orChain[0]}`;
-      }
-      updated = normalizeWhitespace(updated);
-      continue;
-    }
-
-    if (archetype.strayPattern) {
-      const cleanPattern = new RegExp(archetype.strayPattern.source, archetype.strayPattern.flags);
-      updated = updated.replace(cleanPattern, " ");
-    }
-
-    for (const tag of desiredTags) {
-      // Use (?!-) instead of \b so we don't accidentally strip a compound tag that
-      // starts with this tag name (e.g. "function:tutor" must not strip "function:tutor-land").
-      const tagPattern = new RegExp(`\\bfunction:${escapeRegex(tag)}(?!-)`, "gi");
-      updated = updated.replace(tagPattern, " ");
-    }
-    // Remove parenthetical groups that are now empty or contain only "or" separators
-    // after stripping tags (e.g. "( or or or )" left over from an expanded OR chain).
-    updated = updated.replace(/\(\s*(?:-?(?:and|or)\s*)*\)/gi, " ");
-    updated = normalizeWhitespace(updated);
-
-    const orChain = desiredTags.map((t) => `function:${t}`);
-    if (orChain.length >= 2) {
-      updated = `${updated} (${orChain.join(" or ")})`;
-    } else if (orChain.length === 1) {
-      updated = `${updated} ${orChain[0]}`;
-    }
-
-    // Re-add any specific qualifier tags that were preserved above but not included
-    // in desiredTags (they cover additional targets beyond what the qualifier detected,
-    // e.g. both enchantment and artifact when the qualifier loop only matched enchantment).
-    const desiredTagSet = new Set(desiredTags);
-    for (const slug of preservedSpecificTags) {
-      if (!desiredTagSet.has(slug)) {
-        updated = `${updated} function:${slug}`;
-      }
-    }
-  }
-
-  return normalizeWhitespace(updated);
-}
 
 export type ArchetypeMenuEntry = {
   name: string;
@@ -1749,120 +1279,6 @@ function pickLandTutorTag(
   return bestLand;
 }
 
-function buildStrategyCandidates(): string[] {
-  const candidates: string[] = [];
-  for (const entry of STRATEGY_ORACLETAGS) {
-    candidates.push(entry.strategy);
-    for (const alias of entry.aliases || []) {
-      candidates.push(alias);
-    }
-  }
-  return candidates;
-}
-
-function detectStrategies(naturalQuery: string): string[] {
-  const query = naturalQuery.toLowerCase();
-  const found = new Set<string>();
-  for (const candidate of buildStrategyCandidates()) {
-    const normalized = candidate.toLowerCase();
-    const isWordy = /^[a-z0-9 ]+$/.test(normalized);
-    if (isWordy) {
-      const pattern = new RegExp(`\\b${escapeRegex(normalized).replace(/ +/g, "\\s+")}\\b`, "i");
-      if (pattern.test(naturalQuery)) {
-        found.add(candidate);
-      }
-    } else if (query.includes(normalized)) {
-      found.add(candidate);
-    }
-  }
-  const resolved = new Set<string>();
-  for (const entry of found) {
-    const canonical = resolveStrategyName(entry) || entry;
-    resolved.add(canonical);
-  }
-  return Array.from(resolved);
-}
-
-function detectNegatedStrategies(naturalQuery: string): string[] {
-  const query = naturalQuery.toLowerCase();
-  const found = new Set<string>();
-  for (const candidate of buildStrategyCandidates()) {
-    const normalized = candidate.toLowerCase();
-    const isWordy = /^[a-z0-9 ]+$/.test(normalized);
-    const escaped = escapeRegex(normalized).replace(/ +/g, "\\s+");
-    const negationPattern = new RegExp(
-      `\\b(?:not|non|without|excluding|exclude|no)\\b[\\s\\w-]{0,20}\\b${escaped}\\b`,
-      "i"
-    );
-    const nonPrefixPattern = new RegExp(`\\bnon[-\\s]?${escaped}\\b`, "i");
-
-    if (isWordy) {
-      if (negationPattern.test(naturalQuery) || nonPrefixPattern.test(naturalQuery)) {
-        found.add(candidate);
-      }
-    } else if (
-      query.includes(`not ${normalized}`) ||
-      query.includes(`without ${normalized}`) ||
-      query.includes(`exclude ${normalized}`) ||
-      query.includes(`non-${normalized}`)
-    ) {
-      found.add(candidate);
-    }
-  }
-
-  const resolved = new Set<string>();
-  for (const entry of found) {
-    const canonical = resolveStrategyName(entry) || entry;
-    resolved.add(canonical);
-  }
-
-  return Array.from(resolved);
-}
-
-function appendStrategyTags(query: string, naturalQuery: string): string {
-  const detected = detectStrategies(naturalQuery);
-  if (detected.length === 0) {
-    return query;
-  }
-
-  // If Phase 1 already resolved the query to a card name, don't also inject strategy
-  // tags for the same keyword — "flicker" should be either the card OR the mechanic,
-  // not both ANDed together (which would return only cards that both ARE named "Flicker"
-  // AND carry flicker function tags).
-  if (/\bname:/i.test(query)) {
-    return query;
-  }
-
-  const queryLower = query.toLowerCase();
-  const negated = new Set(detectNegatedStrategies(naturalQuery).map((entry) => entry.toLowerCase()));
-  const missing = detected.filter((strategy) => {
-    if (queryLower.includes(`strategy:${strategy.toLowerCase()}`)) return false;
-    if (queryLower.includes(`-strategy:${strategy.toLowerCase()}`)) return false;
-    // Don't re-append if the strategy's oracletags are already expanded in the query
-    // (e.g. after a second finalizeScryfallQuery pass following invalid-tag removal)
-    const canonicalName = resolveStrategyName(strategy) ?? strategy;
-    const entry = STRATEGY_ORACLETAGS.find(
-      (e) => e.strategy.toLowerCase() === canonicalName.toLowerCase()
-    );
-    if (entry && entry.oracletags.some((tag) => queryLower.includes(tag.toLowerCase()))) {
-      return false;
-    }
-    return true;
-  });
-
-  if (missing.length === 0) {
-    return query;
-  }
-
-  const strategyTokens = missing.map((strategy) => {
-    const value = /[^\w]/.test(strategy) ? `"${strategy}"` : strategy;
-    const prefix = negated.has(strategy.toLowerCase()) ? "-strategy:" : "strategy:";
-    return `${prefix}${value}`;
-  });
-
-  return `${query} ${strategyTokens.join(" ")}`.trim();
-}
-
 export function finalizeScryfallQuery(args: {
   naturalQuery: string;
   rawQuery: string;
@@ -1881,9 +1297,7 @@ export function finalizeScryfallQuery(args: {
     .replace(/^```[\w]*\n?/g, "")
     .replace(/```$/g, "")
     .trim();
-  const queryWithStrategies = appendStrategyTags(cleanedQuery, naturalQuery);
-  const expandedQuery = expandStrategyTags(queryWithStrategies);
-  let normalizedQuery = normalizeFormatFunctionTags(expandedQuery);
+  let normalizedQuery = normalizeFormatFunctionTags(cleanedQuery);
 
   const landTutorTag = pickLandTutorTag(naturalQuery, tagContext);
   if (landTutorTag) {
@@ -1949,16 +1363,11 @@ export function finalizeScryfallQuery(args: {
     }
   }
 
-  normalizedQuery = normalizeCounterspellIntent(naturalQuery, normalizedQuery);
-  normalizedQuery = normalizeNotRedRequirement(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeManaCostSymbolIntent(naturalQuery, normalizedQuery);
-  normalizedQuery = normalizeCommanderIntent(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeGameChangerIntent(naturalQuery, normalizedQuery);
   normalizedQuery = removeFormatLegalityWhenBannedOrRestricted(normalizedQuery);
   normalizedQuery = normalizeCommanderIdentity(normalizedQuery);
   normalizedQuery = normalizeInstantSorceryTypeChain(normalizedQuery);
-  normalizedQuery = normalizeBurnIntent(naturalQuery, normalizedQuery, tagContext);
-  normalizedQuery = normalizeArchetypeIntents(naturalQuery, normalizedQuery);
   normalizedQuery = normalizeTokenGenerationIntent(
     naturalQuery,
     normalizedQuery,
@@ -2115,7 +1524,7 @@ export function isScryfallQuery(query: string): boolean {
   // This ensures "function tag:" doesn't match because there's a space before "tag:"
   for (const operator of scryfallOperators) {
     // Escape special regex characters in the operator
-    const escapedOperator = operator.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedOperator = escapeRegex(operator);
     // Match: word boundary + operator (colon must immediately follow, no space)
     const pattern = new RegExp(`\\b${escapedOperator}`, "i");
     if (pattern.test(trimmed)) {

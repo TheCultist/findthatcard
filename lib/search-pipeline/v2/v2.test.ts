@@ -17,13 +17,14 @@ import { buildIRFromExtraction } from "@/lib/search-pipeline/v2/buildIR";
 import { recognizeCardNames, runPrePass } from "@/lib/search-pipeline/v2/prePass";
 import { buildDirectIR } from "@/lib/search-pipeline/v2/runV2";
 import type { V2Extraction } from "@/lib/search-pipeline/v2/schema";
-import { extractTaggerTags } from "@/lib/tagger/validation";
+import { extractTaggerTags, validateTaggerTags } from "@/lib/tagger/validation";
 
 function baseExtraction(overrides: Partial<V2Extraction>): V2Extraction {
   return {
     intent: "search",
     cardName: null,
     colors: null,
+    negatedColors: null,
     typesAll: [],
     typesAny: [],
     negatedTypes: [],
@@ -33,14 +34,18 @@ function baseExtraction(overrides: Partial<V2Extraction>): V2Extraction {
     rarity: null,
     year: null,
     keywords: [],
+    negatedKeywords: [],
     format: null,
-    set: null,
+    commanderEligible: false,
+    sets: [],
+    negatedSets: [],
     artist: null,
     artSubjects: [],
     functionTags: [],
     archetypes: [],
     oraclePhrases: [],
     negatedOraclePhrases: [],
+    oracleSequences: [],
     ...overrides,
   };
 }
@@ -201,6 +206,22 @@ async function main(): Promise<void> {
     );
     const nq = assembleQueryFromIR(negated);
     check("negated verb phrase split", nq.includes('-o:"gain"') && nq.includes('-o:"life"'), nq);
+
+    // Linked trigger→effect stays one ordered same-sentence regex, not two
+    // independent o: tokens (o:"dies" o:"draw" matched Aclazotz).
+    const seq = await buildIRFromExtraction(
+      baseExtraction({ oracleSequences: [["dies", "draws a card"]] }),
+      "creatures that draw cards when they die"
+    );
+    const sq = assembleQueryFromIR(seq);
+    check("oracle sequence → ordered regex", sq.includes("o:/die[^.]*draw a card/") && !sq.includes('o:"draw'), sq);
+
+    const flat = await buildIRFromExtraction(
+      baseExtraction({ oracleSequences: ["enters", "gain"] as unknown as string[][] }),
+      "gain life on etb"
+    );
+    const fq = assembleQueryFromIR(flat);
+    check("flat sequence coerced to one sequence", fq.includes("o:/enter[^.]*gain/"), fq);
   }
 
   // 1e. Format allowlist + aliases (pauper edh → paupercommander; unknown dropped).
@@ -292,6 +313,162 @@ async function main(): Promise<void> {
     const q = assembleQueryFromIR(ir);
     check("negated type becomes -t:", q.includes("-t:artifact"), q);
     check("negated oracle becomes -o:", q.includes('-o:"can\'t block"'), q);
+  }
+
+  // 4b. Excluded keywords and colours come from the extraction, not a regex over the text.
+  {
+    const ir = await buildIRFromExtraction(
+      baseExtraction({ keywords: ["flying"], negatedKeywords: ["trample", "notakeyword"], negatedColors: "u" }),
+      "flying creatures that aren't blue without trample"
+    );
+    const q = assembleQueryFromIR(ir);
+    check("negated keyword becomes -kw:", q.includes("-kw:trample"), q);
+    check("unknown negated keyword dropped", !q.includes("notakeyword"), q);
+    check("positive keyword unaffected by an exclusion", q.includes("kw:flying") && !q.includes("-kw:flying"), q);
+    check("negated colour becomes -c:", q.includes("-c:u"), q);
+
+    const identity = await buildIRFromExtraction(
+      baseExtraction({ colors: { mode: "identity", op: ":", letters: "g", combine: "and" }, negatedColors: "r" }),
+      "non-red green commander cards"
+    );
+    const iq = assembleQueryFromIR(identity);
+    // -id:r would also drop colourless cards (id:r = "fits in mono-red").
+    check("negated identity colour uses id>=", iq.includes("-id>=r"), iq);
+  }
+
+  // 4c. Sets resolve against the set index for every intent; exclusions are negated.
+  {
+    const byName = assembleQueryFromIR(await buildIRFromExtraction(baseExtraction({ sets: ["Bloomburrow"] }), "from bloomburrow"));
+    check("set name → set:blb", byName.includes("set:blb"), byName);
+    const byCode = assembleQueryFromIR(await buildIRFromExtraction(baseExtraction({ sets: ["BLB"] }), "from blb"));
+    check("set code → set:blb", byCode.includes("set:blb"), byCode);
+    // The schema's pre-array `set` key is still accepted.
+    const legacy = assembleQueryFromIR(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await buildIRFromExtraction({ intent: "search", set: "Bloomburrow" } as any, "from bloomburrow")
+    );
+    check("legacy scalar set key accepted", legacy.includes("set:blb"), legacy);
+    const excluded = assembleQueryFromIR(await buildIRFromExtraction(baseExtraction({ negatedSets: ["Kaladesh"] }), "not from kaladesh"));
+    check("negated set → -set:", excluded.includes("-set:kld"), excluded);
+    const franchise = assembleQueryFromIR(await buildIRFromExtraction(baseExtraction({ sets: ["final fantasy"] }), "final fantasy cards"));
+    check("set name shared by several sets → OR group incl. main set", /\(set:\w+( or set:\w+)+\)/.test(franchise) && franchise.includes("set:fin"), franchise);
+    const bogus = assembleQueryFromIR(await buildIRFromExtraction(baseExtraction({ sets: ["Zzqx Nonexistent"] }), "zzqx"));
+    check("unknown set dropped", !bogus.includes("set:"), bogus);
+    const generic = assembleQueryFromIR(await buildIRFromExtraction(baseExtraction({ sets: ["commander"] }), "commander cards"));
+    check("generic word matching many sets dropped", !generic.includes("set:"), generic);
+
+    const named = await buildIRFromExtraction(
+      baseExtraction({ intent: "similar-cards", cardName: "Lightning Bolt", sets: ["Dominaria United"] }),
+      "cards like lightning bolt from dominaria united"
+    );
+    check("named intent keeps its set", assembleQueryFromIR(named).includes("set:dmu"), assembleQueryFromIR(named));
+
+    // Finalize no longer re-derives sets from the raw text: a card name containing a
+    // set name ("…the Apocalypse") must not become set:apc.
+    const card = await buildIRFromExtraction(baseExtraction({ cardName: "Sheoldred, the Apocalypse" }), "Sheoldred, the Apocalypse");
+    const cq = (await finalizeQuery(card)).queryForLogs;
+    check("card name is not turned into a set filter", !cq.includes("set:"), cq);
+  }
+
+  // 4d. Commander eligibility → the format's is: flag; deck context is just format + identity.
+  {
+    const plain = assembleQueryFromIR(await buildIRFromExtraction(baseExtraction({ commanderEligible: true, keywords: ["flying"] }), "commanders with flying"));
+    check("commanderEligible → is:commander", plain.includes("is:commander"), plain);
+    const pdh = assembleQueryFromIR(
+      await buildIRFromExtraction(baseExtraction({ commanderEligible: true, format: "pauper edh" }), "pdh commanders")
+    );
+    check("PDH commanders → is:paupercommander", pdh.includes("is:paupercommander") && pdh.includes("f:paupercommander"), pdh);
+    check("PDH commanders: no is:commander", !/\bis:commander\b/.test(pdh), pdh);
+    const brawl = assembleQueryFromIR(await buildIRFromExtraction(baseExtraction({ commanderEligible: true, format: "brawl" }), "brawl commanders"));
+    check("brawl commanders → is:brawler", brawl.includes("is:brawler"), brawl);
+    const deck = assembleQueryFromIR(await buildIRFromExtraction(baseExtraction({ format: "commander" }), "removal for my commander deck"));
+    check("deck context: no eligibility flag", !deck.includes("is:"), deck);
+
+    const typed = await buildIRFromExtraction(
+      baseExtraction({ commanderEligible: true, typesAll: ["creature"], supertypes: ["legendary"] }),
+      "legendary creatures that can be commanders"
+    );
+    const tq = (await finalizeQuery(typed)).queryForLogs;
+    check("eligibility flag drops redundant creature/legendary types", tq.includes("is:commander") && !/\bt:(creature|legendary)\b/.test(tq), tq);
+  }
+
+  // 4e. An archetype qualifier names the effect's target: a matching type/subtype is dropped
+  // (removal/damage/reanimator), and for tokens only a matching subtype.
+  {
+    const removal = assembleQueryFromIR(
+      await buildIRFromExtraction(
+        baseExtraction({ typesAll: ["creature"], archetypes: [{ name: "removal", qualifier: "creature" }] }),
+        "creature removal"
+      )
+    );
+    check("removal target type not a card filter", !/\bt:creature\b/.test(removal), removal);
+    const damage = assembleQueryFromIR(
+      await buildIRFromExtraction(
+        baseExtraction({ typesAny: ["instant", "planeswalker"], archetypes: [{ name: "damage", qualifier: "planeswalker" }] }),
+        "instants that damage planeswalkers"
+      )
+    );
+    check("damage target type dropped, other types kept", damage.includes("t:instant") && !damage.includes("t:planeswalker"), damage);
+    const zombies = assembleQueryFromIR(
+      await buildIRFromExtraction(
+        baseExtraction({ subtypes: ["zombie"], archetypes: [{ name: "tokens", qualifier: "zombie" }] }),
+        "cards that make zombie tokens"
+      )
+    );
+    check("token kind not a subtype filter", !zombies.includes("t:zombie"), zombies);
+    check("specific token kind required in rules text", zombies.includes('o:"zombie"'), zombies);
+    const creatureTokens = assembleQueryFromIR(
+      await buildIRFromExtraction(
+        baseExtraction({ typesAll: ["creature"], archetypes: [{ name: "tokens", qualifier: "creature" }] }),
+        "creatures that make creature tokens"
+      )
+    );
+    check("tokens qualifier keeps the card's base type", creatureTokens.includes("t:creature"), creatureTokens);
+    check("broad token class adds no oracle filter", !creatureTokens.includes("o:"), creatureTokens);
+  }
+
+  // 4f. A keyword that names a chosen archetype is the same concept: it joins the archetype's
+  // OR family instead of AND-ing a second, narrower clause.
+  {
+    const infectIR = await buildIRFromExtraction(
+      baseExtraction({ typesAll: ["creature"], keywords: ["infect"], archetypes: [{ name: "infect", qualifier: null }] }),
+      "infect creatures"
+    );
+    const infect = (await finalizeQuery(infectIR)).queryForLogs;
+    const orGroup = /\(([^()]*\bkw:infect\b[^()]*)\)/.exec(infect)?.[1] ?? "";
+    check("archetype keyword OR-ed into the archetype family", orGroup.includes(" or "), infect);
+    check("archetype keyword not AND-ed on its own", !/(^|\s)kw:infect\b/.test(infect.replace(/\([^()]*\)/g, "")), infect);
+    const other = assembleQueryFromIR(
+      await buildIRFromExtraction(
+        baseExtraction({ keywords: ["flying"], archetypes: [{ name: "removal", qualifier: null }] }),
+        "removal with flying"
+      )
+    );
+    check("unrelated keyword kept beside an archetype", other.includes("kw:flying"), other);
+  }
+
+  // 4g. Strategy archetypes (former strategy: expansion) inject their family, full tokens included.
+  {
+    const ir = await buildIRFromExtraction(
+      baseExtraction({ archetypes: [{ name: "spellslinger", qualifier: null }] }),
+      "spellslinger cards"
+    );
+    const q = (await finalizeQuery(ir)).queryForLogs;
+    check("strategy archetype injects function tags", q.includes("function:copy-spell"), q);
+    check("strategy archetype keeps full oracle tokens", q.includes('o:"whenever you cast a spell"') && !q.includes('function:o:'), q);
+    check("strategy archetype keeps kw tokens", q.includes("kw:prowess") && !q.includes("function:kw:"), q);
+  }
+
+  // 4h. No invalid Tagger tag survives finalize, even when the second finalize pass (run
+  // after invalid-tag removal) re-injects tags of its own: with no art tags in the query's
+  // tag context, the art normalizer injects art:<word> unchecked on both passes.
+  {
+    const ir = await buildIRFromExtraction(baseExtraction({ typesAll: ["creature"] }), "qqzzx art");
+    const p3 = await finalizeQuery(ir);
+    const removedArt = p3.removedInvalidTags.filter((t) => t === "art:qqzzx").length;
+    check("fixture re-injects on the second pass", removedArt === 2, p3.removedInvalidTags.join(","));
+    const leftover = (await validateTaggerTags(p3.queryForLogs)).map((t) => `${t.type}:${t.tag}`);
+    check("no invalid tags after finalize", leftover.length === 0, `${leftover.join(",")} | ${p3.queryForLogs}`);
   }
 
   // 5. Named-card intent routes the card name for the intent resolver — and keeps

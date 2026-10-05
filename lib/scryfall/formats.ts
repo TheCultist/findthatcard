@@ -5,6 +5,8 @@
  * function:format → f:format rewrites in finalize.
  */
 
+import { escapeRegex } from "@/lib/utils/text";
+
 /** Canonical Scryfall `f:` / `format:` slugs. */
 export const SCRYFALL_FORMATS = [
   "standard",
@@ -103,20 +105,6 @@ export function normalizeFormatSlug(raw: string): ScryfallFormat | null {
   return null;
 }
 
-/** True when the natural query (or existing Scryfall clause) refers to Pauper EDH / PDH. */
-export function isPauperCommanderContext(naturalQuery: string, scryfallQuery = ""): boolean {
-  const lower = naturalQuery.toLowerCase();
-  if (
-    /\bpauper\s*(?:edh|commander)\b/i.test(lower) ||
-    /\bp(?:e)?dh\b/i.test(lower) ||
-    /\bpaupercommander\b/i.test(lower) ||
-    /\bpaupermmander\b/i.test(lower)
-  ) {
-    return true;
-  }
-  return /\bf:paupercommander\b/i.test(scryfallQuery);
-}
-
 /**
  * Formats that use a command-zone / leader card (commander-style constructed).
  * Subset of SCRYFALL_FORMATS.
@@ -162,13 +150,9 @@ export const COMMANDER_ELIGIBLE_IS_FLAGS = [
 ] as readonly string[];
 
 const COMMANDER_ELIGIBLE_IS_RE = new RegExp(
-  `\\bis:(?:${COMMANDER_ELIGIBLE_IS_FLAGS.map(escapeRegexLiteral).join("|")})\\b`,
+  `\\bis:(?:${COMMANDER_ELIGIBLE_IS_FLAGS.map(escapeRegex).join("|")})\\b`,
   "i"
 );
-
-function escapeRegexLiteral(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 export function hasCommanderEligibleFlag(query: string): boolean {
   return COMMANDER_ELIGIBLE_IS_RE.test(query);

@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { getCacheDir } from "@/lib/cache-paths";
-import { escapeRegex, levenshteinDistance, normalizeWhitespace } from "@/lib/utils/text";
+import { escapeRegex, levenshteinDistance } from "@/lib/utils/text";
 import { formatTodayStamp, shouldSkipUpdate } from "@/lib/utils/cache";
 
 type ScryfallSetEntry = {
@@ -24,15 +24,6 @@ type SetCacheFile = {
 type SetIndex = {
   byCode: Map<string, ScryfallSetEntry>;
   byName: Array<{ normalized: string; entry: ScryfallSetEntry }>;
-};
-
-export type SetFilter = {
-  code: string;
-  name: string;
-  negated: boolean;
-  source: "name" | "code";
-  /** Extra words to strip from the NL query (e.g. "from" for "… from blb"). */
-  stripHints?: readonly string[];
 };
 
 const SCRYFALL_SETS_URL = "https://api.scryfall.com/sets";
@@ -304,451 +295,42 @@ async function getSetIndex(): Promise<SetIndex> {
   return setIndex;
 }
 
-function detectNegation(normalizedQuery: string, normalizedToken: string): boolean {
-  const escapedToken = escapeRegex(normalizedToken).replace(/ +/g, "\\s+");
-  const pattern = new RegExp(
-    `\\b(not\\s+in|not\\s+from|without|excluding|exclude|no)\\b\\s+(?:the\\s+)?${escapedToken}\\b`,
-    "i"
-  );
-  return pattern.test(normalizedQuery);
-}
+// Above this many name matches a reference is a word, not a set ("commander", "core").
+const MAX_SET_MATCHES = 12;
 
-function normalizeOrphanedOr(query: string): string {
-  let updated = query;
-  updated = updated.replace(/\(\s*OR\s+([^)]+)\)/gi, "($1)");
-  updated = updated.replace(/\(\s*([^)]+)\s+OR\s*\)/gi, "($1)");
-  // Remove parenthesized branches that contain only OR tokens.
-  updated = updated.replace(/\(\s*(?:OR\s*)+\)/gi, "");
-  updated = updated.replace(/\(\s*OR\s+/gi, "(");
-  updated = updated.replace(/\s+OR\s*\)/gi, ")");
-  updated = updated.replace(/\bOR\b\s+\bOR\b/gi, "OR");
-  updated = updated.replace(/\(\s*\)/g, "");
-  return normalizeWhitespace(updated);
-}
-
-function removeSetFilters(query: string): string {
-  let updated = query;
-  // \b prevents matching `e:` inside `name:`, `type:`, etc.
-  updated = updated.replace(/-?\b(?:set|s|e|edition):[^\s)]+/gi, "");
-  updated = updated.replace(/\s{2,}/g, " ").trim();
-  return normalizeOrphanedOr(updated);
-}
-
-function buildSetFilterTokens(filters: SetFilter[]): string {
-  const positives: string[] = [];
-  const negatives: string[] = [];
-
-  for (const filter of filters) {
-    if (filter.negated) {
-      negatives.push(`-set:${filter.code}`);
-    } else {
-      positives.push(`set:${filter.code}`);
-    }
-  }
-
-  const tokens: string[] = [];
-  if (positives.length === 1) {
-    tokens.push(positives[0]);
-  } else if (positives.length > 1) {
-    tokens.push(`(${positives.join(" OR ")})`);
-  }
-
-  if (negatives.length > 0) {
-    tokens.push(negatives.join(" "));
-  }
-
-  return tokens.join(" ").trim();
-}
-
-function addFranchiseSetFilters(
-  naturalQuery: string,
-  normalizedQuery: string,
-  byName: Array<{ normalized: string; entry: ScryfallSetEntry }>,
-  filters: Map<string, SetFilter>
-): void {
-  // "set" as a verb before a location preposition ("set on Ravnica", "set in Ixalan") is NOT a
-  // set-noun context — the phrase "cards set in Ravnica" should not be parsed as "[cards] set".
-  const hasSetContext =
-    /\b(set|sets|edition|editions|printing|printings)\b/i.test(naturalQuery) &&
-    !/\bset\s+(?:on|in|at|within|upon|across|throughout)\b/i.test(naturalQuery);
-  if (!hasSetContext) {
-    return;
-  }
-
-  const phrasePattern =
-    /\b([a-z0-9]{3,}(?:\s+[a-z0-9]{3,}){0,3})\s+(set|sets|edition|editions|printing|printings)\b/gi;
-  const ignored = new Set([
-    "commander",
-    "commanders",
-    "from",
-    "for",
-    "in",
-    "of",
-    "the",
-    "my",
-  ]);
-
-  const phrases = new Set<string>();
-  let phraseMatch: RegExpExecArray | null;
-  while ((phraseMatch = phrasePattern.exec(normalizedQuery)) !== null) {
-    const raw = (phraseMatch[1] || "").trim();
-    if (!raw) continue;
-    const cleanedTokens = raw
-      .split(" ")
-      .filter(Boolean)
-      .filter((token) => !ignored.has(token));
-    if (cleanedTokens.length === 0) continue;
-    phrases.add(cleanedTokens.join(" "));
-  }
-
-  const franchiseHints: Array<{ match: RegExp; phrases: string[] }> = [
-    { match: /\b(avatar|airbender)\b/i, phrases: ["avatar", "airbender", "last airbender"] },
-    { match: /\b(fallout)\b/i, phrases: ["fallout"] },
-    { match: /\b(doctor\s*who)\b/i, phrases: ["doctor who"] },
-    { match: /\b(final\s*fantasy)\b/i, phrases: ["final fantasy"] },
-    {
-      match: /\b(lotr|lord\s*of\s*the\s*rings|middle\s*earth)\b/i,
-      phrases: ["lord of the rings", "middle earth", "lotr"],
-    },
-    { match: /\b(marvel)\b/i, phrases: ["marvel"] },
-  ];
-
-  for (const hint of franchiseHints) {
-    if (hint.match.test(naturalQuery)) {
-      for (const phrase of hint.phrases) {
-        phrases.add(phrase);
-      }
-    }
-  }
-
-  for (const phrase of phrases) {
-    const phraseTokens = phrase
-      .split(" ")
-      .filter((token) => token.length >= 3);
-    if (phraseTokens.length === 0) continue;
-
-    for (const entry of byName) {
-      const isMatch = phraseTokens.every((token) =>
-        new RegExp(`\\b${escapeRegex(token)}\\b`, "i").test(entry.normalized)
-      );
-      if (!isMatch) continue;
-      const code = entry.entry.code.toLowerCase();
-      if (filters.has(code)) continue;
-      const negated = detectNegation(normalizedQuery, phrase);
-      filters.set(code, {
-        code,
-        name: entry.entry.name,
-        negated,
-        source: "name",
-      });
-    }
-  }
-}
-
-export async function resolveSetFilters(naturalQuery: string): Promise<SetFilter[]> {
+/**
+ * Resolves one extracted set reference (name or code) to Scryfall set codes:
+ * exact code → every set whose name holds all its words (the set plus its commander / token /
+ * promo siblings: "final fantasy" → fin, fic, tfin…) → exact name when that is too many →
+ * closest name within a small edit distance. Returns [] rather than guessing.
+ */
+export async function resolveSetCodes(raw: string): Promise<string[]> {
   const { byCode, byName } = await getSetIndex();
-  if (byCode.size === 0 || byName.length === 0) {
-    return [];
+  const needle = normalizeSetText(raw);
+  if (!needle) return [];
+  if (byCode.has(needle)) return [needle];
+
+  const words = needle.split(" ").filter((w) => w.length >= 3);
+  if (words.length > 0) {
+    const patterns = words.map((w) => new RegExp(`\\b${escapeRegex(w)}\\b`));
+    const codes = [
+      ...new Set(byName.filter((e) => patterns.every((p) => p.test(e.normalized))).map((e) => e.entry.code)),
+    ];
+    if (codes.length > 0 && codes.length <= MAX_SET_MATCHES) return codes;
+    const exact = byName.filter((e) => e.normalized === needle).map((e) => e.entry.code);
+    if (codes.length > 0) return [...new Set(exact)];
   }
 
-  const normalizedQuery = normalizeSetText(naturalQuery);
-  if (!normalizedQuery) {
-    return [];
-  }
-
-  const wantsCommanderFormat =
-    /\b(commander[-\s]?legal|legal\s+in\s+commander|for\s+commander|commander\s+format|in\s+commander|edh[-\s]?legal|legal\s+in\s+edh|for\s+edh|edh\s+format|in\s+edh)\b/i.test(
-      naturalQuery
-    ) ||
-    /\bmy\s+commander\b|\bcommander\s+is\b|\b(?:have|run|play|use)\s+(?:a\s+)?[^.]+?\s+commander\b/i.test(
-      naturalQuery
-    );
-  const hasSetContext =
-    /\b(set|sets|edition|editions|printing|printings)\b/i.test(naturalQuery) &&
-    !/\bset\s+(?:on|in|at|within|upon|across|throughout)\b/i.test(naturalQuery);
-  const hasCommanderFromSetHint =
-    /\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b/i.test(naturalQuery);
-  const hasFranchiseSetHint =
-    /\b(avatar|airbender|fallout|lotr|lord\s*of\s*the\s*rings|doctor\s*who|final\s*fantasy)\b/i.test(
-      naturalQuery
-    );
-  const allowSetFuzzyWithoutAnchorContext =
-    hasSetContext || hasCommanderFromSetHint || hasFranchiseSetHint;
-  const queryTokens = normalizedQuery.split(" ").filter(Boolean);
-  const queryTokenSet = new Set(queryTokens);
-
-  const shouldSkipCommanderSetMatch = (entry: { normalized: string }) => {
-    if (!wantsCommanderFormat || hasSetContext) {
-      return false;
-    }
-    const tokens = entry.normalized
-      .split(" ")
-      .filter(Boolean)
-      .filter((token) => token !== "commander");
-    if (tokens.length === 0) {
-      return true;
-    }
-    return !tokens.some((token) => queryTokenSet.has(token));
-  };
-
-  const filters = new Map<string, SetFilter>();
-  const anySetPattern =
-    /\bany\s+([a-z0-9 ]{2,})\s+(set|sets|edition|editions|printing|printings)\b/gi;
-  let anyMatch: RegExpExecArray | null;
-
-  while ((anyMatch = anySetPattern.exec(normalizedQuery)) !== null) {
-    const rawPhrase = anyMatch[1] || "";
-    const normalizedPhrase = normalizeSetText(rawPhrase);
-    const phraseTokens = normalizedPhrase.split(" ").filter((token) => token.length >= 3);
-    if (phraseTokens.length === 0) {
-      continue;
-    }
-
-    for (const entry of byName) {
-      if (shouldSkipCommanderSetMatch(entry)) {
-        continue;
-      }
-      const isMatch = phraseTokens.every((token) =>
-        new RegExp(`\\b${escapeRegex(token)}\\b`, "i").test(entry.normalized)
-      );
-      if (!isMatch) {
-        continue;
-      }
-      const code = entry.entry.code.toLowerCase();
-      if (!filters.has(code)) {
-        const negated = detectNegation(normalizedQuery, normalizedPhrase);
-        filters.set(code, {
-          code,
-          name: entry.entry.name,
-          negated,
-          source: "name",
-        });
-      }
+  let best: string | null = null;
+  let bestScore = 1;
+  for (const e of byName) {
+    const score = normalizedDistance(needle, e.normalized);
+    if (score < bestScore) {
+      bestScore = score;
+      best = e.entry.code;
     }
   }
-
-  for (const entry of byName) {
-    if (shouldSkipCommanderSetMatch(entry)) {
-      continue;
-    }
-    const pattern = new RegExp(
-      `\\b${escapeRegex(entry.normalized).replace(/ +/g, "\\s+")}\\b`,
-      "i"
-    );
-    if (!pattern.test(normalizedQuery)) {
-      continue;
-    }
-    const negated = detectNegation(normalizedQuery, entry.normalized);
-    const code = entry.entry.code.toLowerCase();
-    if (!filters.has(code)) {
-      filters.set(code, {
-        code,
-        name: entry.entry.name,
-        negated,
-        source: "name",
-      });
-    }
-  }
-
-  if (queryTokens.length > 0) {
-    for (const entry of byName) {
-      if (shouldSkipCommanderSetMatch(entry)) {
-        continue;
-      }
-      const nameTokens = entry.normalized.split(" ").filter(Boolean);
-      if (nameTokens.length === 0) {
-        continue;
-      }
-
-      const hasAnchorToken = nameTokens.some(
-        (token) => token.length >= 4 && queryTokenSet.has(token)
-      );
-
-      const windowSizes = new Set<number>([nameTokens.length]);
-      if (nameTokens.length >= 2) {
-        windowSizes.add(nameTokens.length - 1);
-      }
-      if (nameTokens.length >= 3) {
-        windowSizes.add(nameTokens.length + 1);
-      }
-
-      let bestScore = 1;
-      for (const size of windowSizes) {
-        if (size <= 0 || size > queryTokens.length) {
-          continue;
-        }
-        for (let i = 0; i <= queryTokens.length - size; i += 1) {
-          const windowTokens = queryTokens.slice(i, i + size);
-          const windowText = windowTokens.join(" ");
-          const score = normalizedDistance(entry.normalized, windowText);
-          if (score < bestScore) {
-            bestScore = score;
-          }
-        }
-      }
-
-      const maxAllowed = entry.normalized.length <= 8 ? 0.32 : 0.38;
-      const allowWithoutAnchor =
-        !hasAnchorToken &&
-        queryTokens.length <= 4 &&
-        entry.normalized.length >= 5 &&
-        bestScore <= 0.28;
-
-      if (
-        allowSetFuzzyWithoutAnchorContext &&
-        bestScore <= maxAllowed &&
-        (hasAnchorToken || allowWithoutAnchor)
-      ) {
-        const code = entry.entry.code.toLowerCase();
-        if (!filters.has(code)) {
-          const negated = detectNegation(normalizedQuery, entry.normalized);
-          filters.set(code, {
-            code,
-            name: entry.entry.name,
-            negated,
-            source: "name",
-          });
-        }
-      }
-    }
-  }
-
-  addFranchiseSetFilters(naturalQuery, normalizedQuery, byName, filters);
-
-  const codeContextPattern =
-    /\b(set|edition|printing)\b/i.test(naturalQuery) &&
-    !/\bset\s+(?:on|in|at|within|upon|across|throughout)\b/i.test(naturalQuery);
-  const directCodePattern = /\b(?:set|edition)\s*[:#]?\s*([a-z0-9]{1,6})\b/gi;
-  let match: RegExpExecArray | null;
-  while ((match = directCodePattern.exec(naturalQuery)) !== null) {
-    const candidate = match[1]?.toLowerCase();
-    if (!candidate || !byCode.has(candidate)) {
-      continue;
-    }
-    const negated = detectNegation(normalizedQuery, candidate);
-    filters.set(candidate, {
-      code: candidate,
-      name: byCode.get(candidate)?.name || candidate,
-      negated,
-      source: "code",
-    });
-  }
-
-  // Natural phrasing "from blb" / "from dmu" — set code without "set:" or the word "set".
-  const fromSetCodePattern = /\bfrom\s+([a-z0-9]{1,6})\b/gi;
-  while ((match = fromSetCodePattern.exec(naturalQuery)) !== null) {
-    const candidate = match[1]?.toLowerCase();
-    if (!candidate || !byCode.has(candidate)) {
-      continue;
-    }
-    const negated = detectNegation(normalizedQuery, candidate);
-    filters.set(candidate, {
-      code: candidate,
-      name: byCode.get(candidate)?.name || candidate,
-      negated,
-      source: "code",
-      stripHints: ["from"],
-    });
-  }
-
-  if (codeContextPattern) {
-    const tokens = naturalQuery.toLowerCase().match(/\b[a-z0-9]{1,6}\b/g) || [];
-    for (const token of tokens) {
-      if (!byCode.has(token)) {
-        continue;
-      }
-      if (filters.has(token)) {
-        continue;
-      }
-      const negated = detectNegation(normalizedQuery, token);
-      filters.set(token, {
-        code: token,
-        name: byCode.get(token)?.name || token,
-        negated,
-        source: "code",
-      });
-    }
-  }
-
-  // When user asks for "commander from [franchise] sets" (e.g. Avatar, Fallout), drop Commander
-  // precon sets—they want commanders FROM that franchise, not from Commander products
-  const COMMANDER_PRECON_CODES = new Set([
-    "c13", "c14", "c15", "c16", "c17", "c18", "c19", "c20", "c21",
-    "cmd", "cm1", "cm2", "cmr", "clb", "m21", "dbl", "mic",
-  ]);
-  const hasCommanderPrecons = [...filters.keys()].some((code) =>
-    COMMANDER_PRECON_CODES.has(code)
-  );
-  const hasThemeFranchiseSets = [...filters.keys()].some(
-    (code) => !COMMANDER_PRECON_CODES.has(code)
-  );
-  const hasCommanderFromSetIntent =
-    /\bcommanders?\s+from\b/i.test(naturalQuery);
-  const mentionsFranchise =
-    /\b(avatar|airbender|fallout|lotr|lord\s*of\s*the\s*rings|doctor\s*who|final\s*fantasy)\b/i.test(
-      naturalQuery
-    );
-  // If a franchise set is requested, never keep Commander precon/product sets
-  // that might be fuzzy-matched from "commanders".
-  if (mentionsFranchise) {
-    for (const code of COMMANDER_PRECON_CODES) {
-      filters.delete(code);
-    }
-  }
-  if (
-    hasCommanderPrecons &&
-    hasThemeFranchiseSets &&
-    mentionsFranchise
-  ) {
-    for (const code of COMMANDER_PRECON_CODES) {
-      filters.delete(code);
-    }
-  }
-
-  // "commanders from <set>" usually asks for commander-eligible cards printed in those sets,
-  // not Commander product sets accidentally matched by "commanders".
-  if (hasCommanderPrecons && hasThemeFranchiseSets && hasCommanderFromSetIntent) {
-    for (const code of COMMANDER_PRECON_CODES) {
-      filters.delete(code);
-    }
-  }
-
-  // "Universes Beyond" in the query means is:universesbeyond (card property), not a specific set.
-  // Do not return set:slx (or any set named "universes beyond"); Phase 1 will emit is:universesbeyond.
-  const wantsUniversesBeyond =
-    /\buniverses\s+beyond\b|\bfrom\s+universes\s+beyond\s+sets?\b/i.test(naturalQuery);
-  if (wantsUniversesBeyond) {
-    for (const [code, filter] of filters.entries()) {
-      if (code === "slx" || normalizeSetText(filter.name) === "universes beyond") {
-        filters.delete(code);
-      }
-    }
-  }
-
-  return Array.from(filters.values());
-}
-
-export async function applySetFiltersFromNaturalQuery(
-  naturalQuery: string,
-  scryfallQuery: string
-): Promise<string> {
-  const { hasCommanderDeckContext } = await import("@/lib/commander-context");
-  if (hasCommanderDeckContext(naturalQuery)) {
-    return scryfallQuery;
-  }
-
-  const filters = await resolveSetFilters(naturalQuery);
-  if (filters.length === 0) {
-    return scryfallQuery;
-  }
-
-  const cleanedQuery = removeSetFilters(scryfallQuery);
-  const setTokens = buildSetFilterTokens(filters);
-  if (!setTokens) {
-    return cleanedQuery;
-  }
-
-  return normalizeWhitespace(`${cleanedQuery} ${setTokens}`);
+  return best && bestScore <= 0.25 ? [best] : [];
 }
 
 ensureScryfallSetCache().catch((error) => {

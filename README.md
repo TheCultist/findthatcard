@@ -117,7 +117,7 @@ npm run test:queries
 npm run lint
 ```
 
-The deterministic self-check (`lib/search-pipeline/v2/v2.test.ts`) asserts extraction-to-IR-to-query behavior on fixed fixtures without any live AI calls. `query-converter.test.ts`, `synergy-cards.test.ts`, and `synergyPartnerMask.test.ts` cover the finalization/assembly helpers. For end-to-end quality spot-checks against real search results, use `npm run search:qa`.
+The deterministic self-check (`lib/search-pipeline/v2/v2.test.ts`) asserts extraction-to-IR-to-query behavior on fixed fixtures without any live AI calls. `query-converter.test.ts` and `synergy-cards.test.ts` cover the finalization/assembly helpers. For end-to-end quality spot-checks against real search results, use `npm run search:qa`.
 
 ## Project Structure
 
@@ -163,7 +163,6 @@ findthatcard/
 │   │   ├── resolveIntentClauses.ts # Intent resolver: similar/art-like/synergy named-card intents
 │   │   ├── assembleQuery.ts        # IR → Scryfall query string
 │   │   ├── compound.ts             # Splits top-level "or" queries into branches
-│   │   ├── synergyPartnerMask.ts   # Masks "combos with X" partner mentions for finalize
 │   │   ├── similar-cards.ts        # Similar-card and art-like resolvers
 │   │   ├── v2/                     # The pipeline: one AI extraction + guardrails
 │   │   │   ├── runV2.ts                # Orchestrator: passthrough, compound, cache, wiring
@@ -202,8 +201,7 @@ findthatcard/
 │   ├── query-tokens.ts             # Scryfall query tokenizer for QueryTokenPreview
 │   ├── example-queries.ts          # 350+ example query strings
 │   ├── pro-tips.ts                 # Tips shown during loading
-│   ├── cache-paths.ts              # /tmp on serverless, ./data locally
-│   └── commander-context.ts        # "my commander" color identity resolution
+│   └── cache-paths.ts              # /tmp on serverless, ./data locally
 ├── types/
 │   └── scryfall.ts                 # ScryfallCard, CardResult, SearchResponse, etc.
 ├── data/

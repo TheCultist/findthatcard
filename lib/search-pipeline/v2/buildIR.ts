@@ -16,9 +16,14 @@ import {
   matchSubtype,
   matchSupertype,
 } from "@/lib/scryfall/catalog-index";
-import { normalizeFormatSlug } from "@/lib/scryfall/formats";
+import {
+  COMMANDER_FORMAT_TO_ELIGIBLE_IS,
+  normalizeFormatSlug,
+  type CommanderFormat,
+} from "@/lib/scryfall/formats";
 import { fetchCardByName } from "@/lib/scryfall/lookup";
 import { lookupArchetypeTags } from "@/lib/scryfall/query-converter";
+import { resolveSetCodes } from "@/lib/scryfall/sets";
 import { validateTaggerTag } from "@/lib/tagger/validation";
 import type {
   QueryClause,
@@ -41,6 +46,10 @@ const RARITY_OPS = new Set([":", "<=", ">="]);
 const COLOR_OPS = new Set([":", "=", ">=", "<="]);
 const STAT_FIELDS = new Set(["mv", "pow", "tou", "loy"]);
 const RARITY_CODES = new Set(["c", "u", "r", "m"]);
+/** Archetypes whose qualifier is the effect's target, not a filter on the card (see buildIR). */
+const TARGET_QUALIFIER_ARCHETYPES = new Set(["removal", "damage", "reanimator"]);
+/** Token qualifiers that are classes the tokens tags already encode (not a specific kind). */
+const BROAD_TOKEN_KINDS = new Set(["creature", "artifact", "noncreature"]);
 
 /** Normalizes a possibly-scalar-or-array AI value into a clean string array. */
 function toStringArray(value: unknown): string[] {
@@ -65,6 +74,7 @@ function normalizeExtraction(raw: Partial<V2Extraction> | null | undefined): V2E
     intent: (typeof e.intent === "string" ? e.intent : "search") as V2Extraction["intent"],
     cardName: typeof scalar(e.cardName) === "string" ? scalar<string>(e.cardName) : null,
     colors: scalar<V2Extraction["colors"]>(e.colors),
+    negatedColors: typeof scalar(e.negatedColors) === "string" ? scalar<string>(e.negatedColors) : null,
     typesAll: toStringArray(e.typesAll),
     typesAny: toStringArray(e.typesAny),
     negatedTypes: toStringArray(e.negatedTypes),
@@ -74,8 +84,12 @@ function normalizeExtraction(raw: Partial<V2Extraction> | null | undefined): V2E
     rarity: scalar<V2Extraction["rarity"]>(e.rarity),
     year: scalar<V2Extraction["year"]>(e.year),
     keywords: toStringArray(e.keywords),
+    negatedKeywords: toStringArray(e.negatedKeywords),
     format: typeof scalar(e.format) === "string" ? scalar<string>(e.format) : null,
-    set: typeof scalar(e.set) === "string" ? scalar<string>(e.set) : null,
+    commanderEligible: scalar(e.commanderEligible) === true || scalar(e.commanderEligible) === "true",
+    // `set` is the pre-array key; accept it so an older-shaped answer isn't lost.
+    sets: toStringArray(e.sets ?? e.set),
+    negatedSets: toStringArray(e.negatedSets),
     artist: typeof scalar(e.artist) === "string" ? scalar<string>(e.artist) : null,
     artSubjects: toStringArray(e.artSubjects),
     functionTags: toStringArray(e.functionTags),
@@ -84,6 +98,11 @@ function normalizeExtraction(raw: Partial<V2Extraction> | null | undefined): V2E
     ),
     oraclePhrases: toStringArray(e.oraclePhrases),
     negatedOraclePhrases: toStringArray(e.negatedOraclePhrases),
+    // A flat string list (shape drift) is one sequence, not N one-token ones.
+    oracleSequences: (Array.isArray(e.oracleSequences) && e.oracleSequences.some(Array.isArray)
+      ? e.oracleSequences.map(toStringArray)
+      : [toStringArray(e.oracleSequences)]
+    ).filter((s) => s.length > 0),
   };
 }
 
@@ -112,6 +131,12 @@ function resolveArtist(raw: string): string | null {
   if (exact) return exact;
   for (const key of index.keys()) if (key.includes(needle)) return raw.trim();
   return null;
+}
+
+/** Set references → unique Scryfall set codes; unresolvable names are dropped. */
+async function resolveSetList(raw: string[]): Promise<string[]> {
+  const codes = await Promise.all(raw.map(resolveSetCodes));
+  return [...new Set(codes.flat())];
 }
 
 function normalizeType(raw: string): string | null {
@@ -152,10 +177,37 @@ const BARE_NUMBER_TOKEN =
 function splitInflectedVerbPhrase(phrase: string): string[] {
   const words = phrase.split(/\s+/);
   if (words.length < 2) return [phrase];
-  const first = words[0].toLowerCase();
-  const stem = first.endsWith("s") && !first.endsWith("ss") ? first.slice(0, -1) : first;
-  if (!INFLECTABLE_ORACLE_VERBS.has(stem)) return [phrase];
+  const stem = verbStem(words[0]);
+  if (!stem) return [phrase];
   return [stem, words.slice(1).join(" ")];
+}
+
+/** "draws" → "draw", "dies" → "die"; null when the word is not an inflectable verb. */
+function verbStem(word: string): string | null {
+  const w = word.toLowerCase();
+  const stem = w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w;
+  return INFLECTABLE_ORACLE_VERBS.has(stem) ? stem : null;
+}
+
+/**
+ * Ordered same-sentence oracle match: ["dies", "draws a card"] →
+ * `o:/die[^.]*draw a card/`. Scryfall regex is a substring match, so verb stems
+ * cover every inflection; `[^.]` keeps both tokens inside one ability sentence
+ * (an unrelated "draw" elsewhere on the card no longer satisfies "dies").
+ * A one-token sequence degrades to a plain o:"…" phrase.
+ */
+function oracleSequenceClause(tokens: string[]): string | null {
+  const parts = tokens
+    .map((t) => t.trim().replace(/^["']|["']$/g, ""))
+    .filter((t) => t && !BARE_NUMBER_TOKEN.test(t))
+    .map((t) => {
+      const [first, ...rest] = t.split(/\s+/);
+      return [verbStem(first) ?? first, ...rest].join(" ");
+    });
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return `o:"${parts[0]}"`;
+  const escaped = parts.map((p) => p.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&"));
+  return `o:/${escaped.join("[^.]*")}/`;
 }
 
 function emptyIR(naturalQuery: string): SearchPipelineIR {
@@ -208,6 +260,29 @@ export async function buildIRFromExtraction(
   const must: QueryClause[] = ir.mustClauses;
   const mustNot: QueryClause[] = ir.mustNotClauses;
 
+  // Archetypes are validated first: their names and qualifiers gate the type and keyword clauses.
+  const archetypes = extraction.archetypes
+    .map((a) => ({
+      name: a.name.trim().toLowerCase(),
+      qualifier: typeof a.qualifier === "string" ? a.qualifier.trim().toLowerCase() || undefined : undefined,
+    }))
+    .filter((a) => a.name && lookupArchetypeTags(a.name, a.qualifier)); // unknown archetype — drop
+
+  // On these archetypes the qualifier names the effect's TARGET ("creature removal", "damage to
+  // planeswalkers", "reanimate artifacts"); small models also emit it as a type, which would
+  // demand the card itself BE that type. For tokens the qualifier is the created token's kind
+  // ("makes zombie tokens"): only a matching subtype goes — a creature can make creature tokens.
+  // ponytail: "creatures that destroy creatures" loses t:creature too — no IR field tells the
+  // card's own type from the target's; add one if QA shows it matters.
+  const targetTypes = new Set<string>();
+  const targetSubtypes = new Set<string>();
+  for (const a of archetypes) {
+    if (!a.qualifier) continue;
+    const target = a.qualifier.replace(/s$/, "");
+    if (TARGET_QUALIFIER_ARCHETYPES.has(a.name)) targetTypes.add(target);
+    if (TARGET_QUALIFIER_ARCHETYPES.has(a.name) || a.name === "tokens") targetSubtypes.add(target);
+  }
+
   // --- Named-card intents: hand the card name to resolveIntentClauses ---
   // The intent resolver is a pipeline step, not a bypass: every other field the
   // user expressed ("…that aren't instants", "…in modern") is still built below
@@ -256,6 +331,13 @@ export async function buildIRFromExtraction(
       }
     }
   }
+  // Excluded colours: -c:r = not red. Identity uses >= because id:r means "fits in mono-red",
+  // so -id:r would also drop colourless cards.
+  const negLetters = new Set((extraction.negatedColors ?? "").toLowerCase().replace(COLOR_LETTERS, ""));
+  for (const l of negLetters) {
+    const value = extraction.colors?.mode === "identity" ? `id>=${l}` : `c:${l}`;
+    mustNot.push({ value, source: "phase1:color" });
+  }
 
   // --- Types / supertypes / subtypes ---
   // typesAll = compound type ("artifact creature") → AND each. typesAny =
@@ -263,11 +345,11 @@ export async function buildIRFromExtraction(
   // card is rarely two base types and AND-ing them returns zero cards.
   for (const t of extraction.typesAll) {
     const norm = normalizeType(t);
-    if (norm) must.push({ value: `t:${norm}`, source: "phase1:type" });
+    if (norm && !targetTypes.has(norm)) must.push({ value: `t:${norm}`, source: "phase1:type" });
   }
   const anyTypeClauses = extraction.typesAny
     .map(normalizeType)
-    .filter((t): t is string => t !== null)
+    .filter((t): t is string => t !== null && !targetTypes.has(t))
     .map((t) => `t:${t}`);
   if (anyTypeClauses.length === 1) {
     must.push({ value: anyTypeClauses[0], source: "phase1:type" });
@@ -284,7 +366,7 @@ export async function buildIRFromExtraction(
   }
   for (const s of extraction.subtypes) {
     const sub = matchSubtype(s);
-    if (sub) must.push({ value: `t:${sub.name.toLowerCase()}`, source: "phase1:subtype" });
+    if (sub && !targetSubtypes.has(sub.name.toLowerCase())) must.push({ value: `t:${sub.name.toLowerCase()}`, source: "phase1:subtype" });
   }
 
   // --- Stats / rarity / year (each field defensively validated) ---
@@ -315,19 +397,48 @@ export async function buildIRFromExtraction(
     }
   }
 
-  // --- Keywords (validated against the MTG keyword catalog, emitted as kw:) ---
-  if (extraction.keywords.length > 0) {
+  // --- Keywords (validated against the MTG keyword catalog, emitted as kw: / -kw:) ---
+  // A keyword that is also a chosen archetype ("mill", "infect", "storm") is the same concept:
+  // it joins the archetype's OR family (below) instead of AND-ing a second, narrower clause.
+  const archetypeKeywords = new Set<string>();
+  if (extraction.keywords.length > 0 || extraction.negatedKeywords.length > 0) {
     const known = await getKeywordSlugs();
+    const archetypeNames = new Set(archetypes.map((a) => a.name));
     for (const kw of extraction.keywords) {
       const slug = slugify(kw);
-      if (slug && known.has(slug)) must.push({ value: `kw:${slug}`, source: "phase1:keyword" });
+      if (!slug || !known.has(slug)) continue;
+      if (archetypeNames.has(slug)) archetypeKeywords.add(slug);
+      else must.push({ value: `kw:${slug}`, source: "phase1:keyword" });
+    }
+    for (const kw of extraction.negatedKeywords) {
+      const slug = slugify(kw);
+      if (slug && known.has(slug)) mustNot.push({ value: `kw:${slug}`, source: "phase1:keyword" });
     }
   }
 
   // --- Format (allowlisted Scryfall slugs; aliases like "pauper edh" → paupercommander) ---
-  if (extraction.format) {
-    const fmt = normalizeFormatSlug(extraction.format);
-    if (fmt) must.push({ value: `f:${fmt}`, source: "phase1:format" });
+  const fmt = extraction.format ? normalizeFormatSlug(extraction.format) : null;
+  if (fmt) must.push({ value: `f:${fmt}`, source: "phase1:format" });
+
+  // --- Commander eligibility: the format's own is: flag (PDH → is:paupercommander, brawl →
+  // is:brawler…), is:commander when no command-zone format was named ---
+  if (extraction.commanderEligible) {
+    const flag =
+      fmt && fmt in COMMANDER_FORMAT_TO_ELIGIBLE_IS
+        ? COMMANDER_FORMAT_TO_ELIGIBLE_IS[fmt as CommanderFormat]
+        : "commander";
+    must.push({ value: `is:${flag}`, source: "phase1:commander" });
+  }
+
+  // --- Sets (resolved against the set index; alternatives OR-grouped, exclusions negated) ---
+  const setCodes = await resolveSetList(extraction.sets);
+  if (setCodes.length === 1) {
+    must.push({ value: `set:${setCodes[0]}`, source: "phase1:set" });
+  } else if (setCodes.length > 1) {
+    must.push({ value: `(${setCodes.map((c) => `set:${c}`).join(" or ")})`, source: "phase1:set" });
+  }
+  for (const code of await resolveSetList(extraction.negatedSets)) {
+    mustNot.push({ value: `set:${code}`, source: "phase1:set" });
   }
 
   // --- Artist (must match or be contained in a catalog illustrator name) ---
@@ -362,21 +473,23 @@ export async function buildIRFromExtraction(
   // --- Archetypes (validated; routed through resolvedFragments so Phase 3 injects them) ---
   const unresolved: UnresolvedFragment[] = ir.unresolvedFragments;
   const resolved: ResolvedFragment[] = ir.resolvedFragments;
-  extraction.archetypes.forEach((arch, i) => {
-    const name = arch.name.trim().toLowerCase();
-    const qualifier = typeof arch.qualifier === "string" ? arch.qualifier.trim().toLowerCase() || undefined : undefined;
-    if (!name) return;
-    if (!lookupArchetypeTags(name, qualifier)) return; // unknown archetype — drop
+  archetypes.forEach(({ name, qualifier }, i) => {
     const key = `__archetype_${i}_${name}${qualifier ? `_${qualifier}` : ""}`;
     unresolved.push({ text: key, category: "effect" });
     resolved.push({
       fragment: key,
-      tags: [],
+      tags: archetypeKeywords.has(name) ? [`kw:${name}`] : [],
       confidence: 1,
       category: "effect",
       archetype: name,
       qualifier,
     });
+    // The tokens family only says "makes tokens": a specific kind ("zombie", "treasure") must
+    // also appear in the rules text. The broad classes are already what the tags encode.
+    const kind = qualifier?.replace(/s$/, "");
+    if (name === "tokens" && kind && !BROAD_TOKEN_KINDS.has(kind) && /^[a-z][a-z' -]*$/.test(kind)) {
+      must.push({ value: `o:"${kind}"`, source: "phase1:oracle" });
+    }
   });
 
   // Function tags are alternative gameplay roles for one concept → OR-grouped.
@@ -409,6 +522,10 @@ export async function buildIRFromExtraction(
     for (const part of splitInflectedVerbPhrase(p)) {
       mustNot.push({ value: `o:"${part}"`, source: "phase1:oracle" });
     }
+  }
+  for (const tokens of extraction.oracleSequences) {
+    const clause = oracleSequenceClause(tokens);
+    if (clause) must.push({ value: clause, source: "phase1:oracle" });
   }
 
   // --- Safety net: never hand Phase 3 a completely empty IR ---

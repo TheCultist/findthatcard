@@ -1,9 +1,6 @@
-import { applyCommanderContextFromNaturalQuery, hasCommanderDeckContext } from "@/lib/commander-context";
-import { applyKeywordFiltersFromNaturalQuery } from "@/lib/mtg-keywords";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
 import { Phase3Result, SearchPipelineIR } from "@/lib/search-pipeline/types";
 import { getCatalog } from "@/lib/scryfall/catalogs";
-import { isPauperCommanderContext, stripRedundantTypesForCommanderEligible } from "@/lib/scryfall/formats";
 import {
   EFFECTIVE_MAX_QUERY_LENGTH,
   OPPONENT_BURN_DAMAGE_FUNCTION_TAGS,
@@ -12,9 +9,9 @@ import {
   lookupArchetypeTags,
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
-import { applySetFiltersFromNaturalQuery } from "@/lib/scryfall/sets";
 import { getTaggerTagContext } from "@/lib/tagger/context";
 import { validateTaggerTags } from "@/lib/tagger/validation";
+import { escapeRegex } from "@/lib/utils/text";
 
 const DEFAULT_GAME_FILTER = "game:paper";
 const KNOWN_TYPE_CATALOGS = [
@@ -82,169 +79,6 @@ function applyDefaultGameFilter(query: string): string {
   return `${query} ${DEFAULT_GAME_FILTER}`.trim();
 }
 
-function ensureCommanderCreatureFilter(naturalQuery: string, scryfallQuery: string): string {
-  if (hasCommanderDeckContext(naturalQuery)) return scryfallQuery;
-  if (/\bis:paupercommander\b/i.test(scryfallQuery)) return scryfallQuery;
-  if (/\bis:commander\b/i.test(scryfallQuery)) return scryfallQuery;
-  // "for commander"/"in commander" means format context, not commander creatures.
-  if (/\b(for|in)\s+commanders?\b/i.test(naturalQuery)) return scryfallQuery;
-  // Commander mechanic phrases don't mean "find commander creatures".
-  if (/\bcommander[''s]*\s+(?:tax|damage|ninjutsu|eminence|storm)\b/i.test(naturalQuery)) return scryfallQuery;
-  // Ignore "pauper commander" / PDH format phrasing when detecting commander eligibility.
-  const withoutPdhFormat = naturalQuery
-    .replace(/\bpauper\s*(?:edh|commander)\b/gi, " ")
-    .replace(/\bp(?:e)?dh\b/gi, " ")
-    .replace(/\bpaupercommander\b/gi, " ")
-    .replace(/\bpaupermmander\b/gi, " ");
-  const wantsCommanderCreature =
-    /\b(?:a|an|my)\s+(?:easy\s+)?commander\b|\bcommander\s+from\b|\bcommanders?\s+(?:from|in)\b|\bcan\s+be\s+commanders?\b|\bcommanders\b/i.test(
-      withoutPdhFormat
-    );
-  if (!wantsCommanderCreature) return scryfallQuery;
-  // PDH commanders use is:paupercommander, not is:commander.
-  if (isPauperCommanderContext(naturalQuery, scryfallQuery)) {
-    return `${scryfallQuery.trim()} is:paupercommander`.trim();
-  }
-  return `${scryfallQuery.trim()} is:commander`.trim();
-}
-
-function extractTokenTypesFromGenerationIntent(naturalQuery: string): string[] {
-  const matched = new Set<string>();
-  const query = naturalQuery.toLowerCase();
-
-  const directGenerationPattern =
-    /\b(?:make|create|generate|produce)(?:s|d|ing)?\s+(?:a|an|any|some|multiple|many|\d+)?\s*([a-z][a-z-]*)\s+tokens?\b/gi;
-  let directMatch: RegExpExecArray | null;
-  while ((directMatch = directGenerationPattern.exec(query)) !== null) {
-    const tokenType = (directMatch[1] || "").trim();
-    if (tokenType) {
-      matched.add(tokenType);
-    }
-  }
-
-  const makerPattern = /\b([a-z][a-z-]*)\s+token\s+(?:generation|maker|makers)\b/gi;
-  let makerMatch: RegExpExecArray | null;
-  while ((makerMatch = makerPattern.exec(query)) !== null) {
-    const tokenType = (makerMatch[1] || "").trim();
-    if (tokenType) {
-      matched.add(tokenType);
-    }
-  }
-
-  return Array.from(matched);
-}
-
-const DAMAGE_TARGET_TYPES = new Set(["creature", "planeswalker", "player", "battle"]);
-
-function removeDamageTargetTypeFilters(
-  naturalQuery: string,
-  scryfallQuery: string
-): string {
-  const lower = naturalQuery.toLowerCase();
-  const hasDamageIntent =
-    /\b(direct damage|burn)\b/i.test(lower) ||
-    /\bdeal[st]?\s+.*?\bdamage\b/i.test(lower) ||
-    /\bdamage[sd]?\s+(?:target\s+)?(?:opponent|creature|player|planeswalker|battle|any|each)\b/i.test(lower) ||
-    /\bthat\s+damage[sd]?\b/i.test(lower) ||
-    /\bdamage[sd]?\s+(?:the|a|an|each|target)\b/i.test(lower);
-  if (!hasDamageIntent) return scryfallQuery;
-
-  let updated = scryfallQuery;
-  for (const typeName of DAMAGE_TARGET_TYPES) {
-    const mentionedAsTarget = new RegExp(
-      `\\b(?:damage[sd]?|burn|deal[st]?)\\s+(?:target\\s+|the\\s+|a\\s+|an\\s+|each\\s+)?${typeName}s?\\b`,
-      "i"
-    ).test(lower);
-    if (!mentionedAsTarget) continue;
-    const typePattern = new RegExp(`\\s*\\b(?:t|type):${typeName}\\b`, "gi");
-    updated = updated.replace(typePattern, " ");
-  }
-
-  return updated.replace(/\s{2,}/g, " ").trim();
-}
-
-type ArchetypeTypeSuppressionRule = {
-  intentPattern: RegExp;
-  targetPattern: RegExp;
-  suppressType: string;
-};
-
-const ARCHETYPE_TYPE_SUPPRESSIONS: ArchetypeTypeSuppressionRule[] = [
-  {
-    intentPattern: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?|kill\s+spells?)\b/i,
-    targetPattern: /\bcreature\s+(?:removal|destroy|exile)|(?:removal|remove|destroy|exile|kill)\s+(?:target\s+|a\s+|the\s+)?creatures?\b/i,
-    suppressType: "creature",
-  },
-  {
-    intentPattern: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?)\b/i,
-    targetPattern: /\benchantment\s+(?:removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?enchantments?\b/i,
-    suppressType: "enchantment",
-  },
-  {
-    intentPattern: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?)\b/i,
-    targetPattern: /\bartifact\s+(?:removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?artifacts?\b/i,
-    suppressType: "artifact",
-  },
-  {
-    intentPattern: /\b(removal|remove[sd]?|destroy[sd]?|exile[sd]?)\b/i,
-    targetPattern: /\bplaneswalker\s+(?:removal|destroy|exile)|(?:removal|remove|destroy|exile)\s+(?:target\s+|a\s+|the\s+)?planeswalkers?\b/i,
-    suppressType: "planeswalker",
-  },
-  {
-    intentPattern: /\b(removal|remove[sd]?|destroy[sd]?)\b/i,
-    targetPattern: /\bland\s+(?:removal|destroy)|(?:removal|remove|destroy)\s+(?:target\s+|a\s+|the\s+)?lands?\b/i,
-    suppressType: "land",
-  },
-  {
-    intentPattern: /\b(reanimate|reanimation|graveyard\s+recursion)\b/i,
-    targetPattern: /\b(?:reanimate|return)\s+(?:target\s+|a\s+|the\s+)?creatures?\s+(?:from|to)\b|\bcreature\s+reanima/i,
-    suppressType: "creature",
-  },
-  {
-    intentPattern: /\b(reanimate|reanimation|graveyard\s+recursion)\b/i,
-    targetPattern: /\b(?:reanimate|return)\s+(?:target\s+|a\s+|the\s+)?artifacts?\s+(?:from|to)\b|\bartifact\s+reanima/i,
-    suppressType: "artifact",
-  },
-];
-
-function removeArchetypeTargetTypeFilters(
-  naturalQuery: string,
-  scryfallQuery: string
-): string {
-  const lower = naturalQuery.toLowerCase();
-  let updated = scryfallQuery;
-
-  for (const rule of ARCHETYPE_TYPE_SUPPRESSIONS) {
-    if (!rule.intentPattern.test(lower)) continue;
-    if (!rule.targetPattern.test(lower)) continue;
-    const typePattern = new RegExp(`\\s*\\b(?:t|type):${rule.suppressType}\\b`, "gi");
-    updated = updated.replace(typePattern, " ");
-  }
-
-  return updated.replace(/\s{2,}/g, " ").trim();
-}
-
-function removeTokenTypeFiltersForTokenGenerationIntent(
-  naturalQuery: string,
-  scryfallQuery: string
-): string {
-  const tokenTypes = extractTokenTypesFromGenerationIntent(naturalQuery);
-  if (tokenTypes.length === 0) {
-    return scryfallQuery;
-  }
-
-  let updated = scryfallQuery;
-  for (const tokenType of tokenTypes) {
-    const escaped = tokenType.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    updated = updated.replace(
-      new RegExp(`\\s+-?(?:t|type):${escaped}\\b`, "gi"),
-      " "
-    );
-  }
-
-  return updated.replace(/\s{2,}/g, " ").trim();
-}
-
 async function removeUnknownTypeFilters(scryfallQuery: string): Promise<string> {
   const knownTypes = await getKnownTypeTerms();
   return scryfallQuery.replace(/(^|\s)-?(?:t|type):([a-z][a-z-]*)\b/gi, (full, leading, rawType) => {
@@ -297,7 +131,7 @@ async function stripPlaneswalkerSubtypesWhenCreatureRequired(
   let result = scryfallQuery;
   for (const pw of pwSubtypes) {
     if (pw.length < 2) continue;
-    const escaped = pw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escaped = escapeRegex(pw);
     result = result.replace(
       new RegExp(`\\s*\\b(?:t|type):${escaped}\\b`, "gi"),
       " "
@@ -379,7 +213,7 @@ function stripMvBoundRedundantFunctionTags(
 
   let result = scryfallQuery;
   for (const rule of MV_BOUND_REDUNDANT_FUNCTION_TAG_RULES) {
-    const escaped = rule.tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escaped = escapeRegex(rule.tag);
     if (!new RegExp(`\\bfunction:${escaped}\\b`, "i").test(result)) continue;
     if (rule.userExplicitlyWantsFeature(naturalQuery)) continue;
     result = result
@@ -605,7 +439,7 @@ function demoteRemovalTargetKeyword(
   // Only use the first token (keywords like "first strike" are two words; kw: would have
   // been emitted as kw:first or kw:"first strike" — handling single-token covers 95% of cases).
   const kwToken = m[1].trim().toLowerCase().split(/\s+/)[0];
-  const escaped = kwToken.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escaped = escapeRegex(kwToken);
   const kwRe = new RegExp(`\\bkw:${escaped}\\b`, "gi");
   if (!kwRe.test(scryfallQuery)) return scryfallQuery;
 
@@ -643,7 +477,7 @@ function hasOpponentBurnFunctionTag(query: string): boolean {
  * spell-type oracle (`noncreature spell` vs `instant or sorcery`) where Tagger has no exact
  * substitute. `function:cast-trigger-you` covers "whenever you cast" phrasing; opponent burn
  * tags cover damage / each opponent (oracle `o:damage` + `o:"each opponent"` are redundant
- * once burn tags are present — see normalizeBurnIntent).
+ * once burn tags are present).
  */
 function normalizeSpellCastPingOpponentsOracle(
   naturalQuery: string,
@@ -723,7 +557,7 @@ export function removeInvalidTagsFromQuery(
   let updated = query;
   for (const invalid of invalidTags) {
     const operators = invalid.type === "art" ? "(?:art|atag|arttag)" : "(?:function|otag|oracletag)";
-    const escapedTag = invalid.tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escapedTag = escapeRegex(invalid.tag);
     // Require a true token boundary: do not match `function:storm` inside `function:storm-like`
     // when stripping a shorter invalid tag like `storm`.
     const pattern = new RegExp(
@@ -793,12 +627,13 @@ function injectArchetypeTagsFromResolvedFragments(
       if (!unresolved.orConnected) flushArchetypeOrGroup();
       continue;
     }
-    // Function tags the extractor attached to this archetype describe the same
+    // Function tags / keywords the extractor attached to this archetype describe the same
     // concept (buildIR folds them in) → they join the archetype's OR family.
+    // Registry tags are function slugs unless already a full token (o:"…", kw:…).
     const orChain = [
       ...new Set([
-        ...tags.map((t) => `function:${t}`),
-        ...fragment.tags.filter((t) => /^function:/i.test(t.trim())).map((t) => t.trim().toLowerCase()),
+        ...tags.map((t) => (t.includes(":") ? t : `function:${t}`)),
+        ...fragment.tags.filter((t) => /^(?:function|kw):/i.test(t.trim())).map((t) => t.trim().toLowerCase()),
       ]),
     ];
     if (unresolved.orConnected && orGroupChains.length > 0) {
@@ -811,7 +646,7 @@ function injectArchetypeTagsFromResolvedFragments(
     // Any other extra tags are AND conditions that narrow the archetype — append them
     // directly after flushing. Strip t:/type: tags — card-type filters never come from here.
     const extraTags = fragment.tags.filter(
-      (t) => t.trim().length > 0 && !/^(?:t|type|function):/i.test(t.trim())
+      (t) => t.trim().length > 0 && !/^(?:t|type|function|kw):/i.test(t.trim())
     );
     if (extraTags.length > 0 && !unresolved.orConnected) {
       flushArchetypeOrGroup();
@@ -915,27 +750,7 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     });
   }
 
-  const isBypassIntent =
-    ir.intent === "similar-cards" ||
-    ir.intent === "art-like-cards" ||
-    ir.intent === "synergy-with-card";
-
   if (ir.intent !== "direct-scryfall") {
-    // For bypass intents (similar-cards, art-like, synergy), Phase 1 already ran
-    // set detection with bypass-word exclusions, so skip Phase 3's second pass.
-    // Without this, card names like "Sheoldred, the Apocalypse" would cause
-    // "Apocalypse" to be re-detected as set:apc here.
-    if (!isBypassIntent) {
-      query = await applySetFiltersFromNaturalQuery(ir.naturalQuery, query);
-    }
-    query = await applyKeywordFiltersFromNaturalQuery(ir.naturalQuery, query);
-    query = applyCommanderContextFromNaturalQuery(ir.naturalQuery, query);
-    query = ensureCommanderCreatureFilter(ir.naturalQuery, query);
-    // ensureCommander may add is:commander after finalizeScryfallQuery — strip again.
-    query = stripRedundantTypesForCommanderEligible(query);
-    query = removeTokenTypeFiltersForTokenGenerationIntent(ir.naturalQuery, query);
-    query = removeDamageTargetTypeFilters(ir.naturalQuery, query);
-    query = removeArchetypeTargetTypeFilters(ir.naturalQuery, query);
     query = await removeUnknownTypeFilters(query);
     query = await stripPlaneswalkerSubtypesWhenCreatureRequired(query);
     query = stripMvBoundRedundantFunctionTags(ir.naturalQuery, query);
@@ -963,6 +778,13 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
         tagContext,
         maxLength: EFFECTIVE_MAX_QUERY_LENGTH,
       });
+      // The second pass can inject tags of its own (hard-coded families), including ones
+      // just removed — validate again so nothing unchecked reaches Scryfall.
+      const reinjected = await validateTaggerTags(query);
+      if (reinjected.length > 0) {
+        query = removeInvalidTagsFromQuery(query, reinjected);
+        invalidTags.push(...reinjected);
+      }
     }
 
     if (query.length > EFFECTIVE_MAX_QUERY_LENGTH) {

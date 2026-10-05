@@ -5,6 +5,8 @@
  * scan oracle text for catalog keyword names that have a reminder definition.
  */
 
+import { escapeRegex } from "@/lib/utils/text";
+
 /** Same slug rule as KeywordWithTooltip / mtg-keywords. */
 export function keywordSlug(name: string): string {
   return name
@@ -16,8 +18,6 @@ export function keywordSlug(name: string): string {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 }
-
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Returns `own` plus every catalog keyword mentioned in `text`, deduped by slug,
@@ -38,7 +38,7 @@ export function mergeKeywordMentions(
   for (const name of byLength) {
     const slug = keywordSlug(name);
     if (!slug || !definitions[slug]) continue;
-    const re = new RegExp(`(?<![\\w-])${escapeRe(name).replace(/\\?\s+/g, "\\s+")}s?(?![\\w-])`, "gi");
+    const re = new RegExp(`(?<![\\w-])${escapeRegex(name).replace(/\\?\s+/g, "\\s+")}s?(?![\\w-])`, "gi");
     if (!re.test(haystack)) continue;
     // Consume the match so shorter names ("Strike", "Hexproof") don't re-match inside it.
     haystack = haystack.replace(re, " ");

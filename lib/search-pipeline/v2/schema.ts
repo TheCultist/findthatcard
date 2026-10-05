@@ -34,6 +34,8 @@ export interface V2Extraction {
    * "or" = the letters are alternatives ("red or green" → any one qualifies).
    */
   colors: { mode: "identity" | "color"; op: ColorOp; letters: string; combine: "and" | "or" } | null;
+  /** Letters the card must NOT have ("not blue", "non-red"). Uses `colors.mode` (default color). */
+  negatedColors: string | null;
   /** Types the card must have ALL of — compound types like "artifact creature". */
   typesAll: string[];
   /** Types where ANY one qualifies — enumerated alternatives like "instants or sorceries". */
@@ -52,10 +54,16 @@ export interface V2Extraction {
   year: { op: NumericOp; year: number } | null;
   /** Ability keywords the card itself has (flying, lifelink…). Validated against keyword catalog. */
   keywords: string[];
+  /** Ability keywords the card must NOT have ("without flying"). */
+  negatedKeywords: string[];
   /** Format legality (standard, modern, commander…). */
   format: string | null;
-  /** Set name or code the user constrained to. */
-  set: string | null;
+  /** The card must be able to lead a deck (commanders, PDH commanders, brawlers) → is:<flag>. */
+  commanderEligible: boolean;
+  /** Set names or codes the card must be printed in (alternatives). Validated against the set index. */
+  sets: string[];
+  /** Excluded sets. */
+  negatedSets: string[];
   /** Illustrator name. */
   artist: string | null;
   /** Visual subjects depicted in the art (dragon, forest…) → art: tags. */
@@ -68,6 +76,12 @@ export interface V2Extraction {
   oraclePhrases: string[];
   /** Oracle-text phrases the card must NOT contain → -o:"…". */
   negatedOraclePhrases: string[];
+  /**
+   * Linked trigger→effect token lists that must appear IN ORDER within one
+   * sentence ("draws when it dies" → [["dies","draw"]]) → o:/dies[^.]*draw/.
+   * Independent oraclePhrases would match the words in unrelated abilities.
+   */
+  oracleSequences: string[][];
 }
 
 /**
@@ -97,6 +111,7 @@ export const V2_EXTRACTION_SCHEMA: Record<string, unknown> = {
         combine: { type: "string", enum: ["and", "or"] },
       },
     },
+    negatedColors: { type: ["string", "null"] },
     typesAll: { type: "array", items: { type: "string" } },
     typesAny: { type: "array", items: { type: "string" } },
     negatedTypes: { type: "array", items: { type: "string" } },
@@ -134,8 +149,11 @@ export const V2_EXTRACTION_SCHEMA: Record<string, unknown> = {
       },
     },
     keywords: { type: "array", items: { type: "string" } },
+    negatedKeywords: { type: "array", items: { type: "string" } },
     format: { type: ["string", "null"] },
-    set: { type: ["string", "null"] },
+    commanderEligible: { type: "boolean" },
+    sets: { type: "array", items: { type: "string" } },
+    negatedSets: { type: "array", items: { type: "string" } },
     artist: { type: ["string", "null"] },
     artSubjects: { type: "array", items: { type: "string" } },
     functionTags: { type: "array", items: { type: "string" } },
@@ -153,6 +171,7 @@ export const V2_EXTRACTION_SCHEMA: Record<string, unknown> = {
     },
     oraclePhrases: { type: "array", items: { type: "string" } },
     negatedOraclePhrases: { type: "array", items: { type: "string" } },
+    oracleSequences: { type: "array", items: { type: "array", items: { type: "string" } } },
   },
 };
 
