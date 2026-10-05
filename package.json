@@ -7,9 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "tsx lib/scryfall/query-converter.test.ts && tsx lib/search-pipeline/synergy-cards.test.ts && tsx lib/search-pipeline/v2/v2.test.ts && tsx lib/query-tokens.test.ts && tsx lib/prices.test.ts && tsx lib/keyword-mentions.test.ts && tsx lib/keyword-wiki.test.ts",
+    "test": "tsx lib/scryfall/query-converter.test.ts && tsx lib/search-pipeline/synergy-cards.test.ts && tsx lib/search-pipeline/v2/v2.test.ts && tsx lib/query-tokens.test.ts && tsx lib/prices.test.ts && tsx lib/keyword-mentions.test.ts && tsx lib/keyword-wiki.test.ts && tsx lib/utils/utils.test.ts",
     "test:queries": "tsx lib/scryfall/query-converter.test.ts && tsx lib/search-pipeline/v2/v2.test.ts",
-    "search:qa": "tsx scripts/search-qabot.ts"
+    "search:qa": "tsx scripts/search-qabot.ts",
+    "seed": "tsx scripts/seed-caches.ts",
+    "seo:verify": "tsx --env-file-if-exists=.env.local scripts/verify-seo-queries.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

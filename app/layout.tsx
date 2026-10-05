@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Syne, DM_Sans } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
 import ScrollToTop from "./components/ScrollToTop";
+import CookieBanner from "./components/CookieBanner";
+import ConsentAnalytics from "./components/ConsentAnalytics";
 import "./globals.css";
 
 const syne = Syne({
@@ -167,22 +168,18 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
-                const theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                let stored = null;
+                try { stored = localStorage.getItem('theme'); } catch (e) {}
+                const theme = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
                 document.documentElement.classList.toggle('dark', theme === 'dark');
               })();
             `,
           }}
         />
-        <Script
-          id="adsense"
-          async
-          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1161939859067558"
-          crossOrigin="anonymous"
-          strategy="afterInteractive"
-        />
         {children}
         <ScrollToTop />
-        <Analytics />
+        <CookieBanner />
+        <ConsentAnalytics />
       </body>
     </html>
   );

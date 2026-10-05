@@ -1,24 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { clientIp, createRateLimiter } from "@/lib/utils/rate-limit";
 
 const RECIPIENT = "findthatcard@thecultist.it";
 const SENDER = "FindThatCard Bug Reports <findthatcard@thecultist.it>";
 
-export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { description, userQuery, scryfallQuery, screenshot } = body as {
-      description: string;
-      userQuery: string;
-      scryfallQuery: string;
-      screenshot?: string; // base64 data URI
-    };
+// Every report is an email in the inbox — a handful per visitor per hour is plenty.
+const reportRateLimit = createRateLimiter(5, 60 * 60_000);
+const MAX_TEXT_LENGTH = 5_000;
+const MAX_SCREENSHOT_LENGTH = 3_000_000; // ~2 MB image as a base64 data URI
 
-    if (!description?.trim()) {
+let resend: Resend | null = null;
+
+export async function POST(req: NextRequest) {
+  if (reportRateLimit(clientIp(req.headers)) > 0) {
+    return NextResponse.json({ error: "Too many reports — please try again later." }, { status: 429 });
+  }
+
+  try {
+    const body = (await req.json()) as Record<string, unknown>;
+    const field = (v: unknown) => (typeof v === "string" ? v.slice(0, MAX_TEXT_LENGTH) : "");
+    const description = field(body.description);
+    const userQuery = field(body.userQuery);
+    const scryfallQuery = field(body.scryfallQuery);
+    const screenshot = typeof body.screenshot === "string" ? body.screenshot : "";
+
+    if (!description.trim()) {
       return NextResponse.json({ error: "Description is required." }, { status: 400 });
     }
+    if (screenshot.length > MAX_SCREENSHOT_LENGTH) {
+      return NextResponse.json({ error: "Screenshot is too large." }, { status: 413 });
+    }
+    if (!process.env.RESEND_API_KEY) {
+      console.error("report-bug: RESEND_API_KEY is not configured");
+      return NextResponse.json({ error: "Bug reports are unavailable right now." }, { status: 503 });
+    }
+    resend ??= new Resend(process.env.RESEND_API_KEY);
 
     const attachments: { filename: string; content: string }[] = [];
     if (screenshot) {

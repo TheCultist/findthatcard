@@ -1,4 +1,5 @@
-import { ensureScryfallCatalogCache, getCatalog } from "@/lib/scryfall/catalogs";
+import { ensureScryfallCatalogCache, getCatalog, getCatalogStamp } from "@/lib/scryfall/catalogs";
+import { createCacheLoader } from "@/lib/utils/cache";
 import { findFuzzyMatch, levenshteinDistance } from "@/lib/utils/text";
 
 export type SubtypeMatch = {
@@ -73,7 +74,7 @@ let subtypeIndex: Map<string, SubtypeMatch> | null = null;
 let supertypeSet: Set<string> | null = null;
 let artistIndex: Map<string, string> | null = null;
 let cardNameIndexPair: CardNameIndexPair | null = null;
-let indexPromise: Promise<void> | null = null;
+let builtFromStamp: string | null = null;
 
 /**
  * Normalise a card name for fuzzy lookup: lowercase, strip apostrophes,
@@ -92,6 +93,12 @@ function simplifyForNameLookup(text: string): string {
 
 async function buildIndexes(): Promise<void> {
   await ensureScryfallCatalogCache();
+  // Catalogs not loaded yet (upstream down): leave the indexes null so a later call rebuilds them.
+  if ((await getCatalog("card-names")).length === 0) {
+    console.warn("[Catalog Index] Catalogs unavailable; index build deferred");
+    return;
+  }
+  builtFromStamp = getCatalogStamp();
 
   const stMap = new Map<string, SubtypeMatch>();
   for (const { catalog, category } of SUBTYPE_SOURCES) {
@@ -172,18 +179,13 @@ async function buildIndexes(): Promise<void> {
   );
 }
 
-export async function ensureCatalogIndex(): Promise<void> {
-  if (subtypeIndex !== null) return;
-
-  if (indexPromise === null) {
-    indexPromise = buildIndexes().catch((error) => {
-      indexPromise = null;
-      throw error;
-    });
-  }
-
-  await indexPromise;
-}
+// Keyed on the last index buildIndexes assigns, so "loaded" means every index is ready.
+// Retry window 0: an unbuilt index is cheap to re-check — the catalog loader throttles the fetches.
+export const ensureCatalogIndex = createCacheLoader(() => cardNameIndexPair !== null, buildIndexes, {
+  retryMs: 0,
+  // Rebuilt (in the background) whenever the catalogs refresh, so new card names are recognized.
+  isFresh: () => builtFromStamp === getCatalogStamp(),
+});
 
 export function matchSubtype(token: string): SubtypeMatch | null {
   if (!subtypeIndex) return null;

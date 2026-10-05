@@ -5,11 +5,11 @@ import ThemeToggle from "@/app/components/ThemeToggle";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "Find That Card privacy policy. How we handle search data, cookies, Scryfall API, and OpenAI. No personal data stored. GDPR-compliant.",
+    "Find That Card privacy policy. No ads or tracking cookies, cookieless analytics you can opt out of, and how searches are processed by Scryfall and our AI provider.",
   openGraph: {
     title: "Privacy Policy | Find That Card",
     description:
-      "How Find That Card handles your data, cookies, and third-party services. No personal data stored.",
+      "How Find That Card handles your searches, analytics, and third-party services. No ads or tracking cookies.",
     url: "https://www.findthatcard.net/privacy",
   },
 };
@@ -32,67 +32,116 @@ export default function PrivacyPage() {
           <h1 className="font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
             Privacy Policy
           </h1>
-          <p className="mt-2 text-sm text-muted" suppressHydrationWarning>
-            Last updated: {new Date().toLocaleDateString("en-CA", { year: "numeric", month: "long", day: "numeric" })}
-          </p>
+          <p className="mt-2 text-sm text-muted">Last updated: October 5, 2026</p>
         </div>
 
         {/* Content */}
         <div className="prose max-w-none space-y-6 text-muted">
           <section>
-            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Data Collection</h2>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Summary</h2>
             <p className="text-sm leading-relaxed">
-              Find That Card is a search tool for Magic: The Gathering cards. We collect minimal data necessary for the service to function:
+              Find That Card is a search tool for Magic: The Gathering cards. There are no user accounts, no
+              advertising networks and no advertising or tracking cookies. The site itself sets no cookies at all.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Your Searches</h2>
+            <p className="text-sm leading-relaxed">
+              When you search, the text you type is sent to our server and processed as follows:
             </p>
             <ul className="list-disc list-inside mt-3 space-y-2 text-sm">
-              <li>Search queries are processed to generate Scryfall API queries</li>
-              <li>Cookie consent preferences are stored locally in your browser</li>
-              <li>No personal information is collected or stored</li>
+              <li>
+                Plain-language searches are sent to our AI provider (OpenAI or Anthropic, depending on our
+                configuration) to be converted into Scryfall syntax. Only the search text is sent, not your IP
+                address or any identifier.
+              </li>
+              <li>Searches already written in Scryfall syntax skip the AI step entirely.</li>
+              <li>
+                The resulting query is sent from our server to Scryfall, and community tags may be looked up on
+                Scryfall Tagger.
+              </li>
+              <li>
+                Your search appears in the page address (for example <code>/search?q=...</code>) so results can be
+                bookmarked and shared.
+              </li>
             </ul>
           </section>
 
           <section>
-            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Cookies</h2>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Stored in Your Browser</h2>
             <p className="text-sm leading-relaxed">
-              We use cookies to:
+              We use your browser&apos;s local storage (not cookies) for two settings, which never leave your device:
             </p>
             <ul className="list-disc list-inside mt-3 space-y-2 text-sm">
-              <li>Remember your cookie consent preference</li>
-              <li>Store cached data for improved performance (mana symbol images)</li>
+              <li>Your light/dark theme preference</li>
+              <li>Your choice in the analytics banner (accept or reject)</li>
             </ul>
+          </section>
+
+          <section>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Analytics</h2>
+            <p className="text-sm leading-relaxed">
+              We use Vercel Web Analytics, which is privacy-friendly and does not use cookies. It records aggregate
+              page views and a few anonymous events, such as opening a card or clicking a buy link (including the
+              card name and store). It is not used to identify or follow you across sites.
+            </p>
             <p className="text-sm leading-relaxed mt-3">
-              You can accept or reject non-essential cookies using the cookie banner. Essential cookies are required for the site to function.
+              If you choose &quot;Reject&quot; in the banner, no analytics data is sent from your browser. To change
+              your choice, clear this site&apos;s data in your browser and the banner will appear again.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Affiliate Links</h2>
+            <p className="text-sm leading-relaxed">
+              Buy links to CardTrader and TCGPlayer, and the CavernHold banner, are affiliate links: we may earn a
+              commission if you buy something, at no extra cost to you. We don&apos;t share any data with these
+              stores. Once you click through, those sites (and their affiliate partners) may set their own cookies
+              under their own privacy policies.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Bug Reports</h2>
+            <p className="text-sm leading-relaxed">
+              If you use the bug report button, your description, your search, the generated Scryfall query and the
+              screenshot you choose to attach (if any) are emailed to us through Resend. We use them only to fix
+              search problems. Please don&apos;t include personal information in screenshots.
             </p>
           </section>
 
           <section>
             <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Third-Party Services</h2>
-            <p className="text-sm leading-relaxed">
-              This site uses the following third-party services:
-            </p>
             <ul className="list-disc list-inside mt-3 space-y-2 text-sm">
               <li>
-                <strong>Scryfall API</strong> - Card data and images are fetched from Scryfall&apos;s public API
+                <strong>Scryfall</strong>: card data and community tags are fetched by our server. Card images and
+                mana symbols load directly from Scryfall in your browser, so Scryfall receives the standard request
+                information (such as your IP address) for those files.
               </li>
               <li>
-                <strong>OpenAI API</strong> - Natural language queries are converted to Scryfall syntax using OpenAI
+                <strong>OpenAI or Anthropic</strong>: converts plain-language search text into Scryfall syntax.
+              </li>
+              <li>
+                <strong>Vercel</strong>: hosts the site. Like any web host, it processes IP addresses and request
+                details, and our server logs (which include search text) are kept for a limited time.
+              </li>
+              <li>
+                <strong>Resend</strong>: delivers bug reports to us by email.
               </li>
             </ul>
             <p className="text-sm leading-relaxed mt-3">
-              We do not share your data with third parties beyond what is necessary for the service to function.
+              We do not sell your data or share it with third parties beyond what is needed for the service to work.
             </p>
           </section>
 
           <section>
             <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Data Storage</h2>
             <p className="text-sm leading-relaxed">
-              All data processing happens in real-time. We do not store:
+              We have no database of users or searches. To keep the service fast and fair, our server briefly holds
+              in memory recent query conversions and per-IP request counts for rate limiting; these are discarded
+              automatically. Apart from hosting logs and any bug reports you send, we do not keep your searches.
             </p>
-            <ul className="list-disc list-inside mt-3 space-y-2 text-sm">
-              <li>Search queries</li>
-              <li>Search results</li>
-              <li>User accounts or personal information</li>
-            </ul>
           </section>
 
           <section>
@@ -101,9 +150,10 @@ export default function PrivacyPage() {
               Under GDPR and other privacy regulations, you have the right to:
             </p>
             <ul className="list-disc list-inside mt-3 space-y-2 text-sm">
-              <li>Access any data we hold about you (we don&apos;t store personal data)</li>
-              <li>Request deletion of your data (clear your browser&apos;s localStorage)</li>
-              <li>Withdraw consent for cookies at any time</li>
+              <li>Ask what data we hold about you (normally none beyond any bug report you sent)</li>
+              <li>Ask us to delete a bug report you sent</li>
+              <li>Opt out of analytics with the banner&apos;s &quot;Reject&quot; button</li>
+              <li>Remove the settings stored on your device by clearing this site&apos;s data in your browser</li>
             </ul>
           </section>
 

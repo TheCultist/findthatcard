@@ -77,11 +77,13 @@ export interface V2Extraction {
   /** Oracle-text phrases the card must NOT contain → -o:"…". */
   negatedOraclePhrases: string[];
   /**
-   * Linked trigger→effect token lists that must appear IN ORDER within one
-   * sentence ("draws when it dies" → [["dies","draw"]]) → o:/dies[^.]*draw/.
-   * Independent oraclePhrases would match the words in unrelated abilities.
+   * Effects tied to a trigger ("draws when it dies", "draw when a creature
+   * enters"). `subject`: "~" = the card itself, a noun = another object, null =
+   * unspecified. Compiled to one ordered same-sentence regex
+   * (o:/~[^.]*die[^.]*draw/); independent oraclePhrases would match the words
+   * in unrelated abilities.
    */
-  oracleSequences: string[][];
+  triggeredEffects: Array<{ subject: string | null; trigger: string; effect: string }>;
 }
 
 /**
@@ -171,7 +173,19 @@ export const V2_EXTRACTION_SCHEMA: Record<string, unknown> = {
     },
     oraclePhrases: { type: "array", items: { type: "string" } },
     negatedOraclePhrases: { type: "array", items: { type: "string" } },
-    oracleSequences: { type: "array", items: { type: "array", items: { type: "string" } } },
+    triggeredEffects: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["subject", "trigger", "effect"],
+        properties: {
+          subject: { type: ["string", "null"] },
+          trigger: { type: "string" },
+          effect: { type: "string" },
+        },
+      },
+    },
   },
 };
 

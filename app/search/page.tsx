@@ -20,7 +20,7 @@ export async function generateMetadata({
 
 export default function SearchIndexPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-black" />}>
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
       <SearchPage />
     </Suspense>
   );

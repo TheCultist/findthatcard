@@ -9,17 +9,12 @@ export type ClauseSource =
   | "phase1:function"
   | "phase1:set"
   | "phase1:keyword"
-  | "phase1:strategy"
   | "phase1:oracle"
   | "phase1:stat"
   | "phase1:rarity"
   | "phase1:cardname"
-  | "phase1:is-flag"
-  | "phase1:removal-target"
   | "phase1:direct"
-  | "phase1:intent"   // clauses injected by the intent resolver (similar-cards, art-like-cards, synergy-with-card)
-  | "phase2:resolver"
-  | "phase3:sanitize";
+  | "phase1:intent";  // clauses injected by the intent resolver (similar-cards, art-like-cards, synergy-with-card)
 
 export type QueryIntent =
   | "search"
@@ -76,15 +71,9 @@ export type SearchPipelineIR = {
     aiSequentialCalls: number;
     invalidTagsRemoved: number;
     phase0Normalized: boolean;
+    /** A resolver fell back (Tagger/Scryfall/LLM unavailable) — the result must not be cached. */
+    degraded?: boolean;
   };
-};
-
-export type Phase1Result = SearchPipelineIR;
-
-export type Phase2Result = {
-  ir: SearchPipelineIR;
-  batchCalls: number;
-  sequentialCalls: number;
 };
 
 export type Phase3Result = {

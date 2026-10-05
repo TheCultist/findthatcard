@@ -1,12 +1,11 @@
 import { SearchResponse, CardResult, ScryfallCard } from "@/types/scryfall";
 import { getTcgPlayerLink } from "@/lib/tcgplayer/links";
 import { CARDS_PER_PAGE } from "@/lib/scryfall/client";
+import { scryfallFetch } from "@/lib/scryfall/http";
 
 type CardSearchResponse = {
   data?: ScryfallCard[];
 };
-const SCRYFALL_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 
 /**
  * Trims Scryfall response to only include necessary fields
@@ -48,13 +47,8 @@ export async function transformScryfallResponse(
       if (isAlchemy && !explicitlyAsksForAlchemy && card.oracle_id) {
         try {
           // Fetch a non-alchemy print of this card using oracle_id
-          const baseCardResponse = await fetch(
-            `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}+-is:alchemy+-is:digital+-is:rebalanced&unique=prints&order=released&dir=asc&limit=1`,
-            {
-              headers: {
-                "User-Agent": SCRYFALL_USER_AGENT,
-              },
-            }
+          const baseCardResponse = await scryfallFetch(
+            `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}+-is:alchemy+-is:digital+-is:rebalanced&unique=prints&order=released&dir=asc&limit=1`
           );
 
           if (baseCardResponse.ok) {
@@ -70,13 +64,8 @@ export async function transformScryfallResponse(
             }
           } else {
             // If search fails, try alternative: get all prints and filter client-side
-            const printsResponse = await fetch(
-              `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}&unique=prints&order=released&dir=asc`,
-              {
-                headers: {
-                  "User-Agent": SCRYFALL_USER_AGENT,
-                },
-              }
+            const printsResponse = await scryfallFetch(
+              `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}&unique=prints&order=released&dir=asc`
             );
 
             if (printsResponse.ok) {
@@ -159,13 +148,8 @@ export async function transformScryfallResponse(
         // Handle alchemy cards - fetch base card name for CardTrader links
         try {
           // Fetch a non-alchemy print of this card using oracle_id
-          const baseCardResponse = await fetch(
-            `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}+-is:alchemy+-is:digital+-is:rebalanced&unique=prints&order=released&dir=asc&limit=1`,
-            {
-              headers: {
-                "User-Agent": SCRYFALL_USER_AGENT,
-              },
-            }
+          const baseCardResponse = await scryfallFetch(
+            `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}+-is:alchemy+-is:digital+-is:rebalanced&unique=prints&order=released&dir=asc&limit=1`
           );
 
           if (baseCardResponse.ok) {
@@ -177,13 +161,8 @@ export async function transformScryfallResponse(
             }
           } else {
             // If search fails, try alternative: get all prints and filter client-side
-            const printsResponse = await fetch(
-              `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}&unique=prints&order=released&dir=asc`,
-              {
-                headers: {
-                  "User-Agent": SCRYFALL_USER_AGENT,
-                },
-              }
+            const printsResponse = await scryfallFetch(
+              `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}&unique=prints&order=released&dir=asc`
             );
 
             if (printsResponse.ok) {
@@ -217,13 +196,8 @@ export async function transformScryfallResponse(
         // Handle digital-only cards (non-alchemy) - find a non-digital set
         try {
           // Fetch a non-digital print of this card using oracle_id
-          const baseCardResponse = await fetch(
-            `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}+-is:digital+-is:alchemy+-is:rebalanced&unique=prints&order=released&dir=asc&limit=1`,
-            {
-              headers: {
-                "User-Agent": SCRYFALL_USER_AGENT,
-              },
-            }
+          const baseCardResponse = await scryfallFetch(
+            `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}+-is:digital+-is:alchemy+-is:rebalanced&unique=prints&order=released&dir=asc&limit=1`
           );
 
           if (baseCardResponse.ok) {
@@ -236,13 +210,8 @@ export async function transformScryfallResponse(
             }
           } else {
             // If search fails, try alternative: get all prints and filter client-side
-            const printsResponse = await fetch(
-              `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}&unique=prints&order=released&dir=asc`,
-              {
-                headers: {
-                  "User-Agent": SCRYFALL_USER_AGENT,
-                },
-              }
+            const printsResponse = await scryfallFetch(
+              `https://api.scryfall.com/cards/search?q=prefer:best+oracle_id:${card.oracle_id}&unique=prints&order=released&dir=asc`
             );
 
             if (printsResponse.ok) {

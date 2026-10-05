@@ -4,11 +4,10 @@
  * Flow: pre-pass (direct-scryfall passthrough) → one AI extraction → catalog
  * validation into an IR → intent resolver → Phase 3 finalizer. Compound "or"
  * queries process each branch independently and OR-combine, mirroring the legacy
- * compound pipeline. Results are LRU-cached by normalized query.
+ * compound pipeline. Results are LRU-cached by normalized query (except degraded
+ * resolver fallbacks); identical in-flight queries share one run.
  *
- * This module never falls back to the legacy pipeline itself — it throws on
- * failure and `runSearchPipeline` catches and degrades. Keeping fallback in one
- * place avoids an import cycle and keeps the failure policy explicit.
+ * Failures throw; the search route logs them and answers with a generic error.
  */
 
 import { ensureCatalogIndex } from "@/lib/scryfall/catalog-index";
@@ -30,11 +29,15 @@ import { extractQuery } from "@/lib/search-pipeline/v2/extractIR";
 import type { SearchPipelineResult } from "@/lib/search-pipeline/runSearchPipeline";
 
 const extractionCache = new LruCache<SearchPipelineResult>();
+const inFlight = new Map<string, Promise<SearchPipelineResult>>();
 
 const GAME_FILTER_RE = /\s*\bgame:\w+\b/gi;
 const PREFER_BEST_RE = /^prefer:best\s+/i;
 
 const NAMED_CARD_INTENTS = new Set(["similar-cards", "art-like-cards", "synergy-with-card"]);
+
+const MAX_COMPOUND_BRANCHES = 4;
+const COMPOUND_WRAPPER_LENGTH = "() game:paper".length;
 
 export function buildDirectIR(query: string): SearchPipelineIR {
   return {
@@ -71,27 +74,34 @@ export async function runSearchPipelineV2(naturalQuery: string): Promise<SearchP
   const cached = extractionCache.get(cacheKey);
   if (cached) return cached;
 
+  // Identical queries arriving together (double submit, a shared link) share one AI call.
+  let pending = inFlight.get(cacheKey);
+  if (!pending) {
+    pending = runUncached(naturalQuery).finally(() => inFlight.delete(cacheKey));
+    inFlight.set(cacheKey, pending);
+  }
+  const result = await pending;
+  if (!result.degraded) extractionCache.set(cacheKey, result);
+  return result;
+}
+
+async function runUncached(naturalQuery: string): Promise<SearchPipelineResult> {
   // Direct Scryfall syntax passes through untouched — never sent to the AI.
   if (isScryfallQuery(naturalQuery)) {
     const ir = buildDirectIR(naturalQuery);
     const phase3 = await finalizeQuery(ir);
-    const result: SearchPipelineResult = {
+    return {
       queryForScryfall: phase3.queryForScryfall,
       queryForLogs: phase3.queryForLogs,
       debug: emptyDebug(),
     };
-    extractionCache.set(cacheKey, result);
-    return result;
   }
 
   const branches = splitCompoundQuery(naturalQuery);
-  const result =
-    branches.length > 1
-      ? (await runCompound(naturalQuery, branches)) ?? (await runSingle(naturalQuery))
-      : await runSingle(naturalQuery);
-
-  extractionCache.set(cacheKey, result);
-  return result;
+  // Each branch is its own AI call; past the cap the whole query goes to one extraction.
+  return branches.length > 1 && branches.length <= MAX_COMPOUND_BRANCHES
+    ? (await runCompound(naturalQuery, branches)) ?? (await runSingle(naturalQuery))
+    : runSingle(naturalQuery);
 }
 
 function emptyDebug(): SearchPipelineResult["debug"] {
@@ -120,6 +130,7 @@ async function runSingle(query: string): Promise<SearchPipelineResult> {
   return {
     queryForScryfall: phase3.queryForScryfall,
     queryForLogs: phase3.queryForLogs,
+    degraded: ir.debug.degraded,
     debug: {
       ...emptyDebug(),
       unresolvedFragments: ir.unresolvedFragments.length,
@@ -155,11 +166,9 @@ async function runCompound(
       .trim()
   );
 
+  // Truncate the OR body, not the whole string, so the wrapper and game filter always survive.
   const orBody = strippedBranches.map((b) => `(${b})`).join(" or ");
-  let compound = `(${orBody}) game:paper`;
-  if (compound.length > EFFECTIVE_MAX_QUERY_LENGTH) {
-    compound = truncateScryfallQuery(compound, EFFECTIVE_MAX_QUERY_LENGTH);
-  }
+  const compound = `(${truncateScryfallQuery(orBody, EFFECTIVE_MAX_QUERY_LENGTH - COMPOUND_WRAPPER_LENGTH)}) game:paper`;
   const queryForScryfall = `${PREFER_BEST_PREFIX}${compound}`.trim();
 
   logSummary(originalQuery, {

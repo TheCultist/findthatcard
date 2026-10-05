@@ -1,9 +1,9 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { getCacheDir } from "@/lib/cache-paths";
-import { formatTodayStamp, shouldSkipUpdate } from "@/lib/utils/cache";
+import { createCacheLoader, readCacheJson, formatTodayStamp, shouldSkipUpdate, stampedToday } from "@/lib/utils/cache";
+import { scryfallFetch } from "@/lib/scryfall/http";
 
-const TAGGER_USER_AGENT = "find-that-card/1.0 (+https://findthatcard.net)";
 const TAGGER_CACHE_PATH = path.join(getCacheDir(), "tagger-tags.json");
 
 type TaggerCacheFile = {
@@ -17,14 +17,12 @@ type TaggerCacheFile = {
  * Structure: Map<'art' | 'function', Set<string>>
  */
 let taggerTagCache: Map<'art' | 'function', Set<string>> | null = null;
-let cacheInitializationPromise: Promise<void> | null = null;
 
 let cacheUpdatedAt: string | null = null;
 
 async function readTaggerCacheFile(): Promise<TaggerCacheFile | null> {
   try {
-    const raw = await fs.readFile(TAGGER_CACHE_PATH, "utf-8");
-    const parsed = JSON.parse(raw);
+    const parsed = await readCacheJson(TAGGER_CACHE_PATH, () => import("@/data/seed/tagger-tags.json"));
     if (!parsed || typeof parsed !== "object") {
       return null;
     }
@@ -55,10 +53,7 @@ async function writeTaggerCacheFile(payload: TaggerCacheFile): Promise<void> {
  * Extracts all valid art: and function: tags
  */
 async function initializeTaggerTagCache(): Promise<void> {
-  if (taggerTagCache !== null) {
-    return; // Cache already initialized
-  }
-
+  const firstLoad = taggerTagCache === null;
   const existing = await readTaggerCacheFile();
   if (existing) {
     taggerTagCache = new Map([
@@ -68,6 +63,9 @@ async function initializeTaggerTagCache(): Promise<void> {
     cacheUpdatedAt = existing.updatedAt || null;
   }
 
+  // Serve file/seed data at once; a stale stamp makes the loader refresh it in the background.
+  if (firstLoad && existing) return;
+
   const todayStamp = formatTodayStamp();
   if (existing && shouldSkipUpdate(existing.updatedAt, todayStamp)) {
     console.log(
@@ -76,8 +74,10 @@ async function initializeTaggerTagCache(): Promise<void> {
     return;
   }
 
-  const artTags = new Set<string>(existing?.art ?? []);
-  const functionTags = new Set<string>(existing?.function ?? []);
+  // Only what the docs page lists now: unioning with the old file kept tags Scryfall deleted
+  // "valid" forever, and each one zeroes the results of any query that uses it.
+  const artTags = new Set<string>();
+  const functionTags = new Set<string>();
   const artOperators = new Set<string>(["art", "atag", "arttag"]);
   const functionOperators = new Set<string>(["function", "otag", "oracletag"]);
 
@@ -85,10 +85,8 @@ async function initializeTaggerTagCache(): Promise<void> {
     console.log(
       `[Tagger Cache] Performing cache update (file date: ${existing?.updatedAt || "none"}, today: ${todayStamp})`
     );
-    const response = await fetch("https://scryfall.com/docs/tagger-tags", {
-      headers: {
-        "User-Agent": TAGGER_USER_AGENT,
-      },
+    const response = await scryfallFetch("https://scryfall.com/docs/tagger-tags", {
+      headers: { Accept: "text/html" },
     });
 
     if (!response.ok) {
@@ -203,6 +201,15 @@ async function initializeTaggerTagCache(): Promise<void> {
 
     const fetchedArt = new Set(artTags);
     const fetchedFunction = new Set(functionTags);
+    // A markup change that breaks the parse yields a fraction of the tags — keep the old list.
+    if (
+      fetchedFunction.size < (existing?.function.length ?? 0) / 2 ||
+      fetchedArt.size < (existing?.art.length ?? 0) / 2
+    ) {
+      throw new Error(
+        `Parsed only ${fetchedArt.size} art / ${fetchedFunction.size} function tags (had ${existing?.art.length} / ${existing?.function.length})`
+      );
+    }
 
     const addedArt: string[] = [];
     const removedArt: string[] = [];
@@ -261,36 +268,18 @@ async function initializeTaggerTagCache(): Promise<void> {
       console.log("[Tagger Cache] No tag content changes detected");
     }
   } catch (error) {
+    // Keep whatever the cache file gave us; with no file the cache stays null and
+    // ensureTaggerTagCache retries on a later call.
     console.error("[Tagger Cache] Failed to initialize cache:", error);
-    // Initialize with empty sets to prevent repeated failed attempts
-    // This allows the app to continue functioning, but all tags will be assumed valid
-    taggerTagCache = new Map([
-      ["art", new Set()],
-      ["function", new Set()],
-    ]);
-    // Don't throw - allow the app to continue with empty cache (tags will be assumed valid)
   }
 }
 
-/**
- * Ensures the tagger tag cache is initialized
- * Uses a promise to prevent concurrent initialization attempts
- */
-export async function ensureTaggerTagCache(): Promise<void> {
-  if (taggerTagCache !== null) {
-    return;
-  }
-
-  if (cacheInitializationPromise === null) {
-    cacheInitializationPromise = initializeTaggerTagCache().catch((error) => {
-      // Reset promise on error so we can retry
-      cacheInitializationPromise = null;
-      throw error;
-    });
-  }
-
-  await cacheInitializationPromise;
-}
+/** Ensures the tagger tag cache is initialized (single-flight; retried while unpopulated). */
+export const ensureTaggerTagCache = createCacheLoader(
+  () => taggerTagCache !== null,
+  initializeTaggerTagCache,
+  { isFresh: stampedToday(() => cacheUpdatedAt) }
+);
 
 export function getTaggerTagCache(): Map<"art" | "function", Set<string>> | null {
   return taggerTagCache;

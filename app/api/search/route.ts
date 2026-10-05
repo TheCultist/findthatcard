@@ -5,14 +5,32 @@ import {
   formatErrorMessage,
 } from "@/lib/utils";
 import { SearchRequest, SearchResponse, ErrorResponse } from "@/types/scryfall";
-import { CARDS_PER_PAGE, searchScryfall } from "@/lib/scryfall/client";
+import { CARDS_PER_PAGE, ScryfallResponseError, searchScryfall } from "@/lib/scryfall/client";
 import { runSearchPipeline } from "@/lib/search-pipeline/runSearchPipeline";
 import { getActiveProvider } from "@/lib/ai-client";
+import { clientIp, createRateLimiter } from "@/lib/utils/rate-limit";
+
+// AI extraction (≤20s, one retry) + Scryfall (10s timeout) fit; a hung call can't run forever.
+export const maxDuration = 60;
+
+// Every uncached search costs an AI call. 30/min covers a person searching and paging fast.
+const searchRateLimit = createRateLimiter(30, 60_000);
+
+// ~30k unique cards at 60 per page is ~500 pages; anything far past that is garbage input.
+const MAX_PAGE = 1_000;
 
 /**
  * POST /api/search
  */
 export async function POST(request: NextRequest) {
+  const retryAfter = searchRateLimit(clientIp(request.headers));
+  if (retryAfter > 0) {
+    return NextResponse.json<ErrorResponse>(
+      { error: "Too many searches — please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } }
+    );
+  }
+
   try {
     const provider = getActiveProvider();
     const apiKeyMissing =
@@ -20,10 +38,10 @@ export async function POST(request: NextRequest) {
         ? !process.env.ANTHROPIC_API_KEY
         : !process.env.OPENAI_API_KEY;
     if (apiKeyMissing) {
-      const providerName = provider === "claude" ? "Anthropic" : "OpenAI";
+      console.error(`[Search] ${provider} API key is not configured`);
       return NextResponse.json<ErrorResponse>(
-        { error: `${providerName} API key is not configured` },
-        { status: 500 }
+        { error: "Search is temporarily unavailable." },
+        { status: 503 }
       );
     }
 
@@ -45,7 +63,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const page = Math.max(1, body.page || 1);
+    const page = body.page ?? 1;
+    if (!Number.isInteger(page) || page < 1 || page > MAX_PAGE) {
+      return NextResponse.json<ErrorResponse>({ error: "Invalid page" }, { status: 400 });
+    }
 
     let scryfallQuery: string | undefined;
     try {
@@ -89,19 +110,24 @@ export async function POST(request: NextRequest) {
         return NextResponse.json<SearchResponse>(emptyResponse);
       }
 
-      const status = errorMessage.includes("Scryfall") ? 502 : 500;
+      // Scryfall's own 4xx explanation is about the query (and the user can edit it);
+      // timeouts, network failures and 5xx get a generic message.
+      const queryProblem =
+        scryfallError instanceof ScryfallResponseError && scryfallError.status < 500;
       return NextResponse.json<ErrorResponse>(
-        { error: errorMessage, scryfallQuery },
-        { status }
+        {
+          error: queryProblem ? errorMessage : "Scryfall is unavailable right now — please try again.",
+          scryfallQuery,
+        },
+        { status: queryProblem ? 400 : 502 }
       );
     }
   } catch (error) {
+    // Pipeline/AI failures: log the detail, never send provider messages or internals to the client.
     console.error("Search API error:", error);
-    const errorMessage = formatErrorMessage(error);
-    const status = errorMessage.includes("Scryfall") ? 502 : 500;
     return NextResponse.json<ErrorResponse>(
-      { error: errorMessage },
-      { status }
+      { error: "Search failed — please try again or rephrase your query." },
+      { status: 500 }
     );
   }
 }

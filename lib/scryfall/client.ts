@@ -1,9 +1,14 @@
 import { ScryfallError, ScryfallSearchResponse } from "@/types/scryfall";
+import { scryfallFetch, SCRYFALL_BASE_URL } from "@/lib/scryfall/http";
 
-const SCRYFALL_BASE_URL = "https://api.scryfall.com";
-const SCRYFALL_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 export const CARDS_PER_PAGE = 60;
+
+/** Scryfall answered with an error. A 4xx `message` is Scryfall's explanation of the query — safe to show. */
+export class ScryfallResponseError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
 
 /**
  * Calculates which Scryfall page to fetch and the offset within that page
@@ -56,12 +61,7 @@ export async function searchScryfall(
   );
 
   try {
-    const response = await fetch(url.toString(), {
-      headers: {
-        "User-Agent": SCRYFALL_USER_AGENT,
-        Accept: "application/json",
-      },
-    });
+    const response = await scryfallFetch(url.toString());
 
     if (!response.ok) {
       const errorData: ScryfallError = await response.json().catch(() => ({
@@ -83,7 +83,10 @@ export async function searchScryfall(
         };
       }
 
-      throw new Error(errorData.details || `Scryfall API error: ${response.statusText}`);
+      throw new ScryfallResponseError(
+        errorData.details || `Scryfall API error: ${response.statusText}`,
+        response.status
+      );
     }
 
     const data: ScryfallSearchResponse = await response.json();
@@ -95,12 +98,7 @@ export async function searchScryfall(
       nextPageUrl.searchParams.set("unique", "cards");
       nextPageUrl.searchParams.set("page", (scryfallPage + 1).toString());
 
-      const nextResponse = await fetch(nextPageUrl.toString(), {
-        headers: {
-          "User-Agent": SCRYFALL_USER_AGENT,
-          Accept: "application/json",
-        },
-      });
+      const nextResponse = await scryfallFetch(nextPageUrl.toString());
 
       if (nextResponse.ok) {
         const nextData: ScryfallSearchResponse = await nextResponse.json();

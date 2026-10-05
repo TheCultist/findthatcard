@@ -5,8 +5,10 @@ import {
   EFFECTIVE_MAX_QUERY_LENGTH,
   OPPONENT_BURN_DAMAGE_FUNCTION_TAGS,
   PREFER_BEST_PREFIX,
+  balanceScryfallQuery,
   finalizeScryfallQuery,
   lookupArchetypeTags,
+  quoteScryfallValue,
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
 import { getTaggerTagContext } from "@/lib/tagger/context";
@@ -371,7 +373,7 @@ function injectCastTriggerTagForTokenSpellCreation(
  *   – remove the misapplied spell-type filters (they are not card-type constraints)
  *   – replace the vague Phase-2 oracle clause with the precise trigger phrase
  */
-function normalizeWheneverCastTrigger(
+export function normalizeWheneverCastTrigger(
   naturalQuery: string,
   scryfallQuery: string
 ): string {
@@ -383,13 +385,19 @@ function normalizeWheneverCastTrigger(
     return scryfallQuery;
   }
 
-  // Extract the trigger object, e.g. "an instant or sorcery spell" / "a noncreature spell"
-  const castMatch = q.match(/\bwhenever\s+you\s+cast\s+([\s\S]+?)(?:\s*[,.]|$)/);
-  const castObject = castMatch ? castMatch[1].trim() : null;
+  // Extract the trigger object, e.g. "an instant or sorcery spell" / "a noncreature spell":
+  // up to the first "spell(s)" when there is one, else up to punctuation — what follows
+  // ("…spell, draw a card" / "…spell draw") is the effect, not the trigger.
+  const castMatch = q.match(/\bwhenever\s+you\s+cast\s+([^,.]+)/);
+  const castObject = castMatch
+    ? castMatch[1].replace(/^(.*?\bspells?\b).*$/, "$1").trim()
+    : null;
 
   let updated = scryfallQuery;
 
-  // Remove spell-type filters that were emitted for the TRIGGER's types, not the card.
+  // Remove spell-type filters that were emitted for the TRIGGER's types, not the card —
+  // only the type itself: a group made of nothing but type alternatives, else the bare
+  // token with one adjacent "or". Everything else in the query stays.
   const SPELL_TYPES = ["instant", "sorcery", "creature", "artifact", "enchantment", "land", "planeswalker"];
   for (const type of SPELL_TYPES) {
     // Only remove when the natural query mentions this type as part of the cast condition.
@@ -397,9 +405,14 @@ function normalizeWheneverCastTrigger(
       `\\bwhenever\\s+you\\s+cast[^.]*\\b${type}\\b`
     ).test(q);
     if (!inCastCondition) continue;
-    // Remove grouped "(t:X or t:Y)" or bare "t:X".
-    updated = updated.replace(new RegExp(`\\s*\\(\\s*(?:t|type):${type}[^)]*\\)`, "gi"), " ");
-    updated = updated.replace(new RegExp(`\\s*\\(?\\s*(?:t|type):${type}\\b[^)]*\\)?`, "gi"), " ");
+    const token = `(?<![-\\w])(?:t|type):${type}\\b`;
+    updated = updated
+      .replace(/\((?:\s*(?:or\s+)?(?:t|type):[\w-]+)+\s*\)/gi, (group) =>
+        new RegExp(token, "i").test(group) ? " " : group
+      )
+      .replace(new RegExp(`\\s+or\\s+${token}`, "gi"), " ")
+      .replace(new RegExp(`${token}\\s+or\\s+`, "gi"), " ")
+      .replace(new RegExp(token, "gi"), " ");
   }
 
   // Remove the vague Phase-2 oracle clause: (o:"whenever you cast" or o:spell)
@@ -411,7 +424,7 @@ function normalizeWheneverCastTrigger(
   // Inject the precise oracle phrase.
   if (castObject) {
     const oraclePhrase = `whenever you cast ${castObject}`;
-    const oracleTag = `o:"${oraclePhrase}"`;
+    const oracleTag = `o:${quoteScryfallValue(oraclePhrase)}`;
     if (!updated.includes(oracleTag)) {
       updated = `${updated} ${oracleTag}`.trim();
     }
@@ -660,6 +673,21 @@ function injectArchetypeTagsFromResolvedFragments(
   return updated.replace(/\s{2,}/g, " ").trim();
 }
 
+/**
+ * Scryfall regex clauses (o:/…/) are opaque to the string sanitizers below,
+ * which are paren- and OR-aware and would rewrite `(?<!this )` or `a|b` inside
+ * them. Each is swapped for an inert quoted placeholder during post-processing.
+ */
+class RegexClauseMask {
+  private saved: string[] = [];
+  mask(query: string): string {
+    return query.replace(/\b(?:o|oracle|fo|name):\/(?:\\.|[^/\\])*\//gi, (m) => `o:"ftc-regex-${this.saved.push(m) - 1}"`);
+  }
+  restore(query: string): string {
+    return query.replace(/o:"ftc-regex-(\d+)"/g, (_, i: string) => this.saved[Number(i)]);
+  }
+}
+
 export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result> {
   const baseQuery = assembleQueryFromIR(ir);
   // `prefer:best` is a default we add to generated queries. Raw Scryfall syntax is the
@@ -727,7 +755,7 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
       .flatMap((f) => f.text.toLowerCase().split(/\s+/))
       .filter((w) => w.length >= 3 && !/^\d+$/.test(w))
       .slice(0, 4)
-      .map((w) => `o:${w}`);
+      .map((w) => `o:${quoteScryfallValue(w)}`);
     if (oracleTerms.length > 0) {
       withArchetypeTags = oracleTerms.join(" ");
       console.warn(`[Phase3] Empty query fallback for "${ir.naturalQuery}" → ${withArchetypeTags}`);
@@ -739,12 +767,13 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
 
   // For direct Scryfall syntax, use the query exactly as typed — no strategy expansion or other post-processing.
   let query: string;
+  const regexClauses = new RegexClauseMask();
   if (ir.intent === "direct-scryfall") {
     query = withArchetypeTags;
   } else {
     query = finalizeScryfallQuery({
       naturalQuery: ir.naturalQuery,
-      rawQuery: withArchetypeTags,
+      rawQuery: regexClauses.mask(withArchetypeTags),
       tagContext,
       maxLength: EFFECTIVE_MAX_QUERY_LENGTH,
     });
@@ -787,9 +816,9 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
       }
     }
 
-    if (query.length > EFFECTIVE_MAX_QUERY_LENGTH) {
-      query = truncateScryfallQuery(query, EFFECTIVE_MAX_QUERY_LENGTH);
-    }
+    query = regexClauses.restore(query);
+    // The post-finalize rewrites above can unbalance groups — repair, then fit to length.
+    query = truncateScryfallQuery(balanceScryfallQuery(query), EFFECTIVE_MAX_QUERY_LENGTH);
   }
 
   const queryForScryfall = isDirect ? query : prependPreferBest(query);

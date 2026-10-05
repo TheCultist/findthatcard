@@ -3,7 +3,7 @@
 import React, { useState, FormEvent, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ShieldCheckIcon,
   PaintBrushIcon,
@@ -13,17 +13,15 @@ import {
 import { SearchResponse, ErrorResponse } from "@/types/scryfall";
 import { getRandomExamples } from "@/lib/example-queries";
 import { getRandomProTip } from "@/lib/pro-tips";
-import CookieBanner from "@/app/components/CookieBanner";
 import { fetchSymbolData } from "@/lib/scryfall/symbols";
-import useAdBlockDetection from "@/app/hooks/useAdBlockDetection";
 import CardCard from "@/app/components/CardCard";
-import AdBanner from "@/app/components/AdBanner";
 import QueryTokenPreview from "@/app/components/QueryTokenPreview";
 import { getColorSemanticSelectors, getPreferSelector } from "@/lib/query-tokens";
 import { formatErrorMessage } from "@/lib/utils/errors";
 import CardDetailPanel from "@/app/components/CardDetailPanel";
 import ThemeToggle from "@/app/components/ThemeToggle";
 import BugReportButton from "@/app/components/BugReportButton";
+import { getQueryFromSlug, isSimpleQuery, slugifyQuery } from "@/lib/search-slug";
 
 type SearchOptions = {
   updateUrl?: boolean;
@@ -33,19 +31,20 @@ type SearchOptions = {
    * edited Scryfall query, and tear down an open card detail panel.
    */
   keepResults?: boolean;
+  /**
+   * Query to put in the URL when it differs from the one sent to the API:
+   * pagination re-sends the generated Scryfall query but keeps the user's words.
+   */
+  urlQuery?: string;
 };
 
-const isSimpleQuery = (value: string) => /^[a-zA-Z0-9 ]+$/.test(value);
+/** `?page=N` in the URL; anything missing or invalid means page 1. */
+const parsePage = (value: string | null) => {
+  const page = Number.parseInt(value ?? "", 10);
+  return page > 1 ? page : 1;
+};
 
-const slugifyQuery = (value: string) =>
-  value
-    .toLowerCase()
-    .trim()
-    .replace(/['"]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
-const buildSearchUrl = (searchQuery: string) => {
+const buildSearchUrl = (searchQuery: string, page = 1) => {
   const trimmed = searchQuery.trim();
   if (!trimmed) {
     return "/search";
@@ -54,22 +53,20 @@ const buildSearchUrl = (searchQuery: string) => {
   if (isSimpleQuery(trimmed)) {
     const slug = slugifyQuery(trimmed);
     if (slug) {
-      return `/search/${slug}`;
+      return `/search/${slug}${page > 1 ? `?page=${page}` : ""}`;
     }
   }
 
-  return `/search?q=${encodeURIComponent(trimmed)}`;
+  return `/search?q=${encodeURIComponent(trimmed)}${page > 1 ? `&page=${page}` : ""}`;
 };
 
 /** What the URL-driven effect will read back from a URL produced by buildSearchUrl. */
-const queryFromSearchUrl = (url: string) =>
-  url.startsWith("/search/")
-    ? getQueryFromSlug(url.slice("/search/".length))
-    : decodeURIComponent(url.split("?q=")[1] ?? "");
-
-const getQueryFromSlug = (slug: string | string[]) => {
-  const slugValue = Array.isArray(slug) ? slug.join(" ") : slug;
-  return slugValue.replace(/-/g, " ");
+const searchFromUrl = (url: string) => {
+  const { pathname, searchParams } = new URL(url, "https://findthatcard.invalid");
+  const query = pathname.startsWith("/search/")
+    ? getQueryFromSlug(pathname.slice("/search/".length))
+    : searchParams.get("q") ?? "";
+  return { query: query.trim(), page: parsePage(searchParams.get("page")) };
 };
 
 function cavernHoldBanner(key: string) {
@@ -95,33 +92,39 @@ function cavernHoldBanner(key: string) {
   );
 }
 
-export default function SearchPage() {
+type SearchPageProps = {
+  /** Page-1 results rendered on the server (pre-built SEO pages): no client search on load. */
+  initial?: { query: string; result: SearchResponse };
+};
+
+export default function SearchPage({ initial }: SearchPageProps = {}) {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const params = useParams<{ slug?: string | string[] }>();
-  const lastUrlQueryRef = useRef("");
+  /** The query/page the URL effect last handled (or that we pushed and ran ourselves). */
+  const lastUrlSearchRef = useRef({ query: initial?.query ?? "", page: 1 });
   /** Monotonic id of the most recent /api/search call; older responses are dropped. */
   const searchSeqRef = useRef(0);
+  /** Aborts the in-flight /api/search request when a newer search starts. */
+  const searchAbortRef = useRef<AbortController | null>(null);
   const editableInputRef = useRef<HTMLTextAreaElement | null>(null);
   /** Set when a page fetch was triggered by stepping past the edge of the panel. */
   const pendingPanelEdgeRef = useRef<{ page: number; edge: "first" | "last" } | null>(null);
   const panelOpenRef = useRef(false);
 
-  const [query, setQuery] = useState("");
-  const [editableQuery, setEditableQuery] = useState("");
-  const [results, setResults] = useState<SearchResponse | null>(null);
+  const [query, setQuery] = useState(initial?.query ?? "");
+  const [editableQuery, setEditableQuery] = useState(initial?.result.scryfallQuery ?? "");
+  const [results, setResults] = useState<SearchResponse | null>(initial?.result ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageInput, setPageInput] = useState("1");
   const [exampleQueries, setExampleQueries] = useState<string[]>([]);
   const [proTip, setProTip] = useState("");
-  const [sourceQuery, setSourceQuery] = useState("");
+  const [sourceQuery, setSourceQuery] = useState(initial?.query ?? "");
   const [isEditingQuery, setIsEditingQuery] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [faqExpandedIndex, setFaqExpandedIndex] = useState<number | null>(null);
-  const adBlockDetected = useAdBlockDetection();
 
   const getQueryFromUrl = useCallback(() => {
     const paramQuery = searchParams.get("q");
@@ -144,25 +147,34 @@ export default function SearchPage() {
         return;
       }
 
+      // Only the latest request may touch state; a slower, older response must not
+      // overwrite a newer one (e.g. the Printings selector picked while a search was in flight).
+      const seq = ++searchSeqRef.current;
+      const isStale = () => seq !== searchSeqRef.current;
+      // The older request is now irrelevant; its AbortError lands in a stale catch below.
+      searchAbortRef.current?.abort();
+      const controller = new AbortController();
+      searchAbortRef.current = controller;
+
       try {
-        const shouldUpdateUrl = options.updateUrl ?? page === 1;
-        if (shouldUpdateUrl && page === 1) {
-          const nextUrl = buildSearchUrl(searchQuery);
-          const currentUrl = `${pathname}${searchParams.toString() ? `?${searchParams}` : ""}`;
-          if (nextUrl !== currentUrl) {
+        if (options.updateUrl ?? true) {
+          const nextUrl = buildSearchUrl(options.urlQuery ?? searchQuery, page);
+          const next = searchFromUrl(nextUrl);
+          const current = {
+            query: getQueryFromUrl().trim(),
+            page: parsePage(searchParams.get("page")),
+          };
+          if (next.query !== current.query || next.page !== current.page) {
             // We run this search ourselves; stop the URL effect from firing a duplicate.
-            lastUrlQueryRef.current = queryFromSearchUrl(nextUrl);
+            lastUrlSearchRef.current = next;
             await Promise.resolve(router.push(nextUrl, { scroll: false })).catch((e) => {
               console.warn("[Search] router.push failed:", e);
             });
+            if (isStale()) return;
           }
         }
 
-        const isNewQuery = page === 1 && !options.keepResults;
-        // Only the latest request may touch state; a slower, older response must not
-        // overwrite a newer one (e.g. the Printings selector picked while a search was in flight).
-        const seq = ++searchSeqRef.current;
-        const isStale = () => seq !== searchSeqRef.current;
+        const isNewQuery = !options.keepResults;
 
         setLoading(true);
         setError(null);
@@ -179,6 +191,7 @@ export default function SearchPage() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ naturalQuery: searchQuery, page }),
+            signal: controller.signal,
           });
 
           const data = await response.json();
@@ -211,12 +224,13 @@ export default function SearchPage() {
           if (!isStale()) setLoading(false);
         }
       } catch (err) {
+        if (isStale()) return;
         console.error("[Search] handleSearch failed:", err);
         setError(formatErrorMessage(err));
         setLoading(false);
       }
     },
-    [pathname, router, searchParams]
+    [getQueryFromUrl, router, searchParams]
   );
 
   useEffect(() => {
@@ -229,19 +243,24 @@ export default function SearchPage() {
 
   useEffect(() => {
     const urlQuery = getQueryFromUrl().trim();
-    if (!urlQuery || urlQuery === lastUrlQueryRef.current) {
+    const urlPage = parsePage(searchParams.get("page"));
+    const last = lastUrlSearchRef.current;
+    if (!urlQuery || (urlQuery === last.query && urlPage === last.page)) {
       return;
     }
-    lastUrlQueryRef.current = urlQuery;
+    // Same query, different page (back/forward through pagination): keep the grid
+    // and the query bar instead of starting over.
+    const pageOnly = urlQuery === last.query;
+    lastUrlSearchRef.current = { query: urlQuery, page: urlPage };
     setQuery(urlQuery);
-    setCurrentPage(1);
-    setPageInput("1");
-    void handleSearch(urlQuery, 1, { updateUrl: false }).catch((err) => {
+    setCurrentPage(urlPage);
+    setPageInput(String(urlPage));
+    void handleSearch(urlQuery, urlPage, { updateUrl: false, keepResults: pageOnly }).catch((err) => {
       console.error("[Search] URL-driven search failed:", err);
       setError(formatErrorMessage(err));
       setLoading(false);
     });
-  }, [getQueryFromUrl, handleSearch]);
+  }, [getQueryFromUrl, handleSearch, searchParams]);
 
   useEffect(() => {
     if (loading) {
@@ -264,7 +283,9 @@ export default function SearchPage() {
     }
     setCurrentPage(1);
     setPageInput("1");
-    handleSearch(editableQuery, 1, { updateUrl: false });
+    // A normal search of the edited Scryfall string: it lands in the URL (raw
+    // Scryfall syntax skips the AI), so refresh/share reproduce it.
+    handleSearch(editableQuery, 1);
   };
 
   const handleEditableQueryFocus = () => {
@@ -291,7 +312,7 @@ export default function SearchPage() {
     if (!searchQuery) {
       return false;
     }
-    handleSearch(searchQuery, newPage, { updateUrl: false, keepResults: true });
+    handleSearch(searchQuery, newPage, { keepResults: true, urlQuery: sourceQuery || query });
     return true;
   };
 
@@ -408,8 +429,6 @@ export default function SearchPage() {
     setPageInput("1");
     handleSearch(chipQuery, 1);
   };
-
-  const trimmedQuery = query.trim();
 
   return (
     <main className="min-h-screen bg-background px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
@@ -660,26 +679,6 @@ export default function SearchPage() {
           </section>
         )}
 
-        {/* Ad Space / Adblock Message */}
-        {trimmedQuery && (
-          <div className="mb-8 flex justify-center">
-            {adBlockDetected ? (
-              <div className="w-full max-w-2xl rounded-lg border border-border bg-surface-muted p-4 text-center">
-                <p className="text-base text-muted">
-                  <span className="font-medium text-foreground">Find That Card is supported by ads.</span>
-                  <br />
-                  <span className="text-sm text-muted-soft">
-                    A single, non-intrusive ad helps keep this site free. Please consider whitelisting{" "}
-                    <span className="font-medium text-muted">findthatcard.net</span> in your ad blocker.
-                  </span>
-                </p>
-              </div>
-            ) : (
-              <AdBanner slot="4024965634" className="w-full max-w-2xl" />
-            )}
-          </div>
-        )}
-
         {(editableQuery || sourceQuery || results) && !loading && (
           <div id="query-display" className="relative z-50 mb-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -761,7 +760,7 @@ export default function SearchPage() {
                       setEditableQuery(option.query);
                       setCurrentPage(1);
                       setPageInput("1");
-                      handleSearch(option.query, 1, { updateUrl: false });
+                      handleSearch(option.query, 1);
                     }}
                     className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-sm font-medium transition-colors ${
                       option.current
@@ -792,7 +791,7 @@ export default function SearchPage() {
                       setEditableQuery(next.query);
                       setCurrentPage(1);
                       setPageInput("1");
-                      handleSearch(next.query, 1, { updateUrl: false });
+                      handleSearch(next.query, 1);
                     }}
                     className="rounded-lg border border-border bg-surface-muted px-3 py-1 text-sm font-medium text-foreground transition-colors hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -1005,8 +1004,6 @@ export default function SearchPage() {
           </p>
         </footer>
       </div>
-
-      <CookieBanner />
 
       {selectedCard && selectedIndex !== null && resultCards && results && (
         <CardDetailPanel

@@ -1,18 +1,17 @@
 /**
- * Intent Resolver — runs after Phase 1 when a named-card intent is detected.
+ * Intent Resolver — runs after buildIR when a named-card intent is extracted.
  *
  * When the user's query targets a specific card (e.g. "cards similar to
- * Sheoldred", "art like Elspeth", "synergy with Omnath"), Phase 1 records the
- * intent and card name in the IR instead of parsing the query as a generic
- * search.  This module fetches card-specific external data (Tagger
+ * Sheoldred", "art like Elspeth", "synergy with Omnath"), the extraction
+ * records the intent and card name in the IR instead of treating the query as
+ * a generic search.  This module fetches card-specific external data (Tagger
  * relationships, illustration tags, or an LLM synergy query) and injects the
- * result as a `mustClause` so the remaining phases (1.5, 2, 3) apply any
- * extra user constraints on top.
+ * result as a `mustClause`; finalize then runs as usual.
  *
  * ## This is NOT a bypass
- * The IR continues through every subsequent phase after this resolver runs.
  * Extra constraints the user appended (e.g. "…that are not instants",
- * "…in Modern") are left as unresolved fragments and handled by Phase 2.
+ * "…in Modern") were already built into the IR by buildIR and are AND-ed with
+ * the injected clause.
  *
  * ## Compound-query interaction
  * When a branch of a compound OR query carries a named-card intent, the
@@ -24,6 +23,7 @@
 import type { SearchPipelineIR } from "@/lib/search-pipeline/types";
 import { resolveArtLikeCardsQuery, resolveSimilarCardsQuery } from "@/lib/search-pipeline/similar-cards";
 import { resolveSynergyQuery } from "@/lib/search-pipeline/synergy-cards";
+import { quoteScryfallValue } from "@/lib/scryfall/query-converter";
 
 /**
  * Strips any `name:"X"` must-clauses from the IR that conflict with card
@@ -72,7 +72,8 @@ export async function resolveIntentClauses(ir: SearchPipelineIR): Promise<void> 
       dropContradictoryNameClauses(ir, similarQuery);
       ir.mustClauses.unshift({ value: `(${similarQuery})`, source: "phase1:intent" });
     } else {
-      ir.mustClauses.unshift({ value: `name:"${ir.similarToCardName}"`, source: "phase1:cardname" });
+      ir.mustClauses.unshift({ value: `name:${quoteScryfallValue(ir.similarToCardName)}`, source: "phase1:cardname" });
+      ir.debug.degraded = true;
     }
     return;
   }
@@ -83,7 +84,8 @@ export async function resolveIntentClauses(ir: SearchPipelineIR): Promise<void> 
       dropContradictoryNameClauses(ir, artQuery);
       ir.mustClauses.unshift({ value: `(${artQuery})`, source: "phase1:intent" });
     } else {
-      ir.mustClauses.unshift({ value: `name:"${ir.artLikeCardName}"`, source: "phase1:cardname" });
+      ir.mustClauses.unshift({ value: `name:${quoteScryfallValue(ir.artLikeCardName)}`, source: "phase1:cardname" });
+      ir.debug.degraded = true;
     }
     return;
   }
@@ -101,7 +103,8 @@ export async function resolveIntentClauses(ir: SearchPipelineIR): Promise<void> 
       }
       ir.debug.aiBatchCalls += 1;
     } else {
-      ir.mustClauses.unshift({ value: `name:"${ir.synergyWithCardName}"`, source: "phase1:cardname" });
+      ir.mustClauses.unshift({ value: `name:${quoteScryfallValue(ir.synergyWithCardName)}`, source: "phase1:cardname" });
+      ir.debug.degraded = true;
     }
   }
 }

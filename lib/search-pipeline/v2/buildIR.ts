@@ -22,7 +22,7 @@ import {
   type CommanderFormat,
 } from "@/lib/scryfall/formats";
 import { fetchCardByName } from "@/lib/scryfall/lookup";
-import { lookupArchetypeTags } from "@/lib/scryfall/query-converter";
+import { lookupArchetypeTags, quoteScryfallValue } from "@/lib/scryfall/query-converter";
 import { resolveSetCodes } from "@/lib/scryfall/sets";
 import { validateTaggerTag } from "@/lib/tagger/validation";
 import type {
@@ -98,12 +98,26 @@ function normalizeExtraction(raw: Partial<V2Extraction> | null | undefined): V2E
     ),
     oraclePhrases: toStringArray(e.oraclePhrases),
     negatedOraclePhrases: toStringArray(e.negatedOraclePhrases),
-    // A flat string list (shape drift) is one sequence, not N one-token ones.
-    oracleSequences: (Array.isArray(e.oracleSequences) && e.oracleSequences.some(Array.isArray)
-      ? e.oracleSequences.map(toStringArray)
-      : [toStringArray(e.oracleSequences)]
-    ).filter((s) => s.length > 0),
+    triggeredEffects: toObjectArray<Record<string, unknown>>(
+      ([] as unknown[]).concat(parseIfJson(e.triggeredEffects) ?? []).map(parseIfJson)
+    )
+      .filter((t) => typeof t.trigger === "string" && typeof t.effect === "string")
+      .map((t) => ({
+        subject: typeof t.subject === "string" && t.subject.trim() ? t.subject : null,
+        trigger: t.trigger as string,
+        effect: t.effect as string,
+      })),
   };
+}
+
+/** Claude sometimes returns a nested value as its JSON text; decode it, else pass it through. */
+function parseIfJson(value: unknown): unknown {
+  if (typeof value !== "string" || !/^\s*[[{]/.test(value)) return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -189,25 +203,41 @@ function verbStem(word: string): string | null {
   return INFLECTABLE_ORACLE_VERBS.has(stem) ? stem : null;
 }
 
+// Pronouns the model may use for "the card itself" instead of "~".
+const SELF_SUBJECTS = new Set(["~", "it", "itself", "this", "they", "self"]);
+
+/** "gains 3 life" → ["gain", "life"]: verb stems, no bare numbers, regex-escaped. */
+function oracleRegexWords(text: string): string[] {
+  return text
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .split(/\s+/)
+    .filter((w) => w && !BARE_NUMBER_TOKEN.test(w))
+    .map((w) => (verbStem(w) ?? w).replace(/[.*+?^${}()|[\]\\/]/g, "\\$&"));
+}
+
 /**
- * Ordered same-sentence oracle match: ["dies", "draws a card"] →
- * `o:/die[^.]*draw a card/`. Scryfall regex is a substring match, so verb stems
- * cover every inflection; `[^.]` keeps both tokens inside one ability sentence
- * (an unrelated "draw" elsewhere on the card no longer satisfies "dies").
- * A one-token sequence degrades to a plain o:"…" phrase.
+ * Trigger→effect as one ordered same-sentence match:
+ * {subject:"~", trigger:"dies", effect:"draw a card"} → `o:/~[^.]*die[^.]*draw[^.]*a[^.]*card/`.
+ * Scryfall regex is a substring match, so verb stems cover every inflection;
+ * `[^.]` keeps every word inside one ability sentence (an unrelated "draw"
+ * elsewhere on the card no longer satisfies "dies").
+ * Subject "~" is the card itself (Scryfall expands it to the name AND "this
+ * creature"); a noun ("creature" in "whenever a creature enters") means some
+ * OTHER object, so its "this creature" self-reference is excluded — otherwise
+ * every self-ETB card matches.
+ * ponytail: Scryfall regex never crosses a line, so modal triggers ("choose one —"
+ * + bulleted modes on new lines, e.g. Retreat to Hagra) can't match; would need
+ * an OR with per-line fallbacks if those matter.
  */
-function oracleSequenceClause(tokens: string[]): string | null {
-  const parts = tokens
-    .map((t) => t.trim().replace(/^["']|["']$/g, ""))
-    .filter((t) => t && !BARE_NUMBER_TOKEN.test(t))
-    .map((t) => {
-      const [first, ...rest] = t.split(/\s+/);
-      return [verbStem(first) ?? first, ...rest].join(" ");
-    });
-  if (parts.length === 0) return null;
-  if (parts.length === 1) return `o:"${parts[0]}"`;
-  const escaped = parts.map((p) => p.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&"));
-  return `o:/${escaped.join("[^.]*")}/`;
+function triggeredEffectClause(t: V2Extraction["triggeredEffects"][number]): string | null {
+  const trigger = oracleRegexWords(t.trigger);
+  const effect = oracleRegexWords(t.effect);
+  if (trigger.length === 0 || effect.length === 0) return null;
+  const rawSubject = t.subject?.trim().toLowerCase() ?? "";
+  const subject = SELF_SUBJECTS.has(rawSubject) ? ["~"] : oracleRegexWords(rawSubject);
+  if (subject.length > 0 && subject[0] !== "~") subject[0] = `(?<!this )${subject[0]}`;
+  return `o:/${[...subject, ...trigger, ...effect].join("[^.]*")}/`;
 }
 
 function emptyIR(naturalQuery: string): SearchPipelineIR {
@@ -307,7 +337,7 @@ export async function buildIRFromExtraction(
   if (ir.intent === "search" && extraction.cardName) {
     const canonical = await resolveCardName(extraction.cardName, true);
     if (canonical) {
-      must.push({ value: `name:"${canonical}"`, source: "phase1:cardname" });
+      must.push({ value: `name:${quoteScryfallValue(canonical)}`, source: "phase1:cardname" });
     }
   }
 
@@ -444,7 +474,7 @@ export async function buildIRFromExtraction(
   // --- Artist (must match or be contained in a catalog illustrator name) ---
   if (extraction.artist) {
     const artist = resolveArtist(extraction.artist);
-    if (artist) must.push({ value: `a:"${artist}"`, source: "phase1:artist" });
+    if (artist) must.push({ value: `a:${quoteScryfallValue(artist)}`, source: "phase1:artist" });
   }
 
   // --- Art subjects (validated against art vocabulary, OR-grouped) ---
@@ -513,18 +543,18 @@ export async function buildIRFromExtraction(
     const p = phrase.trim().replace(/^["']|["']$/g, "");
     if (!p || BARE_NUMBER_TOKEN.test(p)) continue;
     for (const part of splitInflectedVerbPhrase(p)) {
-      must.push({ value: `o:"${part}"`, source: "phase1:oracle" });
+      must.push({ value: `o:${quoteScryfallValue(part)}`, source: "phase1:oracle" });
     }
   }
   for (const phrase of extraction.negatedOraclePhrases) {
     const p = phrase.trim().replace(/^["']|["']$/g, "");
     if (!p) continue;
     for (const part of splitInflectedVerbPhrase(p)) {
-      mustNot.push({ value: `o:"${part}"`, source: "phase1:oracle" });
+      mustNot.push({ value: `o:${quoteScryfallValue(part)}`, source: "phase1:oracle" });
     }
   }
-  for (const tokens of extraction.oracleSequences) {
-    const clause = oracleSequenceClause(tokens);
+  for (const triggered of extraction.triggeredEffects) {
+    const clause = triggeredEffectClause(triggered);
     if (clause) must.push({ value: clause, source: "phase1:oracle" });
   }
 

@@ -1,33 +1,11 @@
-import OpenAI from "openai";
-import {
-  getUserPrompt,
-} from "@/lib/prompts";
-import { buildSystemPrompt, selectPacks } from "@/lib/prompts/promptModules";
 import { TaggerTagContext, extractArtKeywords } from "@/lib/tagger/context";
 import { SCRYFALL_FORMATS, stripRedundantTypesForCommanderEligible } from "@/lib/scryfall/formats";
 import { escapeRegex } from "@/lib/utils/text";
 
-let openaiClient: OpenAI | null = null;
-
-function getOpenAIClient(): OpenAI {
-  if (openaiClient) {
-    return openaiClient;
-  }
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "The OPENAI_API_KEY environment variable is missing or empty."
-    );
-  }
-  openaiClient = new OpenAI({ apiKey });
-  return openaiClient;
-}
-
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 const MAX_SCRYFALL_QUERY_LENGTH = 1200;
 export const PREFER_BEST_PREFIX = "prefer:best "; // 12 characters
 export const EFFECTIVE_MAX_QUERY_LENGTH =
-  MAX_SCRYFALL_QUERY_LENGTH - PREFER_BEST_PREFIX.length; // 588 characters
+  MAX_SCRYFALL_QUERY_LENGTH - PREFER_BEST_PREFIX.length; // 1188 characters
 const FORMAT_NAMES = SCRYFALL_FORMATS;
 
 function normalizeFormatFunctionTags(query: string): string {
@@ -1405,41 +1383,67 @@ export function finalizeScryfallQuery(args: {
     throw new Error("Failed to generate Scryfall query (empty response)");
   }
 
-  // Validate parentheses are balanced
-  const openParens = (normalizedQuery.match(/\(/g) || []).length;
-  const closeParens = (normalizedQuery.match(/\)/g) || []).length;
-  if (openParens !== closeParens) {
-    console.warn(
-      `[OpenAI] Generated query has unbalanced parentheses (${openParens} open, ${closeParens} close): "${normalizedQuery}"`
-    );
-    // Try to fix by adding missing closing parentheses
-    const fixedQuery = normalizedQuery + ")".repeat(openParens - closeParens);
-    console.warn(
-      `[OpenAI] Attempting to fix by adding closing parentheses: "${fixedQuery}"`
-    );
-    // Only use fixed query if it's still under the limit (accounting for prefer:best prefix)
-    if (fixedQuery.length <= maxLength) {
-      return fixedQuery;
-    }
-    // If fixed query is too long, throw error to trigger regeneration
-    throw new Error(
-      "Generated query has unbalanced parentheses and cannot be automatically fixed"
-    );
+  const balanced = balanceScryfallQuery(normalizedQuery);
+  if (balanced !== normalizedQuery) {
+    console.warn(`[Finalize] Repaired unbalanced query: "${normalizedQuery}" → "${balanced}"`);
   }
-
-  // Validate length - truncate if necessary (accounting for prefer:best prefix)
-  if (normalizedQuery.length > maxLength) {
-    console.warn(
-      `[OpenAI] Generated query exceeds ${maxLength} characters (${normalizedQuery.length}), truncating...`
-    );
-    return truncateScryfallQuery(normalizedQuery, maxLength);
-  }
-
-  return normalizedQuery;
+  return truncateScryfallQuery(balanced, maxLength);
 }
 
 /**
- * Truncates a Scryfall query to the maximum allowed length, trying to preserve word boundaries
+ * Quotes a value for a Scryfall field (name:, o:, a:…). Scryfall has no escape inside "…" but
+ * accepts '…' as a delimiter, so a value holding a double quote (Henzie "Toolbox" Torre) is
+ * single-quoted. A value holding both kinds (no known card) loses its double quotes.
+ */
+export function quoteScryfallValue(value: string): string {
+  if (!value.includes('"')) return `"${value}"`;
+  if (!value.includes("'")) return `'${value}'`;
+  return `"${value.replace(/"/g, "")}"`;
+}
+
+/**
+ * Repairs grouping structure: unmatched ")" are dropped, an unterminated quote or /regex/ is
+ * closed, and missing ")" are appended. Parens inside "…", '…' and /…/ values are content, not
+ * grouping (B.F.M. (Big Furry Monster)). A ' or / only opens a value right after an operator
+ * (o:'…', o:/…/) — anywhere else it is an apostrophe or a slash.
+ */
+export function balanceScryfallQuery(query: string): string {
+  const { out, closer, depth } = scanScryfallQuery(query);
+  return out + (closer ?? "") + ")".repeat(depth);
+}
+
+/** One pass over the query's grouping structure; see balanceScryfallQuery for the rules. */
+function scanScryfallQuery(query: string) {
+  let out = "";
+  let depth = 0;
+  let closer: string | null = null;
+  let valueStart = -1; // index in `query` of the delimiter that opened the current value
+  for (let i = 0; i < query.length; i++) {
+    const ch = query[i];
+    if (closer) {
+      out += ch;
+      if (ch === "\\" && closer === "/" && i + 1 < query.length) out += query[++i];
+      else if (ch === closer) closer = null;
+      continue;
+    }
+    if (ch === '"' || ((ch === "'" || ch === "/") && /[:=<>!]/.test(query[i - 1] ?? ""))) {
+      closer = ch;
+      valueStart = i;
+    } else if (ch === "(") {
+      depth++;
+    } else if (ch === ")") {
+      if (depth === 0) continue;
+      depth--;
+    }
+    out += ch;
+  }
+  return { out, closer, depth, valueStart: closer ? valueStart : -1 };
+}
+
+/**
+ * Truncates a Scryfall query to `maxLength` at a clause boundary: cuts at the last space, drops a
+ * clause whose quoted/regex value the cut split (a half phrase means something else; a half regex
+ * is invalid), drops a dangling `or`/`and`/`(`/`-`, then re-balances any open group.
  */
 export function truncateScryfallQuery(
   query: string,
@@ -1449,14 +1453,18 @@ export function truncateScryfallQuery(
     return query;
   }
 
-  let truncated = query.substring(0, maxLength).trim();
-  // Try to truncate at a word boundary if possible (within 90% of max length)
-  const lastSpace = truncated.lastIndexOf(" ");
-  if (lastSpace > maxLength * 0.9) {
-    truncated = truncated.substring(0, lastSpace).trim();
+  let cut = query.slice(0, maxLength);
+  for (;;) {
+    const lastSpace = cut.lastIndexOf(" ");
+    if (lastSpace > 0) cut = cut.slice(0, lastSpace);
+    const { valueStart } = scanScryfallQuery(cut);
+    if (valueStart >= 0) cut = cut.slice(0, Math.max(0, cut.lastIndexOf(" ", valueStart)));
+    cut = cut.replace(/(?:\s+(?:or|and)|[\s(-])+$/i, "");
+    const balanced = balanceScryfallQuery(cut);
+    if (balanced.length <= maxLength || !cut) return balanced;
+    // Closing the cut added characters — shorten by that much and cut again.
+    cut = cut.slice(0, cut.length - (balanced.length - maxLength));
   }
-
-  return truncated;
 }
 
 /**
@@ -1533,170 +1541,4 @@ export function isScryfallQuery(query: string): boolean {
   }
 
   return false;
-}
-
-/**
- * Converts natural language query to Scryfall query string using OpenAI
- */
-export async function convertToScryfallQuery(
-  naturalQuery: string,
-  regenerationPrompt?: string,
-  tagContext?: TaggerTagContext,
-  isRetry: boolean = false
-): Promise<string> {
-  // If it's already a Scryfall query, validate length and return it
-  // Account for "prefer:best " prefix (12 characters)
-  if (isScryfallQuery(naturalQuery)) {
-    const trimmed = naturalQuery.trim();
-    if (trimmed.length > EFFECTIVE_MAX_QUERY_LENGTH) {
-      throw new Error(
-        `Scryfall query exceeds maximum length of ${EFFECTIVE_MAX_QUERY_LENGTH} characters (${MAX_SCRYFALL_QUERY_LENGTH} total including "prefer:best " prefix). Please shorten your query.`
-      );
-    }
-    return trimmed;
-  }
-
-  const userPrompt = regenerationPrompt || getUserPrompt(naturalQuery, tagContext);
-  const systemPrompt = buildSystemPrompt(naturalQuery);
-
-  // Log selected packs and prompt length in dev
-  if (process.env.NODE_ENV === "development") {
-    const selectedPacks = selectPacks(naturalQuery);
-    console.log(`[OpenAI] Selected packs: ${selectedPacks.join(", ")}`);
-    console.log(`[OpenAI] System prompt length: ${systemPrompt.length} chars`);
-  }
-
-  let query = "";
-  try {
-    const isGpt5 = OPENAI_MODEL.startsWith("gpt-5");
-
-    if (isGpt5) {
-      // Use Responses API for reasoning models (gpt-5-mini, gpt-5, etc.)
-      // Use "low" effort for economical token usage - this is a relatively simple conversion task
-      const completion = await getOpenAIClient().responses.create({
-        model: OPENAI_MODEL,
-        reasoning: {
-          effort: "low", // Low effort balances speed and cost efficiency for query conversion
-        },
-        input: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        max_output_tokens: 3000, // Reasonable limit: 388 char query + reasoning overhead
-      });
-
-      // Log response structure in dev for debugging
-      if (process.env.NODE_ENV === "development") {
-        console.log(`[OpenAI] Response structure (Responses API):`, {
-          status: completion.status,
-          outputLength: completion.output?.length,
-          outputText: completion.output_text,
-          usage: completion.usage,
-          reasoningTokens: completion.usage?.output_tokens_details?.reasoning_tokens,
-        });
-      }
-
-      // Handle incomplete responses
-      if (completion.status === "incomplete") {
-        const reason = completion.incomplete_details?.reason;
-        if (reason === "max_output_tokens") {
-          if (completion.output_text && completion.output_text.length > 0) {
-            // Partial output available, use it
-            query = completion.output_text.trim();
-            console.warn(
-              `[OpenAI] Response incomplete due to max_output_tokens, using partial output`
-            );
-          } else {
-            // Ran out of tokens during reasoning, no output
-            throw new Error(
-              `Failed to generate Scryfall query: ran out of tokens during reasoning. Consider increasing max_output_tokens or simplifying the query.`
-            );
-          }
-        } else {
-          throw new Error(
-            `Failed to generate Scryfall query: incomplete response (reason: ${reason})`
-          );
-        }
-      } else {
-        query = completion.output_text?.trim() || "";
-      }
-    } else {
-      // Use Chat Completions API for non-reasoning models
-      const completion = await getOpenAIClient().chat.completions.create({
-        model: OPENAI_MODEL,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.3,
-        stream: false,
-        max_tokens: 1500,
-      });
-
-      // Log response structure in dev for debugging
-      if (process.env.NODE_ENV === "development") {
-        console.log(`[OpenAI] Response structure (Chat Completions):`, {
-          choicesLength: completion.choices?.length,
-          firstChoice: completion.choices?.[0],
-          finishReason: completion.choices?.[0]?.finish_reason,
-        });
-      }
-
-      query = completion.choices[0]?.message?.content?.trim() || "";
-    }
-
-    return finalizeScryfallQuery({
-      naturalQuery,
-      rawQuery: query,
-      tagContext,
-      maxLength: EFFECTIVE_MAX_QUERY_LENGTH,
-    });
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("empty response")) {
-      console.error(`[OpenAI] ${error.message}`, {
-        model: OPENAI_MODEL,
-        isGpt5: OPENAI_MODEL.startsWith("gpt-5"),
-        rawQuery: query,
-      });
-    }
-    // Log detailed error information
-    if (process.env.NODE_ENV === "development") {
-      console.error("[OpenAI] API call error details:", {
-        model: OPENAI_MODEL,
-        isGpt5: OPENAI_MODEL.startsWith("gpt-5"),
-        error: error instanceof Error ? {
-          message: error.message,
-          name: error.name,
-          stack: error.stack,
-        } : error,
-      });
-    }
-
-    // If it's a validation error (unbalanced parentheses) and we haven't retried yet, try regenerating once
-    if (!isRetry && error instanceof Error && error.message.includes("unbalanced parentheses")) {
-      console.warn("[OpenAI] Query had unbalanced parentheses, attempting regeneration...");
-      try {
-        const retryPrompt = regenerationPrompt || getUserPrompt(naturalQuery, tagContext);
-        const retryPromptWithFix = `${retryPrompt}\n\nIMPORTANT: The previous attempt had unbalanced parentheses. Please ensure all parentheses are properly closed and use the simplest possible query.`;
-        return await convertToScryfallQuery(
-          naturalQuery,
-          retryPromptWithFix,
-          tagContext,
-          true
-        );
-      } catch (retryError) {
-        console.error("[OpenAI] Retry also failed:", retryError);
-        throw error; // Throw original error
-      }
-    }
-
-    // Re-throw API errors with more context
-    if (error instanceof Error) {
-      console.error("OpenAI API error:", error.message);
-      throw error;
-    }
-
-    console.error("OpenAI API error:", error);
-    throw new Error("Failed to convert query. Please try again.");
-  }
 }

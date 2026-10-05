@@ -2,14 +2,30 @@
 
 import { useState, useEffect } from "react";
 
-const COOKIE_CONSENT_KEY = "cookie-consent";
+export const COOKIE_CONSENT_KEY = "cookie-consent";
+
+/** localStorage throws when storage is blocked; treat that as "no choice saved". */
+export function readConsent(): string | null {
+  try {
+    return localStorage.getItem(COOKIE_CONSENT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveConsent(value: "accepted" | "rejected") {
+  try {
+    localStorage.setItem(COOKIE_CONSENT_KEY, value);
+  } catch {
+    // Storage blocked: the choice still applies for this page view only.
+  }
+}
 
 export default function CookieBanner() {
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
-    const consent = localStorage.getItem(COOKIE_CONSENT_KEY);
-    if (!consent) {
+    if (!readConsent()) {
       // Small delay to avoid flash of banner on page load
       const timer = setTimeout(() => {
         setShowBanner(true);
@@ -19,12 +35,12 @@ export default function CookieBanner() {
   }, []);
 
   const handleAccept = () => {
-    localStorage.setItem(COOKIE_CONSENT_KEY, "accepted");
+    saveConsent("accepted");
     setShowBanner(false);
   };
 
   const handleReject = () => {
-    localStorage.setItem(COOKIE_CONSENT_KEY, "rejected");
+    saveConsent("rejected");
     setShowBanner(false);
   };
 
@@ -38,18 +54,12 @@ export default function CookieBanner() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex-1">
             <p className="text-sm text-muted">
-              <span className="font-semibold text-foreground">We use cookies</span> to improve your experience and analyze site usage. 
-              This site uses essential cookies for functionality and may use analytics cookies to understand how visitors interact with the site.
+              <span className="font-semibold text-foreground">No advertising or tracking cookies.</span>{" "}
+              We use privacy-friendly, cookieless analytics (Vercel Analytics) to count page views and
+              anonymous events such as card opens and buy-link clicks.
             </p>
             <p className="mt-1 text-xs text-muted-soft">
-              By clicking &quot;Accept&quot;, you consent to our use of cookies. You can also{" "}
-              <button
-                onClick={handleReject}
-                className="underline hover:text-muted"
-              >
-                reject non-essential cookies
-              </button>
-              .{" "}
+              Choose &quot;Reject&quot; to opt out of analytics entirely.{" "}
               <a
                 href="/privacy"
                 className="underline hover:text-muted"

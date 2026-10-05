@@ -1,7 +1,8 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { getCacheDir } from "@/lib/cache-paths";
-import { formatTodayStamp, shouldSkipUpdate } from "@/lib/utils/cache";
+import { createCacheLoader, readCacheJson, formatTodayStamp, shouldSkipUpdate, stampedToday } from "@/lib/utils/cache";
+import { scryfallFetch } from "@/lib/scryfall/http";
 
 const CATALOG_SLUGS = [
   "artist-names",
@@ -33,15 +34,13 @@ type CatalogCacheFile = {
   catalogs: Record<string, string[]>;
 };
 
-const SCRYFALL_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 
 const CATALOGS_FILE_PATH = path.join(getCacheDir(), "scryfall-catalogs.json");
 
 const FETCH_DELAY_MS = 100;
 
 let catalogCache: Record<string, string[]> | null = null;
-let catalogCachePromise: Promise<void> | null = null;
+let catalogUpdatedAt: string | null = null;
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
@@ -49,8 +48,7 @@ function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
 
 async function readCatalogFile(): Promise<CatalogCacheFile | null> {
   try {
-    const raw = await fs.readFile(CATALOGS_FILE_PATH, "utf-8");
-    const parsed = JSON.parse(raw);
+    const parsed = await readCacheJson(CATALOGS_FILE_PATH, () => import("@/data/seed/scryfall-catalogs.json"));
     if (!parsed || typeof parsed !== "object") return null;
 
     const updatedAt =
@@ -96,12 +94,7 @@ type ScryfallCatalogResponse = {
 
 async function fetchCatalog(slug: string): Promise<string[]> {
   const url = `https://api.scryfall.com/catalog/${slug}`;
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": SCRYFALL_USER_AGENT,
-      Accept: "application/json",
-    },
-  });
+  const response = await scryfallFetch(url);
 
   if (!response.ok) {
     throw new Error(
@@ -123,7 +116,7 @@ async function fetchCatalog(slug: string): Promise<string[]> {
 
 async function fetchAllCatalogs(
   existing: Record<string, string[]> | null
-): Promise<Record<string, string[]>> {
+): Promise<{ catalogs: Record<string, string[]>; complete: boolean }> {
   const result: Record<string, string[]> = {};
   let fetched = 0;
   let failed = 0;
@@ -154,17 +147,23 @@ async function fetchAllCatalogs(
     `[Scryfall Catalogs] Fetched ${fetched}/${CATALOG_SLUGS.length} catalogs` +
       (failed > 0 ? ` (${failed} failed, kept previous data)` : "")
   );
+  if (fetched === 0) {
+    throw new Error("[Scryfall Catalogs] Every catalog fetch failed");
+  }
 
-  return result;
+  return { catalogs: result, complete: failed === 0 };
 }
 
 async function initializeCatalogCache(): Promise<void> {
-  if (catalogCache !== null) return;
-
+  const firstLoad = catalogCache === null;
   const existing = await readCatalogFile();
   if (existing) {
     catalogCache = existing.catalogs;
+    catalogUpdatedAt = existing.updatedAt;
   }
+
+  // Serve file/seed data at once; a stale stamp makes the loader refresh it in the background.
+  if (firstLoad && existing) return;
 
   const todayStamp = formatTodayStamp();
   if (existing && shouldSkipUpdate(existing.updatedAt, todayStamp)) {
@@ -186,12 +185,14 @@ async function initializeCatalogCache(): Promise<void> {
       }, today: ${todayStamp})`
     );
 
-    const fetched = await fetchAllCatalogs(existing?.catalogs || null);
+    const { catalogs: fetched, complete } = await fetchAllCatalogs(existing?.catalogs || null);
 
     catalogCache = fetched;
-
+    // In memory a partial refresh still counts as today's (no 20-fetch retry every minute);
+    // the file keeps the old stamp so the next cold start retries the gaps.
+    catalogUpdatedAt = todayStamp;
     await writeCatalogFile({
-      updatedAt: todayStamp,
+      updatedAt: complete ? todayStamp : existing?.updatedAt ?? "",
       catalogs: fetched,
     });
 
@@ -204,24 +205,20 @@ async function initializeCatalogCache(): Promise<void> {
         `${Object.keys(fetched).length} catalogs, ${totalEntries} total entries`
     );
   } catch (error) {
+    // Stale file data (if any) stays; with none the cache stays null and is retried.
     console.error("[Scryfall Catalogs] Failed to refresh cache:", error);
-    if (!catalogCache) {
-      catalogCache = {};
-    }
   }
 }
 
-export async function ensureScryfallCatalogCache(): Promise<void> {
-  if (catalogCache !== null) return;
+export const ensureScryfallCatalogCache = createCacheLoader(
+  () => catalogCache !== null,
+  initializeCatalogCache,
+  { isFresh: stampedToday(() => catalogUpdatedAt) }
+);
 
-  if (catalogCachePromise === null) {
-    catalogCachePromise = initializeCatalogCache().catch((error) => {
-      catalogCachePromise = null;
-      throw error;
-    });
-  }
-
-  await catalogCachePromise;
+/** Identifies the loaded catalog data — changes whenever a refresh replaces it. */
+export function getCatalogStamp(): string | null {
+  return catalogUpdatedAt;
 }
 
 export async function getCatalog(name: CatalogName): Promise<string[]> {

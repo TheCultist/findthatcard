@@ -63,6 +63,8 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
   // Each price is itself the buy link: one click from the grid to the store.
   const offers = getStoreOffers(card, tcgFirst).filter((o) => o.price);
 
+  // The whole tile is a mouse target; the name button is the keyboard/screen-reader
+  // target (a real <button> can't wrap the nested flip button and buy links).
   return (
     <div
       onClick={handleClick}
@@ -119,8 +121,14 @@ export default function CardCard({ card, onCardClick }: CardCardProps) {
       )}
 
       <div className="flex items-start justify-between gap-1 sm:gap-2">
-        <h3 className="flex-1 min-w-0 text-xs font-semibold text-foreground line-clamp-2 group-hover:text-accent sm:text-base sm:pr-2">
-          {card.name}
+        <h3 className="flex-1 min-w-0 text-xs font-semibold text-foreground group-hover:text-accent sm:text-base sm:pr-2">
+          {/* Its click bubbles to the tile's onClick, so no handler of its own. */}
+          <button
+            type="button"
+            className="block w-full rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-muted"
+          >
+            <span className="line-clamp-2">{card.name}</span>
+          </button>
         </h3>
         <div className="hidden flex-shrink-0 mt-0.5 min-w-[60px] items-center justify-end sm:flex">
           {card.mana_cost ? (

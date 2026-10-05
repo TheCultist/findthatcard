@@ -4,6 +4,8 @@ export type SearchPipelineResult = {
   queryForScryfall: string;
   queryForLogs: string;
   normalizedQuery?: string;
+  /** Built from a resolver fallback — served, but not cached. */
+  degraded?: boolean;
   debug: {
     /** Count of Phase 1 fragment buckets (same as `ir.unresolvedFragments.length`; assembly order keys, not “still unresolved”). */
     unresolvedFragments: number;

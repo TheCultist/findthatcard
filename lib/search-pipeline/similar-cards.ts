@@ -3,6 +3,9 @@ import { sanitizeFunctionalClause } from "@/lib/search-pipeline/card-query-sanit
 import { isAiPromptLoggingEnabled } from "@/lib/search-pipeline/debug";
 import { fetchCardByName, ScryfallNamedCard } from "@/lib/scryfall/lookup";
 import { fetchTaggerCardData, TaggerCardData } from "@/lib/scryfall/tagger-graphql";
+import { quoteScryfallValue } from "@/lib/scryfall/query-converter";
+import { stripInvalidTagsAnchored } from "@/lib/search-pipeline/synergy-cards";
+import { validateTaggerTags } from "@/lib/tagger/validation";
 
 /**
  * Builds a Scryfall query that finds cards whose illustration shares the same
@@ -101,7 +104,7 @@ function buildArtQueryFromTaggerData(tagger: TaggerCardData): string | null {
   );
 
   if (!query) return null;
-  return `${query} -name:"${tagger.name}"`;
+  return `${query} -name:${quoteScryfallValue(tagger.name)}`;
 }
 
 /**
@@ -152,9 +155,9 @@ export async function resolveSimilarCardsQuery(cardName: string): Promise<string
 
   if (comboPieceNames.length === 0) return null;
 
-  const orNames = comboPieceNames.map((n) => `name:"${n}"`).join(" or ");
+  const orNames = comboPieceNames.map((n) => `name:${quoteScryfallValue(n)}`).join(" or ");
   const nameClause = comboPieceNames.length > 1 ? `(${orNames})` : orNames;
-  return `${nameClause} -name:"${card.name}"`;
+  return `${nameClause} -name:${quoteScryfallValue(card.name)}`;
 }
 
 /**
@@ -344,7 +347,7 @@ function buildOracleTextClauses(oracleText: string): string[] {
       return existing.includes(phrase) || phrase.includes(existing);
     });
     if (!alreadyCovered) {
-      result.push(`o:"${phrase}"`);
+      result.push(`o:${quoteScryfallValue(phrase)}`);
     }
   }
 
@@ -458,7 +461,7 @@ async function buildQueryFromTaggerData(
 
   if (relatedNames.size > 0) {
     const names = [...relatedNames];
-    const orNames = names.map((n) => `name:"${n}"`).join(" or ");
+    const orNames = names.map((n) => `name:${quoteScryfallValue(n)}`).join(" or ");
     parts.push(names.length > 1 ? `(${orNames})` : orNames);
   }
 
@@ -491,7 +494,7 @@ async function buildQueryFromTaggerData(
   if (parts.length === 0) return null;
 
   const combined = parts.length === 1 ? parts[0] : `(${parts.join(" or ")})`;
-  return `${combined} -name:"${tagger.name}"`;
+  return `${combined} -name:${quoteScryfallValue(tagger.name)}`;
 }
 
 // ── LLM-backed functional similarity ────────────────────────────────────────
@@ -620,8 +623,19 @@ async function tryBuildSimilarClauseViaLLM(
       return null;
     }
 
-    const clause = stripManaValueFilters(sanitizeFunctionalClause(parsed.scryfall_query ?? "") ?? "");
+    let clause: string | null = stripManaValueFilters(sanitizeFunctionalClause(parsed.scryfall_query ?? "") ?? "");
     if (!clause) return null;
+
+    // Same guard as synergy (without its retry call): an invented tag zeroes its branch, and
+    // finalize stripping it later leaves an unanchored shell OR-ed into the results.
+    const invalidTags = await validateTaggerTags(clause);
+    if (invalidTags.length > 0) {
+      console.warn(
+        `[SimilarCards] LLM clause for "${card.name}" used nonexistent tags [${invalidTags.map((t) => t.tag).join(", ")}]; stripping them`
+      );
+      clause = stripInvalidTagsAnchored(clause, invalidTags);
+      if (!clause) return null;
+    }
 
     if (parsed.reasoning) {
       console.log(`[SimilarCards] LLM clause for "${card.name}": ${clause} — ${parsed.reasoning}`);

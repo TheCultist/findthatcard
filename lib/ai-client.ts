@@ -53,6 +53,10 @@ export function getActiveProvider(): AIProvider {
   return "openai";
 }
 
+// SDK defaults are a 10-minute timeout with 2 retries — far past any user's patience and the
+// search route's maxDuration. One retry covers a transient 5xx/429.
+const AI_CLIENT_LIMITS = { timeout: 20_000, maxRetries: 1 };
+
 // ── OpenAI ────────────────────────────────────────────────────────────────────
 
 let openaiClient: OpenAI | null = null;
@@ -61,7 +65,7 @@ function getOpenAIClient(): OpenAI {
   if (openaiClient) return openaiClient;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY is missing");
-  openaiClient = new OpenAI({ apiKey });
+  openaiClient = new OpenAI({ apiKey, ...AI_CLIENT_LIMITS });
   return openaiClient;
 }
 
@@ -124,8 +128,17 @@ async function callOpenAIStructured<T>(
     },
   });
 
-  const text = completion.choices[0]?.message?.content ?? "";
-  const data = JSON.parse(text) as T;
+  // Strict mode guarantees the shape only for a complete answer — mirror the Claude path's checks.
+  const choice = completion.choices[0];
+  if (choice?.finish_reason === "length") {
+    throw new Error(
+      `OpenAI structured call truncated at max_tokens=${params.max_output_tokens} (schema ${params.schemaName})`
+    );
+  }
+  if (choice?.message?.refusal) {
+    throw new Error(`OpenAI structured call refused: ${choice.message.refusal}`);
+  }
+  const data = JSON.parse(choice?.message?.content ?? "") as T;
   return {
     data,
     usage: {
@@ -144,7 +157,7 @@ function getAnthropicClient(): Anthropic {
   if (anthropicClient) return anthropicClient;
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is missing");
-  anthropicClient = new Anthropic({ apiKey });
+  anthropicClient = new Anthropic({ apiKey, ...AI_CLIENT_LIMITS });
   return anthropicClient;
 }
 
@@ -232,10 +245,11 @@ export async function callAI(params: AIRequestParams): Promise<AIResponse> {
 }
 
 /**
- * Structured-output variant: returns a parsed object conforming to `schema`.
+ * Structured-output variant: returns a parsed object meant to conform to `schema`.
  * OpenAI uses Chat Completions json_schema strict mode; Claude uses forced tool
- * use. Both guarantee the returned value is valid JSON matching the schema, so
- * callers only need to validate *semantics* (catalog membership), not shape.
+ * use. The result is still UNTRUSTED: Claude treats the schema as a hint (arrays
+ * for scalars, unknown enums), so callers validate shape and semantics
+ * (v2/buildIR.ts is the trust boundary).
  */
 export async function callAIStructured<T>(
   params: AIStructuredParams

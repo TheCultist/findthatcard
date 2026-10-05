@@ -128,16 +128,18 @@ export default function QueryTokenPreview({
         </span>
       ) : (
         tokenMetadata.map((token, index) => (
-          <span
+          <button
+            type="button"
             key={`${token.raw}-${index}`}
             onClick={(e) => handleTokenTap(index, e)}
-            className={`group relative z-0 inline-flex items-center cursor-help px-1.5 py-1 leading-none hover:z-30 sm:px-2 ${getTokenClassName(
+            aria-expanded={activeTooltip === index}
+            className={`group relative z-0 inline-flex items-center cursor-help px-1.5 py-1 leading-none hover:z-30 focus-visible:z-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:px-2 ${getTokenClassName(
               token
             )}`}
           >
             {token.raw}
-            <span className={`pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-border bg-surface px-3 py-2.5 text-xs text-foreground shadow-xl transition duration-200 sm:w-80 sm:px-4 sm:py-3 ${
-              activeTooltip === index ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+            <span className={`pointer-events-none absolute left-1/2 top-full z-40 mt-2 w-[min(16rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl text-left border border-border bg-surface px-3 py-2.5 text-xs text-foreground shadow-xl transition duration-200 sm:w-80 sm:px-4 sm:py-3 ${
+              activeTooltip === index ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
             }`}>
               <div className="text-sm font-semibold text-foreground">{token.title}</div>
               <div className="mt-2 text-muted">{token.description}</div>
@@ -158,7 +160,7 @@ export default function QueryTokenPreview({
                 </div>
               )}
             </span>
-          </span>
+          </button>
         ))
       )}
     </div>

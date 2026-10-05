@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import type { TaggerTagContext } from "@/lib/tagger/context";
 import {
   HATE_MAGNET_FUNCTION_TAGS,
+  balanceScryfallQuery,
   finalizeScryfallQuery,
+  quoteScryfallValue,
   hateMagnetFunctionTagsExcluding,
   isScryfallQuery,
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
+import { normalizeWheneverCastTrigger } from "@/lib/search-pipeline/phase3/finalizeQuery";
 import {
   COMMANDER_ELIGIBLE_IS_FLAGS,
   COMMANDER_FORMATS,
@@ -271,6 +274,61 @@ function runTruncateTests() {
     const noChange = truncateScryfallQuery("short", 10);
     assert.equal(noChange, "short");
     console.log("[PASS] truncate: no-op");
+    passed += 1;
+
+    // Cutting inside a group drops the dangling "or" and closes the group within the limit.
+    const grouped = truncateScryfallQuery("t:creature (c:r or c:g or c:b)", 23);
+    assert.equal(grouped, "t:creature (c:r or c:g)");
+    console.log("[PASS] truncate: closes the open group at a clause boundary");
+    passed += 1;
+
+    // A cut inside a quoted phrase or regex drops that whole clause rather than closing it early.
+    const regexQuery = "t:creature (c:g or o:/(?<!this )creature[^.]*enters/)";
+    assert.equal(truncateScryfallQuery(regexQuery, 40), "t:creature (c:g)");
+    assert.equal(truncateScryfallQuery('t:creature o:"draw a card" c:u', 25), "t:creature");
+    console.log("[PASS] truncate: never splits a quoted or regex value");
+    passed += 1;
+
+    const repaired = [
+      ["(c:r) c:g)", "(c:r) c:g"], // stray ")" used to crash: ")".repeat(-1)
+      ["(t:creature o:draw", "(t:creature o:draw)"],
+      ['name:"B.F.M. (Big Furry Monster" t:creature', 'name:"B.F.M. (Big Furry Monster" t:creature'],
+      ["o:/\\(.*\\)/ (c:r", "o:/\\(.*\\)/ (c:r)"],
+      ["o:urza's (c:r", "o:urza's (c:r)"], // apostrophe outside a value is not a quote
+      ['(o:"draw a', '(o:"draw a")'],
+    ];
+    for (const [input, expected] of repaired) assert.equal(balanceScryfallQuery(input), expected, input);
+    console.log("[PASS] balance: parens inside values ignored, strays dropped, open groups closed");
+    passed += 1;
+
+    // Scryfall has no escape inside "…"; values holding a double quote switch to '…' (verified live).
+    assert.equal(quoteScryfallValue("Urza's Saga"), `"Urza's Saga"`);
+    assert.equal(quoteScryfallValue('Henzie "Toolbox" Torre'), `'Henzie "Toolbox" Torre'`);
+    assert.equal(quoteScryfallValue(`it's "x"`), `"it's x"`);
+    const quotedName = finalizeScryfallQuery({
+      naturalQuery: "henzie",
+      rawQuery: `name:${quoteScryfallValue('Henzie "Toolbox" Torre')} (t:creature`,
+    });
+    assert.equal(quotedName, `name:'Henzie "Toolbox" Torre' (t:creature)`);
+    console.log("[PASS] quote: single-quote delimiter survives finalize");
+    passed += 1;
+
+    // The trigger's spell type is removed — and nothing after it (it used to eat the rest of the query).
+    assert.equal(
+      normalizeWheneverCastTrigger(
+        "green cards that draw whenever you cast a creature spell in modern",
+        "t:creature mv<=3 f:modern o:draw"
+      ),
+      'mv<=3 f:modern o:draw o:"whenever you cast a creature spell"'
+    );
+    assert.equal(
+      normalizeWheneverCastTrigger(
+        "whenever you cast an instant or sorcery spell, deal damage",
+        "(t:instant or t:sorcery) c:r o:damage"
+      ),
+      'c:r o:damage o:"whenever you cast an instant or sorcery spell"'
+    );
+    console.log("[PASS] whenever-cast: removes only the trigger's type filter");
     passed += 1;
   } catch (error) {
     console.error("[FAIL] truncate tests");

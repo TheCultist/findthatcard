@@ -1,0 +1,1413 @@
+{
+  "updatedAt": "2026-10-05",
+  "keywords": [
+    {
+      "name": "Absorb",
+      "slug": "absorb"
+    },
+    {
+      "name": "Affinity",
+      "slug": "affinity"
+    },
+    {
+      "name": "Affinitycycling",
+      "slug": "affinitycycling"
+    },
+    {
+      "name": "Afflict",
+      "slug": "afflict"
+    },
+    {
+      "name": "Afterlife",
+      "slug": "afterlife"
+    },
+    {
+      "name": "Aftermath",
+      "slug": "aftermath"
+    },
+    {
+      "name": "Amplify",
+      "slug": "amplify"
+    },
+    {
+      "name": "Annihilator",
+      "slug": "annihilator"
+    },
+    {
+      "name": "Ascend",
+      "slug": "ascend"
+    },
+    {
+      "name": "Assist",
+      "slug": "assist"
+    },
+    {
+      "name": "Augment",
+      "slug": "augment"
+    },
+    {
+      "name": "Aura Swap",
+      "slug": "aura-swap"
+    },
+    {
+      "name": "Awaken",
+      "slug": "awaken"
+    },
+    {
+      "name": "Backup",
+      "slug": "backup"
+    },
+    {
+      "name": "Banding",
+      "slug": "banding"
+    },
+    {
+      "name": "Bargain",
+      "slug": "bargain"
+    },
+    {
+      "name": "Basic landcycling",
+      "slug": "basic-landcycling"
+    },
+    {
+      "name": "Battle Cry",
+      "slug": "battle-cry"
+    },
+    {
+      "name": "Bestow",
+      "slug": "bestow"
+    },
+    {
+      "name": "Blitz",
+      "slug": "blitz"
+    },
+    {
+      "name": "Bloodthirst",
+      "slug": "bloodthirst"
+    },
+    {
+      "name": "Boast",
+      "slug": "boast"
+    },
+    {
+      "name": "Bushido",
+      "slug": "bushido"
+    },
+    {
+      "name": "Buyback",
+      "slug": "buyback"
+    },
+    {
+      "name": "Cascade",
+      "slug": "cascade"
+    },
+    {
+      "name": "Casualty",
+      "slug": "casualty"
+    },
+    {
+      "name": "Champion",
+      "slug": "champion"
+    },
+    {
+      "name": "Changeling",
+      "slug": "changeling"
+    },
+    {
+      "name": "Choose a background",
+      "slug": "choose-a-background"
+    },
+    {
+      "name": "Cipher",
+      "slug": "cipher"
+    },
+    {
+      "name": "Cleave",
+      "slug": "cleave"
+    },
+    {
+      "name": "Commander ninjutsu",
+      "slug": "commander-ninjutsu"
+    },
+    {
+      "name": "Companion",
+      "slug": "companion"
+    },
+    {
+      "name": "Compleated",
+      "slug": "compleated"
+    },
+    {
+      "name": "Conspire",
+      "slug": "conspire"
+    },
+    {
+      "name": "Convoke",
+      "slug": "convoke"
+    },
+    {
+      "name": "Craft",
+      "slug": "craft"
+    },
+    {
+      "name": "Crew",
+      "slug": "crew"
+    },
+    {
+      "name": "Cumulative upkeep",
+      "slug": "cumulative-upkeep"
+    },
+    {
+      "name": "Cycling",
+      "slug": "cycling"
+    },
+    {
+      "name": "Dash",
+      "slug": "dash"
+    },
+    {
+      "name": "Daybound",
+      "slug": "daybound"
+    },
+    {
+      "name": "Deathtouch",
+      "slug": "deathtouch"
+    },
+    {
+      "name": "Decayed",
+      "slug": "decayed"
+    },
+    {
+      "name": "Defender",
+      "slug": "defender"
+    },
+    {
+      "name": "Delve",
+      "slug": "delve"
+    },
+    {
+      "name": "Demonstrate",
+      "slug": "demonstrate"
+    },
+    {
+      "name": "Desertwalk",
+      "slug": "desertwalk"
+    },
+    {
+      "name": "Dethrone",
+      "slug": "dethrone"
+    },
+    {
+      "name": "Devoid",
+      "slug": "devoid"
+    },
+    {
+      "name": "Devour",
+      "slug": "devour"
+    },
+    {
+      "name": "Disguise",
+      "slug": "disguise"
+    },
+    {
+      "name": "Disturb",
+      "slug": "disturb"
+    },
+    {
+      "name": "Doctor's companion",
+      "slug": "doctors-companion"
+    },
+    {
+      "name": "Double agenda",
+      "slug": "double-agenda"
+    },
+    {
+      "name": "Double strike",
+      "slug": "double-strike"
+    },
+    {
+      "name": "Double team",
+      "slug": "double-team"
+    },
+    {
+      "name": "Dredge",
+      "slug": "dredge"
+    },
+    {
+      "name": "Echo",
+      "slug": "echo"
+    },
+    {
+      "name": "Embalm",
+      "slug": "embalm"
+    },
+    {
+      "name": "Emerge",
+      "slug": "emerge"
+    },
+    {
+      "name": "Enchant",
+      "slug": "enchant"
+    },
+    {
+      "name": "Encore",
+      "slug": "encore"
+    },
+    {
+      "name": "Enlist",
+      "slug": "enlist"
+    },
+    {
+      "name": "Entwine",
+      "slug": "entwine"
+    },
+    {
+      "name": "Epic",
+      "slug": "epic"
+    },
+    {
+      "name": "Equip",
+      "slug": "equip"
+    },
+    {
+      "name": "Escalate",
+      "slug": "escalate"
+    },
+    {
+      "name": "Escape",
+      "slug": "escape"
+    },
+    {
+      "name": "Eternalize",
+      "slug": "eternalize"
+    },
+    {
+      "name": "Evoke",
+      "slug": "evoke"
+    },
+    {
+      "name": "Evolve",
+      "slug": "evolve"
+    },
+    {
+      "name": "Exalted",
+      "slug": "exalted"
+    },
+    {
+      "name": "Exhaust",
+      "slug": "exhaust"
+    },
+    {
+      "name": "Exploit",
+      "slug": "exploit"
+    },
+    {
+      "name": "Extort",
+      "slug": "extort"
+    },
+    {
+      "name": "Fabricate",
+      "slug": "fabricate"
+    },
+    {
+      "name": "Fading",
+      "slug": "fading"
+    },
+    {
+      "name": "Fear",
+      "slug": "fear"
+    },
+    {
+      "name": "Firebending",
+      "slug": "firebending"
+    },
+    {
+      "name": "First strike",
+      "slug": "first-strike"
+    },
+    {
+      "name": "Flanking",
+      "slug": "flanking"
+    },
+    {
+      "name": "Flash",
+      "slug": "flash"
+    },
+    {
+      "name": "Flashback",
+      "slug": "flashback"
+    },
+    {
+      "name": "Flying",
+      "slug": "flying"
+    },
+    {
+      "name": "For Mirrodin!",
+      "slug": "for-mirrodin"
+    },
+    {
+      "name": "Forecast",
+      "slug": "forecast"
+    },
+    {
+      "name": "Forestcycling",
+      "slug": "forestcycling"
+    },
+    {
+      "name": "Forestwalk",
+      "slug": "forestwalk"
+    },
+    {
+      "name": "Foretell",
+      "slug": "foretell"
+    },
+    {
+      "name": "Fortify",
+      "slug": "fortify"
+    },
+    {
+      "name": "Freerunning",
+      "slug": "freerunning"
+    },
+    {
+      "name": "Frenzy",
+      "slug": "frenzy"
+    },
+    {
+      "name": "Friends forever",
+      "slug": "friends-forever"
+    },
+    {
+      "name": "Fuse",
+      "slug": "fuse"
+    },
+    {
+      "name": "Gift",
+      "slug": "gift"
+    },
+    {
+      "name": "Graft",
+      "slug": "graft"
+    },
+    {
+      "name": "Gravestorm",
+      "slug": "gravestorm"
+    },
+    {
+      "name": "Halflingcycling",
+      "slug": "halflingcycling"
+    },
+    {
+      "name": "Harmonize",
+      "slug": "harmonize"
+    },
+    {
+      "name": "Haste",
+      "slug": "haste"
+    },
+    {
+      "name": "Haunt",
+      "slug": "haunt"
+    },
+    {
+      "name": "Hexproof",
+      "slug": "hexproof"
+    },
+    {
+      "name": "Hexproof from",
+      "slug": "hexproof-from"
+    },
+    {
+      "name": "Hidden agenda",
+      "slug": "hidden-agenda"
+    },
+    {
+      "name": "Hideaway",
+      "slug": "hideaway"
+    },
+    {
+      "name": "Horsemanship",
+      "slug": "horsemanship"
+    },
+    {
+      "name": "Impending",
+      "slug": "impending"
+    },
+    {
+      "name": "Improvise",
+      "slug": "improvise"
+    },
+    {
+      "name": "Increment",
+      "slug": "increment"
+    },
+    {
+      "name": "Indestructible",
+      "slug": "indestructible"
+    },
+    {
+      "name": "Infect",
+      "slug": "infect"
+    },
+    {
+      "name": "Ingest",
+      "slug": "ingest"
+    },
+    {
+      "name": "Intensity",
+      "slug": "intensity"
+    },
+    {
+      "name": "Intimidate",
+      "slug": "intimidate"
+    },
+    {
+      "name": "Islandcycling",
+      "slug": "islandcycling"
+    },
+    {
+      "name": "Islandwalk",
+      "slug": "islandwalk"
+    },
+    {
+      "name": "Job select",
+      "slug": "job-select"
+    },
+    {
+      "name": "Jump-start",
+      "slug": "jump-start"
+    },
+    {
+      "name": "Kicker",
+      "slug": "kicker"
+    },
+    {
+      "name": "Landcycling",
+      "slug": "landcycling"
+    },
+    {
+      "name": "Landwalk",
+      "slug": "landwalk"
+    },
+    {
+      "name": "Legendary landwalk",
+      "slug": "legendary-landwalk"
+    },
+    {
+      "name": "Level Up",
+      "slug": "level-up"
+    },
+    {
+      "name": "Lifelink",
+      "slug": "lifelink"
+    },
+    {
+      "name": "Living metal",
+      "slug": "living-metal"
+    },
+    {
+      "name": "Living weapon",
+      "slug": "living-weapon"
+    },
+    {
+      "name": "Madness",
+      "slug": "madness"
+    },
+    {
+      "name": "Max speed",
+      "slug": "max-speed"
+    },
+    {
+      "name": "Mayhem",
+      "slug": "mayhem"
+    },
+    {
+      "name": "Megamorph",
+      "slug": "megamorph"
+    },
+    {
+      "name": "Melee",
+      "slug": "melee"
+    },
+    {
+      "name": "Menace",
+      "slug": "menace"
+    },
+    {
+      "name": "Mentor",
+      "slug": "mentor"
+    },
+    {
+      "name": "Miracle",
+      "slug": "miracle"
+    },
+    {
+      "name": "Mobilize",
+      "slug": "mobilize"
+    },
+    {
+      "name": "Modular",
+      "slug": "modular"
+    },
+    {
+      "name": "More Than Meets the Eye",
+      "slug": "more-than-meets-the-eye"
+    },
+    {
+      "name": "Morph",
+      "slug": "morph"
+    },
+    {
+      "name": "Mountaincycling",
+      "slug": "mountaincycling"
+    },
+    {
+      "name": "Mountainwalk",
+      "slug": "mountainwalk"
+    },
+    {
+      "name": "Multikicker",
+      "slug": "multikicker"
+    },
+    {
+      "name": "Mutate",
+      "slug": "mutate"
+    },
+    {
+      "name": "Myriad",
+      "slug": "myriad"
+    },
+    {
+      "name": "Nightbound",
+      "slug": "nightbound"
+    },
+    {
+      "name": "Ninjutsu",
+      "slug": "ninjutsu"
+    },
+    {
+      "name": "Nonbasic landwalk",
+      "slug": "nonbasic-landwalk"
+    },
+    {
+      "name": "Offering",
+      "slug": "offering"
+    },
+    {
+      "name": "Offspring",
+      "slug": "offspring"
+    },
+    {
+      "name": "Outlast",
+      "slug": "outlast"
+    },
+    {
+      "name": "Overload",
+      "slug": "overload"
+    },
+    {
+      "name": "Paradigm",
+      "slug": "paradigm"
+    },
+    {
+      "name": "Partner",
+      "slug": "partner"
+    },
+    {
+      "name": "Partner with",
+      "slug": "partner-with"
+    },
+    {
+      "name": "Persist",
+      "slug": "persist"
+    },
+    {
+      "name": "Phasing",
+      "slug": "phasing"
+    },
+    {
+      "name": "Plainscycling",
+      "slug": "plainscycling"
+    },
+    {
+      "name": "Plainswalk",
+      "slug": "plainswalk"
+    },
+    {
+      "name": "Poisonous",
+      "slug": "poisonous"
+    },
+    {
+      "name": "Power-up",
+      "slug": "power-up"
+    },
+    {
+      "name": "Protection",
+      "slug": "protection"
+    },
+    {
+      "name": "Prototype",
+      "slug": "prototype"
+    },
+    {
+      "name": "Provoke",
+      "slug": "provoke"
+    },
+    {
+      "name": "Prowess",
+      "slug": "prowess"
+    },
+    {
+      "name": "Prowl",
+      "slug": "prowl"
+    },
+    {
+      "name": "Rampage",
+      "slug": "rampage"
+    },
+    {
+      "name": "Ravenous",
+      "slug": "ravenous"
+    },
+    {
+      "name": "Reach",
+      "slug": "reach"
+    },
+    {
+      "name": "Read Ahead",
+      "slug": "read-ahead"
+    },
+    {
+      "name": "Rebound",
+      "slug": "rebound"
+    },
+    {
+      "name": "Reconfigure",
+      "slug": "reconfigure"
+    },
+    {
+      "name": "Recover",
+      "slug": "recover"
+    },
+    {
+      "name": "Reinforce",
+      "slug": "reinforce"
+    },
+    {
+      "name": "Renown",
+      "slug": "renown"
+    },
+    {
+      "name": "Replicate",
+      "slug": "replicate"
+    },
+    {
+      "name": "Retrace",
+      "slug": "retrace"
+    },
+    {
+      "name": "Riot",
+      "slug": "riot"
+    },
+    {
+      "name": "Ripple",
+      "slug": "ripple"
+    },
+    {
+      "name": "Saddle",
+      "slug": "saddle"
+    },
+    {
+      "name": "Scavenge",
+      "slug": "scavenge"
+    },
+    {
+      "name": "Shadow",
+      "slug": "shadow"
+    },
+    {
+      "name": "Shroud",
+      "slug": "shroud"
+    },
+    {
+      "name": "Skulk",
+      "slug": "skulk"
+    },
+    {
+      "name": "Slivercycling",
+      "slug": "slivercycling"
+    },
+    {
+      "name": "Sneak",
+      "slug": "sneak"
+    },
+    {
+      "name": "Solved",
+      "slug": "solved"
+    },
+    {
+      "name": "Soulbond",
+      "slug": "soulbond"
+    },
+    {
+      "name": "Soulshift",
+      "slug": "soulshift"
+    },
+    {
+      "name": "Specialize",
+      "slug": "specialize"
+    },
+    {
+      "name": "Spectacle",
+      "slug": "spectacle"
+    },
+    {
+      "name": "Splice",
+      "slug": "splice"
+    },
+    {
+      "name": "Split second",
+      "slug": "split-second"
+    },
+    {
+      "name": "Spree",
+      "slug": "spree"
+    },
+    {
+      "name": "Squad",
+      "slug": "squad"
+    },
+    {
+      "name": "Station",
+      "slug": "station"
+    },
+    {
+      "name": "Storied",
+      "slug": "storied"
+    },
+    {
+      "name": "Storm",
+      "slug": "storm"
+    },
+    {
+      "name": "Sunburst",
+      "slug": "sunburst"
+    },
+    {
+      "name": "Surge",
+      "slug": "surge"
+    },
+    {
+      "name": "Suspend",
+      "slug": "suspend"
+    },
+    {
+      "name": "Swampcycling",
+      "slug": "swampcycling"
+    },
+    {
+      "name": "Swampwalk",
+      "slug": "swampwalk"
+    },
+    {
+      "name": "Teamwork",
+      "slug": "teamwork"
+    },
+    {
+      "name": "Tiered",
+      "slug": "tiered"
+    },
+    {
+      "name": "Toxic",
+      "slug": "toxic"
+    },
+    {
+      "name": "Training",
+      "slug": "training"
+    },
+    {
+      "name": "Trample",
+      "slug": "trample"
+    },
+    {
+      "name": "Transfigure",
+      "slug": "transfigure"
+    },
+    {
+      "name": "Transmute",
+      "slug": "transmute"
+    },
+    {
+      "name": "Tribute",
+      "slug": "tribute"
+    },
+    {
+      "name": "Typecycling",
+      "slug": "typecycling"
+    },
+    {
+      "name": "Umbra armor",
+      "slug": "umbra-armor"
+    },
+    {
+      "name": "Undaunted",
+      "slug": "undaunted"
+    },
+    {
+      "name": "Undying",
+      "slug": "undying"
+    },
+    {
+      "name": "Unearth",
+      "slug": "unearth"
+    },
+    {
+      "name": "Unleash",
+      "slug": "unleash"
+    },
+    {
+      "name": "Vanishing",
+      "slug": "vanishing"
+    },
+    {
+      "name": "Vigilance",
+      "slug": "vigilance"
+    },
+    {
+      "name": "Ward",
+      "slug": "ward"
+    },
+    {
+      "name": "Warp",
+      "slug": "warp"
+    },
+    {
+      "name": "Web-slinging",
+      "slug": "web-slinging"
+    },
+    {
+      "name": "Wither",
+      "slug": "wither"
+    },
+    {
+      "name": "Wizardcycling",
+      "slug": "wizardcycling"
+    },
+    {
+      "name": "Scry",
+      "slug": "scry"
+    },
+    {
+      "name": "Seek",
+      "slug": "seek"
+    },
+    {
+      "name": "Heal",
+      "slug": "heal"
+    },
+    {
+      "name": "Adapt",
+      "slug": "adapt"
+    },
+    {
+      "name": "Support",
+      "slug": "support"
+    },
+    {
+      "name": "Time Travel",
+      "slug": "time-travel"
+    },
+    {
+      "name": "Goad",
+      "slug": "goad"
+    },
+    {
+      "name": "Transform",
+      "slug": "transform"
+    },
+    {
+      "name": "Surveil",
+      "slug": "surveil"
+    },
+    {
+      "name": "Planeswalk",
+      "slug": "planeswalk"
+    },
+    {
+      "name": "Empower Jace",
+      "slug": "empower-jace"
+    },
+    {
+      "name": "Mill",
+      "slug": "mill"
+    },
+    {
+      "name": "Learn",
+      "slug": "learn"
+    },
+    {
+      "name": "Connive",
+      "slug": "connive"
+    },
+    {
+      "name": "Venture into the dungeon",
+      "slug": "venture-into-the-dungeon"
+    },
+    {
+      "name": "Open an Attraction",
+      "slug": "open-an-attraction"
+    },
+    {
+      "name": "Food",
+      "slug": "food"
+    },
+    {
+      "name": "Discover",
+      "slug": "discover"
+    },
+    {
+      "name": "Abandon",
+      "slug": "abandon"
+    },
+    {
+      "name": "Explore",
+      "slug": "explore"
+    },
+    {
+      "name": "Treasure",
+      "slug": "treasure"
+    },
+    {
+      "name": "Roll to Visit Your Attractions",
+      "slug": "roll-to-visit-your-attractions"
+    },
+    {
+      "name": "Set in motion",
+      "slug": "set-in-motion"
+    },
+    {
+      "name": "Manifest",
+      "slug": "manifest"
+    },
+    {
+      "name": "Populate",
+      "slug": "populate"
+    },
+    {
+      "name": "Detain",
+      "slug": "detain"
+    },
+    {
+      "name": "Investigate",
+      "slug": "investigate"
+    },
+    {
+      "name": "Monstrosity",
+      "slug": "monstrosity"
+    },
+    {
+      "name": "Clash",
+      "slug": "clash"
+    },
+    {
+      "name": "Incubate",
+      "slug": "incubate"
+    },
+    {
+      "name": "Proliferate",
+      "slug": "proliferate"
+    },
+    {
+      "name": "Meld",
+      "slug": "meld"
+    },
+    {
+      "name": "Bolster",
+      "slug": "bolster"
+    },
+    {
+      "name": "Assemble",
+      "slug": "assemble"
+    },
+    {
+      "name": "Conjure",
+      "slug": "conjure"
+    },
+    {
+      "name": "Cloak",
+      "slug": "cloak"
+    },
+    {
+      "name": "Suspect",
+      "slug": "suspect"
+    },
+    {
+      "name": "Collect evidence",
+      "slug": "collect-evidence"
+    },
+    {
+      "name": "Role token",
+      "slug": "role-token"
+    },
+    {
+      "name": "Plot",
+      "slug": "plot"
+    },
+    {
+      "name": "Harness",
+      "slug": "harness"
+    },
+    {
+      "name": "Draft from a spellbook",
+      "slug": "draft-from-a-spellbook"
+    },
+    {
+      "name": "Heist",
+      "slug": "heist"
+    },
+    {
+      "name": "Forage",
+      "slug": "forage"
+    },
+    {
+      "name": "Manifest dread",
+      "slug": "manifest-dread"
+    },
+    {
+      "name": "Endure",
+      "slug": "endure"
+    },
+    {
+      "name": "Prepared",
+      "slug": "prepared"
+    },
+    {
+      "name": "Incorporate",
+      "slug": "incorporate"
+    },
+    {
+      "name": "Exert",
+      "slug": "exert"
+    },
+    {
+      "name": "Convert",
+      "slug": "convert"
+    },
+    {
+      "name": "Assimilate",
+      "slug": "assimilate"
+    },
+    {
+      "name": "Waterbend",
+      "slug": "waterbend"
+    },
+    {
+      "name": "Airbend",
+      "slug": "airbend"
+    },
+    {
+      "name": "Earthbend",
+      "slug": "earthbend"
+    },
+    {
+      "name": "Blight",
+      "slug": "blight"
+    },
+    {
+      "name": "Behold",
+      "slug": "behold"
+    },
+    {
+      "name": "Triple",
+      "slug": "triple"
+    },
+    {
+      "name": "Face a dilemma",
+      "slug": "face-a-dilemma"
+    },
+    {
+      "name": "Amass",
+      "slug": "amass"
+    },
+    {
+      "name": "Recruit",
+      "slug": "recruit"
+    },
+    {
+      "name": "Eerie",
+      "slug": "eerie"
+    },
+    {
+      "name": "Battalion",
+      "slug": "battalion"
+    },
+    {
+      "name": "Bloodrush",
+      "slug": "bloodrush"
+    },
+    {
+      "name": "Channel",
+      "slug": "channel"
+    },
+    {
+      "name": "Chroma",
+      "slug": "chroma"
+    },
+    {
+      "name": "Cohort",
+      "slug": "cohort"
+    },
+    {
+      "name": "Constellation",
+      "slug": "constellation"
+    },
+    {
+      "name": "Converge",
+      "slug": "converge"
+    },
+    {
+      "name": "Delirium",
+      "slug": "delirium"
+    },
+    {
+      "name": "Domain",
+      "slug": "domain"
+    },
+    {
+      "name": "Fateful hour",
+      "slug": "fateful-hour"
+    },
+    {
+      "name": "Ferocious",
+      "slug": "ferocious"
+    },
+    {
+      "name": "Formidable",
+      "slug": "formidable"
+    },
+    {
+      "name": "Grandeur",
+      "slug": "grandeur"
+    },
+    {
+      "name": "Hellbent",
+      "slug": "hellbent"
+    },
+    {
+      "name": "Heroic",
+      "slug": "heroic"
+    },
+    {
+      "name": "Imprint",
+      "slug": "imprint"
+    },
+    {
+      "name": "Inspired",
+      "slug": "inspired"
+    },
+    {
+      "name": "Join forces",
+      "slug": "join-forces"
+    },
+    {
+      "name": "Kinship",
+      "slug": "kinship"
+    },
+    {
+      "name": "Landfall",
+      "slug": "landfall"
+    },
+    {
+      "name": "Lieutenant",
+      "slug": "lieutenant"
+    },
+    {
+      "name": "Metalcraft",
+      "slug": "metalcraft"
+    },
+    {
+      "name": "Morbid",
+      "slug": "morbid"
+    },
+    {
+      "name": "Parley",
+      "slug": "parley"
+    },
+    {
+      "name": "Radiance",
+      "slug": "radiance"
+    },
+    {
+      "name": "Raid",
+      "slug": "raid"
+    },
+    {
+      "name": "Rally",
+      "slug": "rally"
+    },
+    {
+      "name": "Spell mastery",
+      "slug": "spell-mastery"
+    },
+    {
+      "name": "Strive",
+      "slug": "strive"
+    },
+    {
+      "name": "Sweep",
+      "slug": "sweep"
+    },
+    {
+      "name": "Tempting offer",
+      "slug": "tempting-offer"
+    },
+    {
+      "name": "Threshold",
+      "slug": "threshold"
+    },
+    {
+      "name": "Will of the council",
+      "slug": "will-of-the-council"
+    },
+    {
+      "name": "Adamant",
+      "slug": "adamant"
+    },
+    {
+      "name": "Addendum",
+      "slug": "addendum"
+    },
+    {
+      "name": "Council's dilemma",
+      "slug": "councils-dilemma"
+    },
+    {
+      "name": "Eminence",
+      "slug": "eminence"
+    },
+    {
+      "name": "Enrage",
+      "slug": "enrage"
+    },
+    {
+      "name": "Hero's Reward",
+      "slug": "heros-reward"
+    },
+    {
+      "name": "Kinfall",
+      "slug": "kinfall"
+    },
+    {
+      "name": "Landship",
+      "slug": "landship"
+    },
+    {
+      "name": "Legacy",
+      "slug": "legacy"
+    },
+    {
+      "name": "Revolt",
+      "slug": "revolt"
+    },
+    {
+      "name": "Underdog",
+      "slug": "underdog"
+    },
+    {
+      "name": "Undergrowth",
+      "slug": "undergrowth"
+    },
+    {
+      "name": "Void",
+      "slug": "void"
+    },
+    {
+      "name": "Descend",
+      "slug": "descend"
+    },
+    {
+      "name": "Fathomless descent",
+      "slug": "fathomless-descent"
+    },
+    {
+      "name": "Magecraft",
+      "slug": "magecraft"
+    },
+    {
+      "name": "Pack tactics",
+      "slug": "pack-tactics"
+    },
+    {
+      "name": "Coven",
+      "slug": "coven"
+    },
+    {
+      "name": "Alliance",
+      "slug": "alliance"
+    },
+    {
+      "name": "Corrupted",
+      "slug": "corrupted"
+    },
+    {
+      "name": "Secret council",
+      "slug": "secret-council"
+    },
+    {
+      "name": "Celebration",
+      "slug": "celebration"
+    },
+    {
+      "name": "Paradox",
+      "slug": "paradox"
+    },
+    {
+      "name": "Disappear",
+      "slug": "disappear"
+    },
+    {
+      "name": "Will of the Planeswalkers",
+      "slug": "will-of-the-planeswalkers"
+    },
+    {
+      "name": "Survival",
+      "slug": "survival"
+    },
+    {
+      "name": "Flurry",
+      "slug": "flurry"
+    },
+    {
+      "name": "Valiant",
+      "slug": "valiant"
+    },
+    {
+      "name": "Start your engines!",
+      "slug": "start-your-engines"
+    },
+    {
+      "name": "Renew",
+      "slug": "renew"
+    },
+    {
+      "name": "Repartee",
+      "slug": "repartee"
+    },
+    {
+      "name": "Opus",
+      "slug": "opus"
+    },
+    {
+      "name": "Infusion",
+      "slug": "infusion"
+    },
+    {
+      "name": "Covercast",
+      "slug": "covercast"
+    },
+    {
+      "name": "Vivid",
+      "slug": "vivid"
+    }
+  ]
+}

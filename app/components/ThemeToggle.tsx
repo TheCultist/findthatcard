@@ -11,7 +11,12 @@ export default function ThemeToggle() {
     // SSR-safe: defer mount state to avoid hydration mismatch (server renders placeholder)
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Required for client-only hydration
     setMounted(true);
-    const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
+    let savedTheme: "light" | "dark" | null = null;
+    try {
+      savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
+    } catch {
+      // Storage blocked: fall back to the system preference.
+    }
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const initialTheme = savedTheme || (prefersDark ? "dark" : "light");
     
@@ -22,7 +27,11 @@ export default function ThemeToggle() {
   const toggleTheme = () => {
     const newTheme = theme === "dark" ? "light" : "dark";
     setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
+    try {
+      localStorage.setItem("theme", newTheme);
+    } catch {
+      // Storage blocked: the theme still applies for this page view.
+    }
     document.documentElement.classList.toggle("dark", newTheme === "dark");
   };
 

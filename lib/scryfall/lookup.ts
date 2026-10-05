@@ -1,6 +1,4 @@
-const SCRYFALL_BASE_URL = "https://api.scryfall.com";
-const SCRYFALL_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
+import { scryfallFetch, SCRYFALL_BASE_URL } from "@/lib/scryfall/http";
 
 export interface ScryfallNamedCard {
   id: string;
@@ -36,12 +34,7 @@ export async function fetchCardByName(name: string): Promise<ScryfallNamedCard |
     const url = new URL(`${SCRYFALL_BASE_URL}/cards/named`);
     url.searchParams.set("fuzzy", name);
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        "User-Agent": SCRYFALL_USER_AGENT,
-        Accept: "application/json",
-      },
-    });
+    const response = await scryfallFetch(url.toString());
 
     if (!response.ok) return null;
 

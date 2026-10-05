@@ -2,7 +2,8 @@ import { promises as fs } from "fs";
 import path from "path";
 import { getCacheDir } from "@/lib/cache-paths";
 import { escapeRegex, levenshteinDistance } from "@/lib/utils/text";
-import { formatTodayStamp, shouldSkipUpdate } from "@/lib/utils/cache";
+import { createCacheLoader, readCacheJson, formatTodayStamp, shouldSkipUpdate, stampedToday } from "@/lib/utils/cache";
+import { scryfallFetch } from "@/lib/scryfall/http";
 
 type ScryfallSetEntry = {
   name: string;
@@ -27,13 +28,10 @@ type SetIndex = {
 };
 
 const SCRYFALL_SETS_URL = "https://api.scryfall.com/sets";
-const SCRYFALL_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 const SETS_FILE_PATH = path.join(getCacheDir(), "scryfall-sets.json");
 
 let setCache: ScryfallSetEntry[] | null = null;
 let setCacheUpdatedAt: string | null = null;
-let setCachePromise: Promise<void> | null = null;
 let setIndex: SetIndex | null = null;
 
 function normalizeSetText(value: string): string {
@@ -79,8 +77,7 @@ function buildSetIndex(entries: ScryfallSetEntry[]): SetIndex {
 
 async function readSetFile(): Promise<SetCacheFile | null> {
   try {
-    const raw = await fs.readFile(SETS_FILE_PATH, "utf-8");
-    const parsed = JSON.parse(raw);
+    const parsed = await readCacheJson(SETS_FILE_PATH, () => import("@/data/seed/scryfall-sets.json"));
     if (Array.isArray(parsed)) {
       const sets = parsed.filter(
         (entry): entry is ScryfallSetEntry =>
@@ -169,12 +166,7 @@ function mergeSets(
 }
 
 async function fetchSetsFromScryfall(): Promise<ScryfallSetEntry[]> {
-  const response = await fetch(SCRYFALL_SETS_URL, {
-    headers: {
-      "User-Agent": SCRYFALL_USER_AGENT,
-      Accept: "application/json",
-    },
-  });
+  const response = await scryfallFetch(SCRYFALL_SETS_URL);
 
   if (!response.ok) {
     throw new Error(
@@ -196,16 +188,16 @@ async function fetchSetsFromScryfall(): Promise<ScryfallSetEntry[]> {
 }
 
 async function initializeSetCache(): Promise<void> {
-  if (setCache !== null) {
-    return;
-  }
-
+  const firstLoad = setCache === null;
   const existing = await readSetFile();
   if (existing) {
     setCache = existing.sets;
     setCacheUpdatedAt = existing.updatedAt || null;
     setIndex = buildSetIndex(existing.sets);
   }
+
+  // Serve file/seed data at once; a stale stamp makes the loader refresh it in the background.
+  if (firstLoad && existing) return;
 
   const todayStamp = formatTodayStamp();
   if (existing && shouldSkipUpdate(existing.updatedAt, todayStamp)) {
@@ -244,28 +236,16 @@ async function initializeSetCache(): Promise<void> {
       console.log("[Scryfall Sets] No set content changes detected");
     }
   } catch (error) {
+    // Stale file data (if any) stays; with none the cache stays null and is retried.
     console.error("[Scryfall Sets] Failed to refresh cache:", error);
-    if (!setCache) {
-      setCache = [];
-      setIndex = buildSetIndex([]);
-    }
   }
 }
 
-export async function ensureScryfallSetCache(): Promise<void> {
-  if (setCache !== null) {
-    return;
-  }
-
-  if (setCachePromise === null) {
-    setCachePromise = initializeSetCache().catch((error) => {
-      setCachePromise = null;
-      throw error;
-    });
-  }
-
-  await setCachePromise;
-}
+export const ensureScryfallSetCache = createCacheLoader(
+  () => setCache !== null,
+  initializeSetCache,
+  { isFresh: stampedToday(() => setCacheUpdatedAt) }
+);
 
 export async function getSetCodeMap(): Promise<{
   updatedAt?: string;

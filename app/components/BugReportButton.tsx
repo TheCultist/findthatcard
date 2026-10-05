@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BugAntIcon, XMarkIcon, PaperClipIcon } from "@heroicons/react/24/outline";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -21,25 +21,30 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
   const [errorMsg, setErrorMsg] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const descRef = useRef<HTMLTextAreaElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
-  const handleClose = useCallback(() => {
-    if (status === "loading") return;
+  // A native modal dialog traps focus, makes the page inert and restores focus to
+  // the bug button on close(); Esc fires `cancel`, which we veto while sending.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!open || !dialog || dialog.open) return;
+    dialog.showModal();
+    descRef.current?.focus();
+  }, [open]);
+
+  /** Every way of closing (X, Cancel, backdrop, Esc) funnels through the dialog's `close` event. */
+  const handleClose = () => {
+    if (status !== "loading") dialogRef.current?.close();
+  };
+
+  const handleDialogClosed = () => {
     setOpen(false);
     setStatus("idle");
     setDescription("");
     setFile(null);
     setFileError("");
     setErrorMsg("");
-  }, [status]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, handleClose]);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = e.target.files?.[0] ?? null;
@@ -115,15 +120,20 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
       </button>
 
       {open && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+        // Full-viewport dialog acting as its own backdrop, so a click on it (outside the card) closes.
+        <dialog
+          ref={dialogRef}
+          aria-labelledby="bug-report-title"
+          onCancel={(e) => status === "loading" && e.preventDefault()}
+          onClose={handleDialogClosed}
+          className="fixed inset-0 z-[60] m-0 hidden open:flex h-full max-h-none w-full max-w-none items-center justify-center border-0 bg-black/40 p-4 text-foreground backdrop-blur-sm backdrop:bg-transparent"
           onClick={(e) => e.target === e.currentTarget && handleClose()}
         >
           <div className="w-full max-w-lg rounded-xl border border-border bg-surface shadow-xl">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
               <div className="flex items-center gap-2">
                 <BugAntIcon className="h-5 w-5 text-red-500" />
-                <h2 className="text-base font-semibold text-foreground">
+                <h2 id="bug-report-title" className="text-base font-semibold text-foreground">
                   Report a faulty search
                 </h2>
               </div>
@@ -236,7 +246,7 @@ export default function BugReportButton({ userQuery, scryfallQuery }: Props) {
               </form>
             )}
           </div>
-        </div>
+        </dialog>
       )}
     </>
   );

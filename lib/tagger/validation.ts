@@ -1,5 +1,4 @@
-import { promises as fs } from "fs";
-import path from "path";
+import { ensureTaggerTagCache, getTaggerTagCache } from "@/lib/tagger/cache";
 
 /**
  * Extracts Tagger tags from a Scryfall query
@@ -52,70 +51,42 @@ export function extractTaggerTags(
   return tags;
 }
 
+// Tagger display names use spaces ("pure draw"); the catalog and Scryfall queries use hyphens.
+const toSlug = (tag: string) => tag.toLowerCase().trim().replace(/\s+/g, "-");
+
+// Slug sets per catalog Set, rebuilt automatically when the tagger cache swaps in a new Set.
+const slugSets = new WeakMap<Set<string>, Set<string>>();
+
 /**
- * Validates if a Tagger tag exists by checking the cached tag list
- * Returns true if the tag exists, false if the tag doesn't exist
+ * Validates a Tagger tag against the same catalog the prompt context is built from
+ * (lib/tagger/cache.ts — /tmp on serverless). Fails CLOSED: with no catalog loaded we
+ * can't tell real tags from invented ones, and an invented tag zeroes the results,
+ * while dropping a real one only broadens them.
  */
-let localTaggerCatalogPromise: Promise<Map<"art" | "function", Set<string>>> | null = null;
-
-async function getLocalTaggerCatalog(): Promise<Map<"art" | "function", Set<string>>> {
-  if (!localTaggerCatalogPromise) {
-    localTaggerCatalogPromise = (async () => {
-      const filePath = path.join(process.cwd(), "data", "tagger-tags.json");
-      const raw = await fs.readFile(filePath, "utf-8");
-      const parsed = JSON.parse(raw) as {
-        art?: unknown;
-        function?: unknown;
-      };
-      const art = Array.isArray(parsed.art)
-        ? parsed.art.filter((v): v is string => typeof v === "string")
-        : [];
-      const func = Array.isArray(parsed.function)
-        ? parsed.function.filter((v): v is string => typeof v === "string")
-        : [];
-      return new Map<"art" | "function", Set<string>>([
-        ["art", new Set(art)],
-        ["function", new Set(func)],
-      ]);
-    })();
-  }
-  return localTaggerCatalogPromise;
-}
-
 export async function validateTaggerTag(
   type: "art" | "function",
   tag: string
 ): Promise<boolean> {
-  try {
-    const localCatalog = await getLocalTaggerCatalog();
-    const tagSet = localCatalog.get(type);
-    if (!tagSet) {
-      console.warn(`[Tagger Validation] No tags found for type: ${type}`);
-      return true; // Assume exists to avoid false positives
-    }
-
-    // Normalize to slug form (lowercase, spaces → hyphens) for comparison.
-    // Tagger display names use spaces ("pure draw") but the catalog and Scryfall
-    // queries both use hyphens ("pure-draw").
-    const normalizedTag = tag.toLowerCase().trim().replace(/\s+/g, "-");
-    for (const cachedTag of tagSet) {
-      if (cachedTag.toLowerCase().replace(/\s+/g, "-") === normalizedTag) {
-        return true;
-      }
-    }
-
-    // Debug: log when a tag is not found (helps diagnose cache issues)
-    console.log(
-      `[Tagger Validation] Tag "${tag}" (slug: "${normalizedTag}") not found in ${type} tags catalog. Catalog size: ${tagSet.size}`
-    );
-
+  await ensureTaggerTagCache().catch((error) =>
+    console.warn("[Tagger Validation] Tag catalog load failed:", error)
+  );
+  const tagSet = getTaggerTagCache()?.get(type);
+  if (!tagSet?.size) {
+    console.warn(`[Tagger Validation] No ${type} tag catalog loaded; rejecting "${tag}"`);
     return false;
-  } catch (error) {
-    // On file read errors, assume tag exists to avoid false positives
-    // We only want to regenerate if we're confident the tag doesn't exist
-    console.error(`Error validating tag ${type}:${tag}:`, error);
-    return true;
   }
+
+  let slugs = slugSets.get(tagSet);
+  if (!slugs) {
+    slugs = new Set([...tagSet].map(toSlug));
+    slugSets.set(tagSet, slugs);
+  }
+  if (slugs.has(toSlug(tag))) return true;
+
+  console.log(
+    `[Tagger Validation] Tag "${tag}" (slug: "${toSlug(tag)}") not found in ${type} tags catalog. Catalog size: ${tagSet.size}`
+  );
+  return false;
 }
 
 /**

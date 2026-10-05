@@ -1,0 +1,1505 @@
+{
+  "generatedAt": "2026-10-05",
+  "pages": [
+    {
+      "slug": "abzan-enchantments-that-make-tokens-for-commander",
+      "query": "abzan enchantments that make tokens for commander",
+      "scryfallQuery": "prefer:best (t:enchantment f:commander (function:repeatable-creature-tokens or function:repeatable-artifact-tokens or function:repeatable-noncreature-tokens or function:create-land-tokens) game:paper) id:wbg",
+      "total": 205
+    },
+    {
+      "slug": "abzan-graveyard-recursion-creatures-for-commander",
+      "query": "abzan graveyard recursion creatures for commander",
+      "scryfallQuery": "prefer:best id:wbg t:creature f:commander function:recursion game:paper",
+      "total": 725
+    },
+    {
+      "slug": "angel-tribal-payoffs-in-white-for-commander",
+      "query": "angel tribal payoffs in white for commander",
+      "scryfallQuery": "prefer:best id:w f:commander function:tribal-angel game:paper",
+      "total": 14
+    },
+    {
+      "slug": "artifact-mana-rocks-legal-in-pioneer-or-modern",
+      "query": "artifact mana rocks legal in pioneer or modern",
+      "scryfallQuery": "prefer:best t:artifact f:pioneer function:mana-rock game:paper",
+      "total": 146
+    },
+    {
+      "slug": "artifacts-that-create-treasure-tokens",
+      "query": "artifacts that create treasure tokens",
+      "scryfallQuery": "prefer:best t:artifact o:\"treasure\" (function:repeatable-token-generator or function:repeatable-artifact-tokens) game:paper",
+      "total": 32
+    },
+    {
+      "slug": "artifacts-that-produce-mana",
+      "query": "artifacts that produce mana",
+      "scryfallQuery": "prefer:best t:artifact function:mana-producer game:paper",
+      "total": 405
+    },
+    {
+      "slug": "artifacts-that-tap-to-produce-any-color-of-mana-for-commander",
+      "query": "artifacts that tap to produce any color of mana for commander",
+      "scryfallQuery": "prefer:best t:artifact f:commander function:manarock-any-color game:paper",
+      "total": 334
+    },
+    {
+      "slug": "artifacts-with-a-converted-mana-cost-of-0",
+      "query": "artifacts with a converted mana cost of 0",
+      "scryfallQuery": "prefer:best t:artifact mv=0 game:paper",
+      "total": 182
+    },
+    {
+      "slug": "artifacts-with-haste-and-an-activated-ability",
+      "query": "artifacts with haste and an activated ability",
+      "scryfallQuery": "prefer:best t:artifact kw:haste function:activated-ability game:paper",
+      "total": 26
+    },
+    {
+      "slug": "artifacts-with-mana-value-2",
+      "query": "artifacts with mana value 2",
+      "scryfallQuery": "prefer:best t:artifact mv=2 game:paper",
+      "total": 894
+    },
+    {
+      "slug": "artifacts-with-sword-art",
+      "query": "artifacts with sword art",
+      "scryfallQuery": "prefer:best t:artifact art:sword game:paper",
+      "total": 307
+    },
+    {
+      "slug": "atraxa-creatures-that-proliferate-for-commander",
+      "query": "atraxa creatures that proliferate for commander",
+      "scryfallQuery": "prefer:best (t:creature f:commander (function:pseudo-proliferate or function:repeatable-proliferate or function:synergy-proliferate or function:virtual-proliferate) game:paper) id:wubg",
+      "total": 60
+    },
+    {
+      "slug": "auras-that-draw-cards",
+      "query": "auras that draw cards",
+      "scryfallQuery": "prefer:best t:aura function:draw game:paper",
+      "total": 123
+    },
+    {
+      "slug": "auras-with-angel-art",
+      "query": "auras with angel art",
+      "scryfallQuery": "prefer:best art:angel game:paper",
+      "total": 598
+    },
+    {
+      "slug": "azorius-blink-cards-for-commander",
+      "query": "azorius blink cards for commander",
+      "scryfallQuery": "prefer:best id:wu f:commander function:blink game:paper",
+      "total": 155
+    },
+    {
+      "slug": "azorius-blink-support-for-commander",
+      "query": "azorius blink support for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:blink or function:support) game:paper) id:wu",
+      "total": 184
+    },
+    {
+      "slug": "azorius-cards-that-tap-creatures-for-commander",
+      "query": "azorius cards that tap creatures for commander",
+      "scryfallQuery": "prefer:best id:wu f:commander function:tap-creature game:paper",
+      "total": 557
+    },
+    {
+      "slug": "azorius-cards-with-bird-art",
+      "query": "azorius cards with bird art",
+      "scryfallQuery": "prefer:best id:wu art:bird game:paper",
+      "total": 1126
+    },
+    {
+      "slug": "azorius-legendary-creatures-that-draw-cards-when-they-enter-for-commander",
+      "query": "azorius legendary creatures that draw cards when they enter for commander",
+      "scryfallQuery": "prefer:best id:wu t:creature t:legendary f:commander o:/~[^.]*enter[^.]*draw/ game:paper",
+      "total": 14
+    },
+    {
+      "slug": "bant-enchantress-cards-for-commander",
+      "query": "bant enchantress cards for commander",
+      "scryfallQuery": "prefer:best id:wug f:commander function:enchantress game:paper",
+      "total": 19
+    },
+    {
+      "slug": "black-cards-illustrated-by-kev-walker",
+      "query": "black cards illustrated by kev walker",
+      "scryfallQuery": "prefer:best id:b a:\"Kev Walker\" game:paper",
+      "total": 137
+    },
+    {
+      "slug": "black-creatures-that-make-you-discard-when-they-enter",
+      "query": "black creatures that make you discard when they enter",
+      "scryfallQuery": "prefer:best id:b t:creature o:/~[^.]*enter[^.]*discard/ game:paper",
+      "total": 52
+    },
+    {
+      "slug": "black-creatures-with-flying-and-deathtouch",
+      "query": "black creatures with flying and deathtouch",
+      "scryfallQuery": "prefer:best id:b t:creature kw:flying kw:deathtouch game:paper",
+      "total": 23
+    },
+    {
+      "slug": "black-discard-spells-legal-in-legacy-or-modern",
+      "query": "black discard spells legal in legacy or modern",
+      "scryfallQuery": "prefer:best ((t:instant or t:sorcery) f:legacy function:discard game:paper) id:b",
+      "total": 158
+    },
+    {
+      "slug": "black-hand-disruption-under-2-mana-in-modern",
+      "query": "black hand disruption under 2 mana in modern",
+      "scryfallQuery": "prefer:best id:b mv<2 f:modern function:hand-disruption game:paper",
+      "total": 35
+    },
+    {
+      "slug": "black-sorceries-that-destroy-all-creatures-and-draw-cards",
+      "query": "black sorceries that destroy all creatures and draw cards",
+      "scryfallQuery": "prefer:best (t:sorcery (function:boardwipe or function:wrath-of-god) (function:draw-engine or function:repeatable-draw or function:pure-draw or function:impulse-draw or function:burst-draw or function:card-advantage) game:paper) id:b",
+      "total": 8
+    },
+    {
+      "slug": "blue-artifacts-with-flash-in-wubr-color-identity",
+      "query": "blue artifacts with flash in wubr color identity",
+      "scryfallQuery": "prefer:best id:wubr t:artifact kw:flash game:paper",
+      "total": 73
+    },
+    {
+      "slug": "blue-cards-illustrated-by-seb-mckinnon",
+      "query": "blue cards illustrated by seb mckinnon",
+      "scryfallQuery": "prefer:best id:u a:\"Seb McKinnon\" game:paper",
+      "total": 42
+    },
+    {
+      "slug": "blue-counterspells-legal-in-legacy-or-vintage",
+      "query": "blue counterspells legal in legacy or vintage",
+      "scryfallQuery": "prefer:best id:u f:legacy function:counterspell game:paper",
+      "total": 394
+    },
+    {
+      "slug": "blue-counterspells-that-also-cycle-or-draw",
+      "query": "blue counterspells that also cycle or draw",
+      "scryfallQuery": "prefer:best ((function:counterspell or function:cycle or function:draw) game:paper) id:u",
+      "total": 2578
+    },
+    {
+      "slug": "blue-creatures-with-flying-and-ward",
+      "query": "blue creatures with flying and ward",
+      "scryfallQuery": "prefer:best id:u t:creature kw:flying kw:ward game:paper",
+      "total": 20
+    },
+    {
+      "slug": "board-wipes-legal-in-standard-or-pioneer",
+      "query": "board wipes legal in standard or pioneer",
+      "scryfallQuery": "prefer:best f:standard (function:boardwipe or function:wrath-of-god) game:paper",
+      "total": 109
+    },
+    {
+      "slug": "board-wipes-with-mana-value-4",
+      "query": "board wipes with mana value 4",
+      "scryfallQuery": "prefer:best mv=4 (function:boardwipe or function:wrath-of-god) game:paper",
+      "total": 190
+    },
+    {
+      "slug": "boros-board-wipes-for-commander",
+      "query": "boros board wipes for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:boardwipe or function:wrath-of-god) game:paper) id:wr",
+      "total": 466
+    },
+    {
+      "slug": "boros-creatures-with-angel-art",
+      "query": "boros creatures with angel art",
+      "scryfallQuery": "prefer:best id:wr t:creature art:angel game:paper",
+      "total": 234
+    },
+    {
+      "slug": "breya-artifacts-that-deal-damage-when-they-enter-for-commander",
+      "query": "breya artifacts that deal damage when they enter for commander",
+      "scryfallQuery": "prefer:best id:wubr t:artifact f:commander o:/~[^.]*enter[^.]*deal[^.]*damage/ game:paper",
+      "total": 27
+    },
+    {
+      "slug": "cards-set-on-dominaria",
+      "query": "cards set on dominaria",
+      "scryfallQuery": "prefer:best art:dominaria game:paper",
+      "total": 6440
+    },
+    {
+      "slug": "cards-set-on-kamigawa",
+      "query": "cards set on kamigawa",
+      "scryfallQuery": "prefer:best art:kamigawa game:paper",
+      "total": 1058
+    },
+    {
+      "slug": "cards-set-on-ravnica",
+      "query": "cards set on ravnica",
+      "scryfallQuery": "prefer:best art:ravnica game:paper",
+      "total": 2566
+    },
+    {
+      "slug": "cards-set-on-zendikar",
+      "query": "cards set on zendikar",
+      "scryfallQuery": "prefer:best art:zendikar game:paper",
+      "total": 1525
+    },
+    {
+      "slug": "cards-that-create-treasure-tokens",
+      "query": "cards that create treasure tokens",
+      "scryfallQuery": "prefer:best o:\"treasure\" (function:repeatable-token-generator or function:repeatable-artifact-tokens) game:paper",
+      "total": 198
+    },
+    {
+      "slug": "cards-that-deal-damage-to-any-target",
+      "query": "cards that deal damage to any target",
+      "scryfallQuery": "prefer:best (function:burn-any or function:burn-creature or function:burn-player or function:burn-planeswalker or function:removal-burn or function:opponent-loses-life) game:paper",
+      "total": 3806
+    },
+    {
+      "slug": "cards-that-destroy-artifacts-or-enchantments",
+      "query": "cards that destroy artifacts or enchantments",
+      "scryfallQuery": "prefer:best (t:artifact or t:enchantment) function:removal-destroy game:paper",
+      "total": 233
+    },
+    {
+      "slug": "cards-that-draw-two-cards",
+      "query": "cards that draw two cards",
+      "scryfallQuery": "prefer:best o:\"draw\" o:\"two cards\" game:paper",
+      "total": 497
+    },
+    {
+      "slug": "cards-that-draw-you-a-card-and-gain-3-life",
+      "query": "cards that draw you a card and gain 3 life",
+      "scryfallQuery": "prefer:best o:\"draw\" o:\"gain\" o:\"3 life\" game:paper",
+      "total": 54
+    },
+    {
+      "slug": "cards-that-exile-a-creature",
+      "query": "cards that exile a creature",
+      "scryfallQuery": "prefer:best (function:removal-creature or function:removal-creature-burn or function:removal-creature-fight or function:removal-exile or function:removal-destroy or function:spot-removal) game:paper",
+      "total": 6266
+    },
+    {
+      "slug": "cards-that-exile-cards-from-graveyards-at-instant-speed",
+      "query": "cards that exile cards from graveyards at instant speed",
+      "scryfallQuery": "prefer:best kw:flash o:\"exile\" o:\"graveyard\" game:paper",
+      "total": 18
+    },
+    {
+      "slug": "cards-that-gain-life-and-draw-a-card",
+      "query": "cards that gain life and draw a card",
+      "scryfallQuery": "prefer:best (function:lifegain or function:lifegain-matters or function:soul-warden-ability or function:pridemate) (function:draw-engine or function:repeatable-draw or function:pure-draw or function:impulse-draw or function:burst-draw or function:card-advantage) game:paper",
+      "total": 470
+    },
+    {
+      "slug": "cards-that-give-hexproof",
+      "query": "cards that give hexproof",
+      "scryfallQuery": "prefer:best function:gives-hexproof game:paper",
+      "total": 157
+    },
+    {
+      "slug": "cards-that-give-indestructible",
+      "query": "cards that give indestructible",
+      "scryfallQuery": "prefer:best function:gives-indestructible game:paper",
+      "total": 268
+    },
+    {
+      "slug": "cards-that-return-a-creature-from-the-graveyard",
+      "query": "cards that return a creature from the graveyard",
+      "scryfallQuery": "prefer:best (function:reanimate or function:reanimate-creature or function:reanimate-from-any) game:paper",
+      "total": 1015
+    },
+    {
+      "slug": "cards-that-search-your-library-for-a-land",
+      "query": "cards that search your library for a land",
+      "scryfallQuery": "prefer:best function:land-ramp game:paper",
+      "total": 599
+    },
+    {
+      "slug": "cards-with-affinity",
+      "query": "cards with affinity",
+      "scryfallQuery": "prefer:best kw:affinity game:paper",
+      "total": 75
+    },
+    {
+      "slug": "cards-with-angel-art",
+      "query": "cards with angel art",
+      "scryfallQuery": "prefer:best art:angel game:paper",
+      "total": 598
+    },
+    {
+      "slug": "cards-with-bird-art",
+      "query": "cards with bird art",
+      "scryfallQuery": "prefer:best art:bird game:paper",
+      "total": 2291
+    },
+    {
+      "slug": "cards-with-book-art",
+      "query": "cards with book art",
+      "scryfallQuery": "prefer:best art:book game:paper",
+      "total": 842
+    },
+    {
+      "slug": "cards-with-cascade",
+      "query": "cards with cascade",
+      "scryfallQuery": "prefer:best kw:cascade game:paper",
+      "total": 38
+    },
+    {
+      "slug": "cards-with-castle-art",
+      "query": "cards with castle art",
+      "scryfallQuery": "prefer:best art:castle game:paper",
+      "total": 216
+    },
+    {
+      "slug": "cards-with-cat-art",
+      "query": "cards with cat art",
+      "scryfallQuery": "prefer:best art:cat game:paper",
+      "total": 991
+    },
+    {
+      "slug": "cards-with-convoke",
+      "query": "cards with convoke",
+      "scryfallQuery": "prefer:best kw:convoke game:paper",
+      "total": 104
+    },
+    {
+      "slug": "cards-with-crown-art",
+      "query": "cards with crown art",
+      "scryfallQuery": "prefer:best art:crown game:paper",
+      "total": 218
+    },
+    {
+      "slug": "cards-with-deathtouch-and-lifelink",
+      "query": "cards with deathtouch and lifelink",
+      "scryfallQuery": "prefer:best kw:deathtouch kw:lifelink game:paper",
+      "total": 30
+    },
+    {
+      "slug": "cards-with-delve",
+      "query": "cards with delve",
+      "scryfallQuery": "prefer:best kw:delve game:paper",
+      "total": 28
+    },
+    {
+      "slug": "cards-with-demon-art",
+      "query": "cards with demon art",
+      "scryfallQuery": "prefer:best art:demon game:paper",
+      "total": 502
+    },
+    {
+      "slug": "cards-with-disturb",
+      "query": "cards with disturb",
+      "scryfallQuery": "prefer:best kw:disturb game:paper",
+      "total": 25
+    },
+    {
+      "slug": "cards-with-dragon-art",
+      "query": "cards with dragon art",
+      "scryfallQuery": "prefer:best art:dragon game:paper",
+      "total": 1120
+    },
+    {
+      "slug": "cards-with-elf-art",
+      "query": "cards with elf art",
+      "scryfallQuery": "prefer:best art:elf game:paper",
+      "total": 1424
+    },
+    {
+      "slug": "cards-with-escape",
+      "query": "cards with escape",
+      "scryfallQuery": "prefer:best function:gives-escape game:paper",
+      "total": 6
+    },
+    {
+      "slug": "cards-with-fire-art",
+      "query": "cards with fire art",
+      "scryfallQuery": "prefer:best art:fire game:paper",
+      "total": 3122
+    },
+    {
+      "slug": "cards-with-flash-and-flying",
+      "query": "cards with flash and flying",
+      "scryfallQuery": "prefer:best kw:flash kw:flying game:paper",
+      "total": 138
+    },
+    {
+      "slug": "cards-with-flashback",
+      "query": "cards with flashback",
+      "scryfallQuery": "prefer:best kw:flashback game:paper",
+      "total": 216
+    },
+    {
+      "slug": "cards-with-flying-and-lifelink",
+      "query": "cards with flying and lifelink",
+      "scryfallQuery": "prefer:best kw:flying kw:lifelink game:paper",
+      "total": 105
+    },
+    {
+      "slug": "cards-with-forest-art",
+      "query": "cards with forest art",
+      "scryfallQuery": "prefer:best art:forest game:paper",
+      "total": 1525
+    },
+    {
+      "slug": "cards-with-foretell",
+      "query": "cards with foretell",
+      "scryfallQuery": "prefer:best function:gives-foretell game:paper",
+      "total": 3
+    },
+    {
+      "slug": "cards-with-goblin-art",
+      "query": "cards with goblin art",
+      "scryfallQuery": "prefer:best art:goblin game:paper",
+      "total": 1258
+    },
+    {
+      "slug": "cards-with-haste-and-trample",
+      "query": "cards with haste and trample",
+      "scryfallQuery": "prefer:best kw:haste kw:trample game:paper",
+      "total": 97
+    },
+    {
+      "slug": "cards-with-hexproof-and-indestructible",
+      "query": "cards with hexproof and indestructible",
+      "scryfallQuery": "prefer:best kw:hexproof kw:indestructible game:paper",
+      "total": 3
+    },
+    {
+      "slug": "cards-with-improvise",
+      "query": "cards with improvise",
+      "scryfallQuery": "prefer:best function:improvise game:paper",
+      "total": 23
+    },
+    {
+      "slug": "cards-with-initiative",
+      "query": "cards with initiative",
+      "scryfallQuery": "prefer:best o:\"cards\" o:\"with\" o:\"initiative\" game:paper",
+      "total": 3
+    },
+    {
+      "slug": "cards-with-investigate",
+      "query": "cards with investigate",
+      "scryfallQuery": "prefer:best function:synergy-investigate game:paper",
+      "total": 1
+    },
+    {
+      "slug": "cards-with-kicker",
+      "query": "cards with kicker",
+      "scryfallQuery": "prefer:best kw:kicker game:paper",
+      "total": 229
+    },
+    {
+      "slug": "cards-with-knight-art",
+      "query": "cards with knight art",
+      "scryfallQuery": "prefer:best art:knight game:paper",
+      "total": 409
+    },
+    {
+      "slug": "cards-with-lantern-art",
+      "query": "cards with lantern art",
+      "scryfallQuery": "prefer:best art:lantern game:paper",
+      "total": 426
+    },
+    {
+      "slug": "cards-with-learn",
+      "query": "cards with learn",
+      "scryfallQuery": "prefer:best o:\"learn\" game:paper",
+      "total": 22
+    },
+    {
+      "slug": "cards-with-lightning-art",
+      "query": "cards with lightning art",
+      "scryfallQuery": "prefer:best art:lightning game:paper",
+      "total": 950
+    },
+    {
+      "slug": "cards-with-magecraft",
+      "query": "cards with magecraft",
+      "scryfallQuery": "prefer:best function:magecraft game:paper",
+      "total": 31
+    },
+    {
+      "slug": "cards-with-mana-value-1-that-draw-cards",
+      "query": "cards with mana value 1 that draw cards",
+      "scryfallQuery": "prefer:best mv=1 function:draw game:paper",
+      "total": 344
+    },
+    {
+      "slug": "cards-with-manifest",
+      "query": "cards with manifest",
+      "scryfallQuery": "prefer:best function:synergy-manifest game:paper",
+      "total": 2
+    },
+    {
+      "slug": "cards-with-menace-and-lifelink",
+      "query": "cards with menace and lifelink",
+      "scryfallQuery": "prefer:best kw:menace kw:lifelink game:paper",
+      "total": 14
+    },
+    {
+      "slug": "cards-with-merfolk-art",
+      "query": "cards with merfolk art",
+      "scryfallQuery": "prefer:best art:merfolk game:paper",
+      "total": 588
+    },
+    {
+      "slug": "cards-with-monarch",
+      "query": "cards with monarch",
+      "scryfallQuery": "prefer:best function:monarch-matters game:paper",
+      "total": 44
+    },
+    {
+      "slug": "cards-with-moon-art",
+      "query": "cards with moon art",
+      "scryfallQuery": "prefer:best art:moon game:paper",
+      "total": 1339
+    },
+    {
+      "slug": "cards-with-morph",
+      "query": "cards with morph",
+      "scryfallQuery": "prefer:best function:synergy-morph game:paper",
+      "total": 2
+    },
+    {
+      "slug": "cards-with-mountain-art",
+      "query": "cards with mountain art",
+      "scryfallQuery": "prefer:best art:mountain game:paper",
+      "total": 848
+    },
+    {
+      "slug": "cards-with-ocean-art",
+      "query": "cards with ocean art",
+      "scryfallQuery": "prefer:best art:ocean game:paper",
+      "total": 362
+    },
+    {
+      "slug": "cards-with-overload",
+      "query": "cards with overload",
+      "scryfallQuery": "prefer:best kw:overload game:paper",
+      "total": 27
+    },
+    {
+      "slug": "cards-with-prowess",
+      "query": "cards with prowess",
+      "scryfallQuery": "prefer:best kw:prowess game:paper",
+      "total": 96
+    },
+    {
+      "slug": "cards-with-shield-art",
+      "query": "cards with shield art",
+      "scryfallQuery": "prefer:best art:shield game:paper",
+      "total": 1119
+    },
+    {
+      "slug": "cards-with-skull-art",
+      "query": "cards with skull art",
+      "scryfallQuery": "prefer:best art:skull game:paper",
+      "total": 1298
+    },
+    {
+      "slug": "cards-with-snake-art",
+      "query": "cards with snake art",
+      "scryfallQuery": "prefer:best art:snake game:paper",
+      "total": 448
+    },
+    {
+      "slug": "cards-with-soldier-art",
+      "query": "cards with soldier art",
+      "scryfallQuery": "prefer:best art:soldier game:paper",
+      "total": 407
+    },
+    {
+      "slug": "cards-with-spider-art",
+      "query": "cards with spider art",
+      "scryfallQuery": "prefer:best art:spider game:paper",
+      "total": 188
+    },
+    {
+      "slug": "cards-with-storm",
+      "query": "cards with storm",
+      "scryfallQuery": "prefer:best (kw:storm or function:storm-like or function:storm-count-matters or function:gives-storm) game:paper",
+      "total": 73
+    },
+    {
+      "slug": "cards-with-storm-art",
+      "query": "cards with storm art",
+      "scryfallQuery": "prefer:best art:storm game:paper",
+      "total": 87
+    },
+    {
+      "slug": "cards-with-sun-art",
+      "query": "cards with sun art",
+      "scryfallQuery": "prefer:best art:sun game:paper",
+      "total": 653
+    },
+    {
+      "slug": "cards-with-surveil",
+      "query": "cards with surveil",
+      "scryfallQuery": "prefer:best function:surveil game:paper",
+      "total": 327
+    },
+    {
+      "slug": "cards-with-suspend",
+      "query": "cards with suspend",
+      "scryfallQuery": "prefer:best kw:suspend game:paper",
+      "total": 70
+    },
+    {
+      "slug": "cards-with-sword-art",
+      "query": "cards with sword art",
+      "scryfallQuery": "prefer:best art:sword game:paper",
+      "total": 3946
+    },
+    {
+      "slug": "cards-with-throne-art",
+      "query": "cards with throne art",
+      "scryfallQuery": "prefer:best art:throne game:paper",
+      "total": 157
+    },
+    {
+      "slug": "cards-with-vampire-art",
+      "query": "cards with vampire art",
+      "scryfallQuery": "prefer:best art:vampire game:paper",
+      "total": 737
+    },
+    {
+      "slug": "cards-with-vigilance-and-lifelink",
+      "query": "cards with vigilance and lifelink",
+      "scryfallQuery": "prefer:best kw:vigilance kw:lifelink game:paper",
+      "total": 28
+    },
+    {
+      "slug": "cards-with-wizard-art",
+      "query": "cards with wizard art",
+      "scryfallQuery": "prefer:best art:wizard game:paper",
+      "total": 275
+    },
+    {
+      "slug": "cards-with-wolf-art",
+      "query": "cards with wolf art",
+      "scryfallQuery": "prefer:best art:wolf game:paper",
+      "total": 336
+    },
+    {
+      "slug": "cards-with-zombie-art",
+      "query": "cards with zombie art",
+      "scryfallQuery": "prefer:best art:zombie game:paper",
+      "total": 1014
+    },
+    {
+      "slug": "cheap-removal-spells-under-2-mana",
+      "query": "cheap removal spells under 2 mana",
+      "scryfallQuery": "prefer:best (t:instant or t:sorcery) mv<2 (function:removal or function:spot-removal or function:repeatable-removal or function:oblivion-ring-effect) game:paper",
+      "total": 394
+    },
+    {
+      "slug": "commander-staples-that-draw-cards",
+      "query": "commander staples that draw cards",
+      "scryfallQuery": "prefer:best f:commander function:draw game:paper",
+      "total": 4081
+    },
+    {
+      "slug": "creature-tutors-legal-in-legacy-or-vintage",
+      "query": "creature tutors legal in legacy or vintage",
+      "scryfallQuery": "prefer:best t:creature f:legacy function:tutor-creature game:paper",
+      "total": 101
+    },
+    {
+      "slug": "creatures-that-copy-spells-you-cast",
+      "query": "creatures that copy spells you cast",
+      "scryfallQuery": "prefer:best t:creature o:/~[^.]*cast[^.]*copy[^.]*spell/ game:paper",
+      "total": 1
+    },
+    {
+      "slug": "creatures-that-create-tokens",
+      "query": "creatures that create tokens",
+      "scryfallQuery": "prefer:best t:creature (function:repeatable-token-generator or function:repeatable-creature-tokens or function:young-pyromancer-ability) game:paper",
+      "total": 1169
+    },
+    {
+      "slug": "creatures-that-create-tokens-when-they-attack",
+      "query": "creatures that create tokens when they attack",
+      "scryfallQuery": "prefer:best t:creature o:/~[^.]*attack[^.]*create/ game:paper",
+      "total": 103
+    },
+    {
+      "slug": "creatures-that-draw-a-card-when-they-die",
+      "query": "creatures that draw a card when they die",
+      "scryfallQuery": "prefer:best t:creature o:/~[^.]*die[^.]*draw/ game:paper",
+      "total": 70
+    },
+    {
+      "slug": "creatures-that-gain-life-when-another-creature-dies",
+      "query": "creatures that gain life when another creature dies",
+      "scryfallQuery": "prefer:best t:creature o:/(?<!this )creature[^.]*die[^.]*gain[^.]*life/ game:paper",
+      "total": 46
+    },
+    {
+      "slug": "creatures-with-4-power-and-flying-for-under-4-mana",
+      "query": "creatures with 4 power and flying for under 4 mana",
+      "scryfallQuery": "prefer:best t:creature pow=4 mv<4 kw:flying game:paper",
+      "total": 29
+    },
+    {
+      "slug": "creatures-with-double-strike",
+      "query": "creatures with double strike",
+      "scryfallQuery": "prefer:best t:creature kw:double-strike game:paper",
+      "total": 119
+    },
+    {
+      "slug": "creatures-with-dragon-art",
+      "query": "creatures with dragon art",
+      "scryfallQuery": "prefer:best t:creature art:dragon game:paper",
+      "total": 588
+    },
+    {
+      "slug": "creatures-with-first-strike",
+      "query": "creatures with first strike",
+      "scryfallQuery": "prefer:best t:creature kw:first-strike game:paper",
+      "total": 384
+    },
+    {
+      "slug": "creatures-with-lifelink",
+      "query": "creatures with lifelink",
+      "scryfallQuery": "prefer:best t:creature kw:lifelink game:paper",
+      "total": 366
+    },
+    {
+      "slug": "creatures-with-mana-value-3-and-flying",
+      "query": "creatures with mana value 3 and flying",
+      "scryfallQuery": "prefer:best t:creature mv=3 kw:flying game:paper",
+      "total": 620
+    },
+    {
+      "slug": "creatures-with-power-5-or-more-and-trample",
+      "query": "creatures with power 5 or more and trample",
+      "scryfallQuery": "prefer:best t:creature pow>=5 kw:trample game:paper",
+      "total": 487
+    },
+    {
+      "slug": "creatures-with-reach",
+      "query": "creatures with reach",
+      "scryfallQuery": "prefer:best t:creature kw:reach game:paper",
+      "total": 429
+    },
+    {
+      "slug": "creatures-with-toughness-1-and-deathtouch",
+      "query": "creatures with toughness 1 and deathtouch",
+      "scryfallQuery": "prefer:best t:creature tou=1 kw:deathtouch game:paper",
+      "total": 75
+    },
+    {
+      "slug": "creatures-with-trample",
+      "query": "creatures with trample",
+      "scryfallQuery": "prefer:best t:creature kw:trample game:paper",
+      "total": 987
+    },
+    {
+      "slug": "creatures-with-vigilance",
+      "query": "creatures with vigilance",
+      "scryfallQuery": "prefer:best t:creature kw:vigilance game:paper",
+      "total": 719
+    },
+    {
+      "slug": "dimir-cards-with-zombie-art",
+      "query": "dimir cards with zombie art",
+      "scryfallQuery": "prefer:best id:ub art:zombie game:paper",
+      "total": 747
+    },
+    {
+      "slug": "dimir-creatures-that-draw-cards-when-they-die-for-commander",
+      "query": "dimir creatures that draw cards when they die for commander",
+      "scryfallQuery": "prefer:best id:ub t:creature f:commander o:/~[^.]*die[^.]*draw/ game:paper",
+      "total": 47
+    },
+    {
+      "slug": "dimir-legendary-creatures-with-shadow-art",
+      "query": "dimir legendary creatures with shadow art",
+      "scryfallQuery": "prefer:best id:ub t:creature t:legendary art:shadow game:paper",
+      "total": 7
+    },
+    {
+      "slug": "dimir-removal-spells-for-commander",
+      "query": "dimir removal spells for commander",
+      "scryfallQuery": "prefer:best ((t:instant or t:sorcery) f:commander (function:removal or function:spot-removal or function:repeatable-removal or function:oblivion-ring-effect) game:paper) id:ub",
+      "total": 977
+    },
+    {
+      "slug": "dimir-removal-spells-for-commander-under-3-mana",
+      "query": "dimir removal spells for commander under 3 mana",
+      "scryfallQuery": "prefer:best ((t:instant or t:sorcery) mv<3 f:commander (function:removal or function:spot-removal or function:repeatable-removal or function:oblivion-ring-effect) game:paper) id:ub",
+      "total": 337
+    },
+    {
+      "slug": "dinosaur-tribal-payoffs-in-naya-for-commander",
+      "query": "dinosaur tribal payoffs in naya for commander",
+      "scryfallQuery": "prefer:best id:rwg f:commander function:tribal-dinosaur game:paper",
+      "total": 54
+    },
+    {
+      "slug": "dragon-tribal-synergies-for-commander",
+      "query": "dragon tribal synergies for commander",
+      "scryfallQuery": "prefer:best f:commander function:tribal-dragon game:paper",
+      "total": 124
+    },
+    {
+      "slug": "elf-tribal-payoffs-in-legacy",
+      "query": "elf tribal payoffs in legacy",
+      "scryfallQuery": "prefer:best f:legacy function:tribal-elf game:paper",
+      "total": 122
+    },
+    {
+      "slug": "enchantments-that-draw-cards",
+      "query": "enchantments that draw cards",
+      "scryfallQuery": "prefer:best t:enchantment (function:draw-engine or function:repeatable-draw or function:pure-draw or function:impulse-draw or function:burst-draw or function:card-advantage) game:paper",
+      "total": 696
+    },
+    {
+      "slug": "enchantments-that-give-your-creatures-haste",
+      "query": "enchantments that give your creatures haste",
+      "scryfallQuery": "prefer:best t:enchantment function:gives-haste game:paper",
+      "total": 88
+    },
+    {
+      "slug": "enchantments-that-make-tokens",
+      "query": "enchantments that make tokens",
+      "scryfallQuery": "prefer:best t:enchantment (function:repeatable-creature-tokens or function:repeatable-artifact-tokens or function:repeatable-noncreature-tokens or function:create-land-tokens) game:paper",
+      "total": 313
+    },
+    {
+      "slug": "enchantments-that-trigger-when-you-cast-a-spell",
+      "query": "enchantments that trigger when you cast a spell",
+      "scryfallQuery": "prefer:best t:enchantment function:cast-trigger game:paper",
+      "total": 259
+    },
+    {
+      "slug": "enchantments-with-mana-value-3",
+      "query": "enchantments with mana value 3",
+      "scryfallQuery": "prefer:best t:enchantment mv=3 game:paper",
+      "total": 1097
+    },
+    {
+      "slug": "enchantments-with-moon-art",
+      "query": "enchantments with moon art",
+      "scryfallQuery": "prefer:best t:enchantment art:moon game:paper",
+      "total": 144
+    },
+    {
+      "slug": "equipment-that-boosts-power",
+      "query": "equipment that boosts power",
+      "scryfallQuery": "prefer:best t:artifact t:equipment function:power-boost-to-all game:paper",
+      "total": 5
+    },
+    {
+      "slug": "equipment-with-sword-art",
+      "query": "equipment with sword art",
+      "scryfallQuery": "prefer:best t:equipment art:sword game:paper",
+      "total": 146
+    },
+    {
+      "slug": "esper-artifact-synergies-for-commander",
+      "query": "esper artifact synergies for commander",
+      "scryfallQuery": "prefer:best (id:w or id:u or id:b) f:commander function:artifact-matters game:paper",
+      "total": 629
+    },
+    {
+      "slug": "esper-artifacts-with-clockwork-art",
+      "query": "esper artifacts with clockwork art",
+      "scryfallQuery": "prefer:best id:wub t:artifact art:clockwork game:paper",
+      "total": 5
+    },
+    {
+      "slug": "esper-stax-pieces-for-commander",
+      "query": "esper stax pieces for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:tax or function:tax-attack or function:tax-block or function:cast-tax or function:kismet-effect) game:paper) id:wub",
+      "total": 322
+    },
+    {
+      "slug": "goblin-creatures-legal-in-modern-or-pioneer",
+      "query": "goblin creatures legal in modern or pioneer",
+      "scryfallQuery": "prefer:best t:creature t:goblin f:modern game:paper",
+      "total": 385
+    },
+    {
+      "slug": "golgari-aristocrats-payoffs-for-commander",
+      "query": "golgari aristocrats payoffs for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:sacrifice-outlet or function:sac-outlet or function:death-trigger or function:death-trigger-self or function:synergy-sacrifice or function:blood-artist-ability) game:paper) id:bg",
+      "total": 1660
+    },
+    {
+      "slug": "golgari-cards-that-create-tokens-for-commander",
+      "query": "golgari cards that create tokens for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:repeatable-token-generator or function:repeatable-creature-tokens or function:young-pyromancer-ability) game:paper) id:bg",
+      "total": 664
+    },
+    {
+      "slug": "golgari-creatures-with-spider-art",
+      "query": "golgari creatures with spider art",
+      "scryfallQuery": "prefer:best id:bg t:creature art:spider game:paper",
+      "total": 105
+    },
+    {
+      "slug": "golgari-enchantments-that-return-creatures-from-the-graveyard-for-commander",
+      "query": "golgari enchantments that return creatures from the graveyard for commander",
+      "scryfallQuery": "prefer:best (t:enchantment f:commander (function:reanimate or function:reanimate-creature or function:reanimate-from-any) game:paper) id:bg",
+      "total": 46
+    },
+    {
+      "slug": "golgari-graveyard-recursion-for-commander",
+      "query": "golgari graveyard recursion for commander",
+      "scryfallQuery": "prefer:best id:bg f:commander function:recursion game:paper",
+      "total": 1069
+    },
+    {
+      "slug": "green-cards-illustrated-by-terese-nielsen",
+      "query": "green cards illustrated by terese nielsen",
+      "scryfallQuery": "prefer:best id:g a:\"Terese Nielsen\" game:paper",
+      "total": 58
+    },
+    {
+      "slug": "green-creatures-that-give-you-mana-when-they-enter",
+      "query": "green creatures that give you mana when they enter",
+      "scryfallQuery": "prefer:best id:g t:creature o:/~[^.]*enter[^.]*add/ game:paper",
+      "total": 6
+    },
+    {
+      "slug": "green-creatures-that-search-for-a-land-when-they-enter",
+      "query": "green creatures that search for a land when they enter",
+      "scryfallQuery": "prefer:best id:g t:creature o:\"land\" o:/~[^.]*enter[^.]*search/ game:paper",
+      "total": 46
+    },
+    {
+      "slug": "green-creatures-with-trample-and-reach",
+      "query": "green creatures with trample and reach",
+      "scryfallQuery": "prefer:best id:g t:creature kw:trample kw:reach game:paper",
+      "total": 37
+    },
+    {
+      "slug": "green-ramp-spells-legal-in-modern-or-commander",
+      "query": "green ramp spells legal in modern or commander",
+      "scryfallQuery": "prefer:best ((t:instant or t:sorcery) f:modern (function:ramp or function:mana-ramp) game:paper) id:g",
+      "total": 107
+    },
+    {
+      "slug": "grixis-reanimator-cards-for-commander",
+      "query": "grixis reanimator cards for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:reanimate or function:reanimate-creature or function:reanimate-permanent or function:reanimate-from-any) game:paper) id:ubr",
+      "total": 553
+    },
+    {
+      "slug": "grixis-sorceries-with-skull-art",
+      "query": "grixis sorceries with skull art",
+      "scryfallQuery": "prefer:best id:ubr t:sorcery art:skull game:paper",
+      "total": 120
+    },
+    {
+      "slug": "gruul-cards-with-haste-for-commander",
+      "query": "gruul cards with haste for commander",
+      "scryfallQuery": "prefer:best id:rg kw:haste f:commander game:paper",
+      "total": 440
+    },
+    {
+      "slug": "gruul-creatures-with-trample-for-commander",
+      "query": "gruul creatures with trample for commander",
+      "scryfallQuery": "prefer:best id:rg t:creature kw:trample f:commander game:paper",
+      "total": 689
+    },
+    {
+      "slug": "gruul-creatures-with-wolf-art",
+      "query": "gruul creatures with wolf art",
+      "scryfallQuery": "prefer:best id:rg t:creature art:wolf game:paper",
+      "total": 155
+    },
+    {
+      "slug": "gruul-landfall-creatures-for-commander",
+      "query": "gruul landfall creatures for commander",
+      "scryfallQuery": "prefer:best id:rg t:creature f:commander function:landfall game:paper",
+      "total": 110
+    },
+    {
+      "slug": "instants-that-cost-1-mana-and-draw-a-card",
+      "query": "instants that cost 1 mana and draw a card",
+      "scryfallQuery": "prefer:best t:instant mv=1 (function:draw-engine or function:repeatable-draw or function:pure-draw or function:impulse-draw or function:burst-draw or function:card-advantage) game:paper",
+      "total": 105
+    },
+    {
+      "slug": "instants-that-exile-a-creature",
+      "query": "instants that exile a creature",
+      "scryfallQuery": "prefer:best t:instant (function:removal-creature or function:removal-creature-burn or function:removal-creature-fight or function:removal-exile or function:removal-destroy or function:spot-removal) game:paper",
+      "total": 1537
+    },
+    {
+      "slug": "instants-with-lightning-art",
+      "query": "instants with lightning art",
+      "scryfallQuery": "prefer:best t:instant art:lightning game:paper",
+      "total": 174
+    },
+    {
+      "slug": "instants-with-mana-value-1",
+      "query": "instants with mana value 1",
+      "scryfallQuery": "prefer:best t:instant mv=1 game:paper",
+      "total": 782
+    },
+    {
+      "slug": "instants-with-storm-that-draw-cards",
+      "query": "instants with storm that draw cards",
+      "scryfallQuery": "prefer:best t:instant (kw:storm or function:storm-like or function:storm-count-matters or function:gives-storm) (function:draw-engine or function:repeatable-draw or function:pure-draw or function:impulse-draw or function:burst-draw or function:card-advantage) game:paper",
+      "total": 2
+    },
+    {
+      "slug": "izzet-cards-that-draw-cards-for-commander",
+      "query": "izzet cards that draw cards for commander",
+      "scryfallQuery": "prefer:best id:ur f:commander function:draw game:paper",
+      "total": 2015
+    },
+    {
+      "slug": "izzet-spellslinger-cards-for-commander",
+      "query": "izzet spellslinger cards for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:copy-spell or function:affinity-for-spells or function:second-spell-matters or function:prowess-anthem or function:gains-prowess or function:gives-prowess or function:grants-prowess or function:storm-like or o:\"whenever you cast an instant or sorcery\" or o:\"whenever a player casts an instant or sorcery\" or o:\"whenever you cast an instant\" or o:\"whenever a player casts an instant\" or o:\"whenever you cast a sorcery\" or o:\"whenever a player casts a sorcery\" or o:\"whenever a player casts a spell\" or o:\"whenever you cast a spell\" or kw:prowess) game:paper) id:ur",
+      "total": 499
+    },
+    {
+      "slug": "izzet-spellslinger-payoffs-for-commander",
+      "query": "izzet spellslinger payoffs for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:copy-spell or function:affinity-for-spells or function:second-spell-matters or function:prowess-anthem or function:gains-prowess or function:gives-prowess or function:grants-prowess or function:storm-like or o:\"whenever you cast an instant or sorcery\" or o:\"whenever a player casts an instant or sorcery\" or o:\"whenever you cast an instant\" or o:\"whenever a player casts an instant\" or o:\"whenever you cast a sorcery\" or o:\"whenever a player casts a sorcery\" or o:\"whenever a player casts a spell\" or o:\"whenever you cast a spell\" or kw:prowess) game:paper) id:ur",
+      "total": 499
+    },
+    {
+      "slug": "jeskai-instants-that-draw-two-or-more-cards-for-commander",
+      "query": "jeskai instants that draw two or more cards for commander",
+      "scryfallQuery": "prefer:best id:wur t:instant mv>=0 f:commander o:\"draw\" o:\"cards\" game:paper",
+      "total": 161
+    },
+    {
+      "slug": "jund-legendary-creatures-with-trample-and-haste-for-commander",
+      "query": "jund legendary creatures with trample and haste for commander",
+      "scryfallQuery": "prefer:best id:brg t:creature t:legendary kw:trample kw:haste f:commander game:paper",
+      "total": 22
+    },
+    {
+      "slug": "jund-midrange-value-creatures-for-commander",
+      "query": "jund midrange value creatures for commander",
+      "scryfallQuery": "prefer:best id:brg t:creature f:commander function:mana-value-matters game:paper",
+      "total": 219
+    },
+    {
+      "slug": "jund-sacrifice-token-makers-for-commander",
+      "query": "jund sacrifice token makers for commander",
+      "scryfallQuery": "prefer:best id:brg f:commander function:sacrifice-outlet-token game:paper",
+      "total": 28
+    },
+    {
+      "slug": "jund-sorceries-with-dragon-art",
+      "query": "jund sorceries with dragon art",
+      "scryfallQuery": "prefer:best id:brg t:sorcery art:dragon game:paper",
+      "total": 102
+    },
+    {
+      "slug": "land-fetch-spells-legal-in-modern-or-legacy",
+      "query": "land fetch spells legal in modern or legacy",
+      "scryfallQuery": "prefer:best (t:instant or t:sorcery) f:modern o:\"search\" o:\"land\" game:paper",
+      "total": 128
+    },
+    {
+      "slug": "lands-that-produce-two-colors",
+      "query": "lands that produce two colors",
+      "scryfallQuery": "prefer:best t:land function:dual-land game:paper",
+      "total": 445
+    },
+    {
+      "slug": "legacy-free-counterspells",
+      "query": "legacy free counterspells",
+      "scryfallQuery": "prefer:best mv=0 f:legacy function:counterspell game:paper",
+      "total": 2
+    },
+    {
+      "slug": "legendary-creatures-with-castle-art",
+      "query": "legendary creatures with castle art",
+      "scryfallQuery": "prefer:best t:creature t:legendary art:castle game:paper",
+      "total": 23
+    },
+    {
+      "slug": "legendary-creatures-with-deathtouch",
+      "query": "legendary creatures with deathtouch",
+      "scryfallQuery": "prefer:best t:creature t:legendary kw:deathtouch game:paper",
+      "total": 103
+    },
+    {
+      "slug": "legendary-creatures-with-flying",
+      "query": "legendary creatures with flying",
+      "scryfallQuery": "prefer:best t:creature t:legendary kw:flying game:paper",
+      "total": 614
+    },
+    {
+      "slug": "legendary-creatures-with-haste",
+      "query": "legendary creatures with haste",
+      "scryfallQuery": "prefer:best t:creature t:legendary kw:haste game:paper",
+      "total": 189
+    },
+    {
+      "slug": "legendary-creatures-with-power-2-or-less-for-commander",
+      "query": "legendary creatures with power 2 or less for commander",
+      "scryfallQuery": "prefer:best t:creature t:legendary pow<=2 f:commander game:paper",
+      "total": 1424
+    },
+    {
+      "slug": "mardu-reanimation-targets-for-commander",
+      "query": "mardu reanimation targets for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:reanimate or function:reanimate-creature or function:reanimate-permanent or function:reanimate-from-any) game:paper) id:wrb",
+      "total": 725
+    },
+    {
+      "slug": "merfolk-tribal-support-cards-in-modern",
+      "query": "merfolk tribal support cards in modern",
+      "scryfallQuery": "prefer:best f:modern (function:tribal-merfolk or function:support) game:paper",
+      "total": 109
+    },
+    {
+      "slug": "modern-artifacts-that-create-treasure-tokens",
+      "query": "modern artifacts that create treasure tokens",
+      "scryfallQuery": "prefer:best t:artifact f:modern o:\"treasure\" (function:repeatable-token-generator or function:repeatable-artifact-tokens) game:paper",
+      "total": 18
+    },
+    {
+      "slug": "modern-board-wipes",
+      "query": "modern board wipes",
+      "scryfallQuery": "prefer:best f:modern (function:boardwipe or function:wrath-of-god) game:paper",
+      "total": 579
+    },
+    {
+      "slug": "modern-cards-that-draw-cards",
+      "query": "modern cards that draw cards",
+      "scryfallQuery": "prefer:best f:modern function:draw game:paper",
+      "total": 2894
+    },
+    {
+      "slug": "modern-counterspells",
+      "query": "modern counterspells",
+      "scryfallQuery": "prefer:best f:modern function:counterspell game:paper",
+      "total": 387
+    },
+    {
+      "slug": "modern-legal-cards-with-removal-effects",
+      "query": "modern legal cards with removal effects",
+      "scryfallQuery": "prefer:best f:modern (function:removal or function:spot-removal or function:repeatable-removal or function:oblivion-ring-effect) game:paper",
+      "total": 4464
+    },
+    {
+      "slug": "multicolor-cards-set-on-innistrad",
+      "query": "multicolor cards set on innistrad",
+      "scryfallQuery": "prefer:best (id:w or id:u or id:b or id:r or id:g) art:innistrad game:paper",
+      "total": 1680
+    },
+    {
+      "slug": "naya-creature-buffs-for-commander",
+      "query": "naya creature buffs for commander",
+      "scryfallQuery": "prefer:best id:rwg t:creature f:commander function:anthem game:paper",
+      "total": 208
+    },
+    {
+      "slug": "naya-creatures-with-giant-art",
+      "query": "naya creatures with giant art",
+      "scryfallQuery": "prefer:best id:rwg t:creature art:giant game:paper",
+      "total": 204
+    },
+    {
+      "slug": "orzhov-cards-that-exile-creatures-for-commander",
+      "query": "orzhov cards that exile creatures for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:removal-creature or function:removal-creature-burn or function:removal-creature-fight or function:removal-exile or function:removal-destroy or function:spot-removal) game:paper) id:wb",
+      "total": 2489
+    },
+    {
+      "slug": "orzhov-creatures-with-vampire-art",
+      "query": "orzhov creatures with vampire art",
+      "scryfallQuery": "prefer:best id:wb t:creature art:vampire game:paper",
+      "total": 336
+    },
+    {
+      "slug": "orzhov-drain-and-gain-cards-for-commander",
+      "query": "orzhov drain and gain cards for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:lifegain or function:lifegain-matters or function:soul-warden-ability or function:pridemate) (function:burn-player or function:burn-player-each or function:burn-any or function:opponent-loses-life or function:life-drain or function:drain-life or function:lifegain-to-damage) game:paper) id:wb",
+      "total": 359
+    },
+    {
+      "slug": "orzhov-lifegain-payoffs-for-commander",
+      "query": "orzhov lifegain payoffs for commander",
+      "scryfallQuery": "prefer:best id:wb f:commander function:lifegain game:paper",
+      "total": 1606
+    },
+    {
+      "slug": "pauper-card-draw-spells",
+      "query": "pauper card draw spells",
+      "scryfallQuery": "prefer:best (t:instant or t:sorcery) f:pauper function:draw game:paper",
+      "total": 567
+    },
+    {
+      "slug": "pauper-counterspells",
+      "query": "pauper counterspells",
+      "scryfallQuery": "prefer:best f:pauper function:counterspell game:paper",
+      "total": 180
+    },
+    {
+      "slug": "pauper-removal-under-2-mana",
+      "query": "pauper removal under 2 mana",
+      "scryfallQuery": "prefer:best mv<2 f:pauper (function:removal or function:spot-removal or function:repeatable-removal or function:oblivion-ring-effect) game:paper",
+      "total": 365
+    },
+    {
+      "slug": "pauper-token-makers",
+      "query": "pauper token makers",
+      "scryfallQuery": "prefer:best f:pauper (function:repeatable-token-generator or function:creates-token-of-a-card or function:creates-oracle-token or function:creates-card-token) game:paper",
+      "total": 88
+    },
+    {
+      "slug": "pioneer-cards-that-make-tokens",
+      "query": "pioneer cards that make tokens",
+      "scryfallQuery": "prefer:best f:pioneer (function:repeatable-token-generator or function:repeatable-creature-tokens or function:repeatable-artifact-tokens or function:repeatable-noncreature-tokens or function:creates-token-of-a-card or function:creates-oracle-token or function:creates-card-token or function:create-land-tokens) game:paper",
+      "total": 861
+    },
+    {
+      "slug": "pioneer-counterspells",
+      "query": "pioneer counterspells",
+      "scryfallQuery": "prefer:best f:pioneer function:counterspell game:paper",
+      "total": 238
+    },
+    {
+      "slug": "pioneer-red-burn-spells",
+      "query": "pioneer red burn spells",
+      "scryfallQuery": "prefer:best ((t:instant or t:sorcery) f:pioneer function:burn game:paper) id:r",
+      "total": 378
+    },
+    {
+      "slug": "pioneer-removal-under-2-mana",
+      "query": "pioneer removal under 2 mana",
+      "scryfallQuery": "prefer:best mv<2 f:pioneer (function:removal or function:spot-removal or function:repeatable-removal or function:oblivion-ring-effect) game:paper",
+      "total": 335
+    },
+    {
+      "slug": "planeswalkers-that-create-tokens",
+      "query": "planeswalkers that create tokens",
+      "scryfallQuery": "prefer:best t:planeswalker (function:repeatable-token-generator or function:repeatable-creature-tokens or function:young-pyromancer-ability) game:paper",
+      "total": 122
+    },
+    {
+      "slug": "planeswalkers-with-crown-art",
+      "query": "planeswalkers with crown art",
+      "scryfallQuery": "prefer:best t:planeswalker art:crown game:paper",
+      "total": 6
+    },
+    {
+      "slug": "rakdos-cards-that-make-treasure-tokens-for-commander",
+      "query": "rakdos cards that make treasure tokens for commander",
+      "scryfallQuery": "prefer:best (f:commander o:\"treasure\" (function:repeatable-token-generator or function:repeatable-artifact-tokens) game:paper) id:rb",
+      "total": 126
+    },
+    {
+      "slug": "rakdos-cards-with-demon-art",
+      "query": "rakdos cards with demon art",
+      "scryfallQuery": "prefer:best id:rb art:demon game:paper",
+      "total": 352
+    },
+    {
+      "slug": "rakdos-sacrifice-synergies-for-commander",
+      "query": "rakdos sacrifice synergies for commander",
+      "scryfallQuery": "prefer:best id:rb f:commander function:synergy-sacrifice game:paper",
+      "total": 62
+    },
+    {
+      "slug": "red-burn-spells-legal-in-pauper-or-modern",
+      "query": "red burn spells legal in pauper or modern",
+      "scryfallQuery": "prefer:best ((t:instant or t:sorcery) function:burn game:paper) id:r",
+      "total": 755
+    },
+    {
+      "slug": "red-cards-illustrated-by-paolo-parente",
+      "query": "red cards illustrated by paolo parente",
+      "scryfallQuery": "prefer:best id:r a:\"Paolo Parente\" game:paper",
+      "total": 78
+    },
+    {
+      "slug": "red-creatures-that-deal-damage-when-another-creature-dies",
+      "query": "red creatures that deal damage when another creature dies",
+      "scryfallQuery": "prefer:best id:r t:creature o:/(?<!this )creature[^.]*die[^.]*deal[^.]*damage/ game:paper",
+      "total": 8
+    },
+    {
+      "slug": "red-creatures-that-deal-damage-when-they-enter-the-battlefield",
+      "query": "red creatures that deal damage when they enter the battlefield",
+      "scryfallQuery": "prefer:best id:r t:creature o:/~[^.]*enter[^.]*deal[^.]*damage/ game:paper",
+      "total": 106
+    },
+    {
+      "slug": "red-instants-that-deal-3-or-more-damage",
+      "query": "red instants that deal 3 or more damage",
+      "scryfallQuery": "prefer:best (t:instant mv>=3 (function:burn-player or function:burn-player-each or function:burn-any or function:opponent-loses-life or function:life-drain or function:drain-life or function:lifegain-to-damage) game:paper) id:r",
+      "total": 108
+    },
+    {
+      "slug": "removal-spells-with-mana-value-2",
+      "query": "removal spells with mana value 2",
+      "scryfallQuery": "prefer:best mv=2 (function:removal or function:spot-removal or function:repeatable-removal or function:oblivion-ring-effect) game:paper",
+      "total": 1229
+    },
+    {
+      "slug": "selesnya-enchantress-support-for-commander",
+      "query": "selesnya enchantress support for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:enchantress or function:support) game:paper) id:wg",
+      "total": 67
+    },
+    {
+      "slug": "selesnya-token-makers-for-commander",
+      "query": "selesnya token makers for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:repeatable-token-generator or function:creates-token-of-a-card or function:creates-oracle-token or function:creates-card-token) game:paper) id:wg",
+      "total": 702
+    },
+    {
+      "slug": "simic-cards-that-put-lands-into-play-for-commander",
+      "query": "simic cards that put lands into play for commander",
+      "scryfallQuery": "prefer:best id:gu f:commander function:play-additional-land game:paper",
+      "total": 30
+    },
+    {
+      "slug": "simic-cards-with-merfolk-art",
+      "query": "simic cards with merfolk art",
+      "scryfallQuery": "prefer:best id:gu art:merfolk game:paper",
+      "total": 466
+    },
+    {
+      "slug": "simic-creatures-with-sea-monster-art",
+      "query": "simic creatures with sea monster art",
+      "scryfallQuery": "prefer:best (t:creature (art:sea or art:monster) game:paper) id:gu",
+      "total": 163
+    },
+    {
+      "slug": "simic-evolve-creatures-for-commander",
+      "query": "simic evolve creatures for commander",
+      "scryfallQuery": "prefer:best id:gu t:creature f:commander function:gives-evolve game:paper",
+      "total": 2
+    },
+    {
+      "slug": "simic-ramp-for-commander",
+      "query": "simic ramp for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:ramp or function:mana-ramp) game:paper) id:gu",
+      "total": 1224
+    },
+    {
+      "slug": "sliver-tribal-support-for-commander",
+      "query": "sliver tribal support for commander",
+      "scryfallQuery": "prefer:best f:commander (function:tribal-sliver or function:support) game:paper",
+      "total": 179
+    },
+    {
+      "slug": "sorceries-that-destroy-all-creatures",
+      "query": "sorceries that destroy all creatures",
+      "scryfallQuery": "prefer:best t:sorcery (function:boardwipe or function:wrath-of-god) game:paper",
+      "total": 485
+    },
+    {
+      "slug": "sorceries-with-fire-art",
+      "query": "sorceries with fire art",
+      "scryfallQuery": "prefer:best t:sorcery art:fire game:paper",
+      "total": 451
+    },
+    {
+      "slug": "sorceries-with-mana-value-2",
+      "query": "sorceries with mana value 2",
+      "scryfallQuery": "prefer:best t:sorcery mv=2 game:paper",
+      "total": 688
+    },
+    {
+      "slug": "standard-board-wipes",
+      "query": "standard board wipes",
+      "scryfallQuery": "prefer:best f:standard (function:boardwipe or function:wrath-of-god) game:paper",
+      "total": 109
+    },
+    {
+      "slug": "standard-legal-cards-that-draw-cards",
+      "query": "standard legal cards that draw cards",
+      "scryfallQuery": "prefer:best f:standard function:draw game:paper",
+      "total": 911
+    },
+    {
+      "slug": "standard-removal-spells",
+      "query": "standard removal spells",
+      "scryfallQuery": "prefer:best (t:instant or t:sorcery) f:standard (function:removal or function:spot-removal or function:repeatable-removal or function:oblivion-ring-effect) game:paper",
+      "total": 511
+    },
+    {
+      "slug": "temur-creatures-with-trample-that-also-ramp-for-commander",
+      "query": "temur creatures with trample that also ramp for commander",
+      "scryfallQuery": "prefer:best (t:creature kw:trample f:commander (function:ramp or function:mana-ramp) game:paper) id:urg",
+      "total": 42
+    },
+    {
+      "slug": "vampire-tribal-support-in-pioneer",
+      "query": "vampire tribal support in pioneer",
+      "scryfallQuery": "prefer:best f:pioneer (function:support or function:tribal-vampire) game:paper",
+      "total": 88
+    },
+    {
+      "slug": "vintage-artifact-mana-rocks",
+      "query": "vintage artifact mana rocks",
+      "scryfallQuery": "prefer:best t:artifact f:vintage function:mana-rock game:paper",
+      "total": 340
+    },
+    {
+      "slug": "warrior-tribal-support-in-mardu-colors-for-commander",
+      "query": "warrior tribal support in mardu colors for commander",
+      "scryfallQuery": "prefer:best (f:commander (function:support or function:tribal-warrior) game:paper) id:wrb",
+      "total": 108
+    },
+    {
+      "slug": "white-cards-illustrated-by-rebecca-guay",
+      "query": "white cards illustrated by rebecca guay",
+      "scryfallQuery": "prefer:best id:w a:\"Rebecca Guay\" game:paper",
+      "total": 40
+    },
+    {
+      "slug": "white-creatures-that-draw-cards-when-they-enter-the-battlefield",
+      "query": "white creatures that draw cards when they enter the battlefield",
+      "scryfallQuery": "prefer:best id:w t:creature o:/~[^.]*enter[^.]*draw/ game:paper",
+      "total": 29
+    },
+    {
+      "slug": "white-creatures-with-lifelink-and-first-strike",
+      "query": "white creatures with lifelink and first strike",
+      "scryfallQuery": "prefer:best id:w t:creature kw:lifelink kw:first-strike game:paper",
+      "total": 15
+    },
+    {
+      "slug": "white-enchantments-that-prevent-combat-damage",
+      "query": "white enchantments that prevent combat damage",
+      "scryfallQuery": "prefer:best id:w t:enchantment function:prevent-damage game:paper",
+      "total": 85
+    },
+    {
+      "slug": "white-removal-spells-legal-in-standard-or-pioneer",
+      "query": "white removal spells legal in standard or pioneer",
+      "scryfallQuery": "prefer:best ((t:instant or t:sorcery) f:standard -set:pss5 -set:pss4 -set:pss3 -set:pss2 -set:pss1 -set:pjsc (function:removal or function:spot-removal or function:repeatable-removal or function:oblivion-ring-effect) game:paper) id:w",
+      "total": 84
+    },
+    {
+      "slug": "white-wrath-effects-that-also-draw-cards",
+      "query": "white wrath effects that also draw cards",
+      "scryfallQuery": "prefer:best ((function:boardwipe or function:wrath-of-god) (function:draw-engine or function:repeatable-draw or function:pure-draw or function:impulse-draw or function:burst-draw or function:card-advantage) game:paper) id:w",
+      "total": 13
+    },
+    {
+      "slug": "wizard-tribal-synergies-in-blue-for-commander",
+      "query": "wizard tribal synergies in blue for commander",
+      "scryfallQuery": "prefer:best id:u f:commander function:tribal-wizard game:paper",
+      "total": 55
+    },
+    {
+      "slug": "yidris-cards-with-cascade-in-a-wubr-deck",
+      "query": "yidris cards with cascade in a wubr deck",
+      "scryfallQuery": "prefer:best id:wubr function:synergy-cascade game:paper",
+      "total": 2
+    },
+    {
+      "slug": "zombie-tribal-payoffs-in-dimir-for-commander",
+      "query": "zombie tribal payoffs in dimir for commander",
+      "scryfallQuery": "prefer:best id:ub f:commander function:tribal-zombie game:paper",
+      "total": 104
+    }
+  ]
+}

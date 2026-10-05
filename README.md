@@ -48,18 +48,26 @@ A query becomes a Scryfall query through one AI extraction wrapped in determinis
 
 5. **Finalization**: `phase3/finalizeQuery.ts` injects archetype tags, suppresses redundant type filters, adds the `game:` filter, sanitizes, and truncates to Scryfall's length limit.
 
-Results are cached in-memory (LRU, keyed by normalized query) so repeat searches skip the AI call.
+Results are cached in-memory (LRU, keyed by normalized query; degraded resolver fallbacks are not cached) so repeat searches skip the AI call, and identical in-flight queries share one run. `/api/search` is rate-limited per IP.
 
 ### Query Assembly
 
 The pipeline produces an intermediate representation (IR) that is assembled into a Scryfall query string. The editable query field and token preview both show this final Scryfall query.
 
+### Reference data caches
+
+Scryfall catalogs, sets, keywords and Tagger tags are cached as JSON in `CACHE_DIR` (`./data` locally, `/tmp` on serverless). A fresh instance with no cache file starts from the committed snapshots in `data/seed/` (no blocking upstream fetches), and any cache whose date stamp is older than today is refreshed in the background on the next request (stale-while-revalidate) — no cron job needed. Refresh the snapshots with `npm run seed`.
+
+### Pre-built search pages
+
+`data/seo-queries.json` lists `/search/<slug>` pages whose query was resolved and verified once by `npm run seo:verify` (the example queries, plus `data/top-queries.txt` when present — one query or `/search/<slug>` path per line). Those pages render their first page of cards on the server by replaying the stored Scryfall query, so crawlers get real content and never trigger an AI call. They are listed in the sitemap.
+
 ## Local Development
 
 ### Prerequisites
 
-- Node.js 18+ and npm/yarn/pnpm
-- OpenAI API key ([get one here](https://platform.openai.com/api-keys))
+- Node.js 20+ and npm
+- An OpenAI or Anthropic API key
 
 ### Setup
 
@@ -70,54 +78,42 @@ The pipeline produces an intermediate representation (IR) that is assembled into
    npm install
    ```
 
-3. **Set up environment variables**:
+3. **Set up environment variables**: copy `.env.example` to `.env.local` and fill in the key for your provider.
 
-   Copy `.env.example` to `.env.local`:
-   ```bash
-   cp .env.example .env.local
-   ```
-
-   Edit `.env.local`:
-   ```env
-   OPENAI_API_KEY=your_openai_api_key_here
-   SCRYFALL_USER_AGENT=find-that-card/1.0 (+https://findthatcard.net)
-   OPENAI_MODEL=gpt-4.1-mini
-   ```
-
-4. **(Optional) Configure affiliate links**:
-   ```env
-   NEXT_PUBLIC_CARDTRADER_SHARE_CODE=your_share_code
-   TCG_PLAYER_PARTNER_LINK=https://partner.tcgplayer.com/XXXXXXXX
-   ```
-
-5. **Run the development server**:
+4. **Run the development server**:
    ```bash
    npm run dev
    ```
 
-6. Open [http://localhost:3000](http://localhost:3000)
+5. Open [http://localhost:3000](http://localhost:3000)
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `OPENAI_API_KEY` | Yes | — | OpenAI API key |
-| `SCRYFALL_USER_AGENT` | No | `find-that-card/1.0` | User-Agent for Scryfall API requests |
-| `OPENAI_MODEL` | No | `gpt-4.1-mini` | OpenAI model for query conversion |
+| `AI_PROVIDER` | No | `openai` | `openai` or `claude` |
+| `OPENAI_API_KEY` | When provider is `openai` | — | OpenAI API key |
+| `OPENAI_MODEL` | No | `gpt-4.1-mini` | OpenAI model for query extraction |
+| `OPENAI_REASONING_EFFORT` | No | — | `low` / `medium` / `high` for reasoning models |
+| `ANTHROPIC_API_KEY` | When provider is `claude` | — | Anthropic API key |
+| `CLAUDE_MODEL` | No | `claude-haiku-4-5` | Claude model for query extraction |
+| `SCRYFALL_USER_AGENT` | No | `find-that-card/1.0 (+https://findthatcard.net)` | User-Agent for Scryfall requests |
 | `NEXT_PUBLIC_CARDTRADER_SHARE_CODE` | No | `thecultist` | CardTrader share code for buy links |
 | `TCG_PLAYER_PARTNER_LINK` | No | — | TCGPlayer partner link base URL |
-| `CRON_SECRET` | No | — | Secret for Vercel cron job authentication |
-| `RESEND_API_KEY` | No | — | Resend API key for bug report emails |
-| `BUG_REPORT_TO_EMAIL` | No | — | Recipient address for bug reports |
+| `RESEND_API_KEY` | For bug reports | — | Resend API key (reports go to the address in `app/api/report-bug/route.ts`) |
+| `CACHE_DIR` | No | `./data` / `/tmp` | Where reference-data caches are written |
+| `CACHE_REFRESH` | No | — | `off` disables background cache refreshes (CI) |
+| `LOG_SEARCH_PIPELINE_DEBUG` / `LOG_AI_AGENT_PROMPT` | No | — | Verbose pipeline / AI prompt logging |
 
 ## Testing
 
 ```bash
-npm run test:queries
+npm test          # deterministic self-checks (no live AI calls)
 npm run lint
+npm run build     # includes the typecheck
 ```
 
-The deterministic self-check (`lib/search-pipeline/v2/v2.test.ts`) asserts extraction-to-IR-to-query behavior on fixed fixtures without any live AI calls. `query-converter.test.ts` and `synergy-cards.test.ts` cover the finalization/assembly helpers. For end-to-end quality spot-checks against real search results, use `npm run search:qa`.
+CI (`.github/workflows/ci.yml`) runs lint, tests and build on every push to `main` and every PR, against the seed snapshots (`CACHE_REFRESH=off`). For end-to-end checks against live AI + Scryfall, use `npm run search:qa` or `npm run seo:verify`.
 
 ## Project Structure
 
@@ -125,45 +121,38 @@ The deterministic self-check (`lib/search-pipeline/v2/v2.test.ts`) asserts extra
 findthatcard/
 ├── app/
 │   ├── page.tsx                    # Home page (wraps SearchPage in Suspense)
-│   ├── layout.tsx                  # Root layout: fonts, metadata, analytics
-│   ├── globals.css                 # Tailwind base + custom utilities
-│   ├── about/page.tsx
-│   ├── privacy/page.tsx
+│   ├── layout.tsx                  # Root layout: fonts, metadata, analytics, cookie banner
+│   ├── about/page.tsx, privacy/page.tsx
+│   ├── sitemap.ts                  # Static pages + pre-built search pages
 │   ├── search/
 │   │   ├── page.tsx                # /search?q=... with dynamic metadata
-│   │   └── [slug]/page.tsx        # /search/query-slug SEO-friendly URL
+│   │   └── [slug]/page.tsx         # /search/query-slug (server-rendered when pre-built)
 │   ├── components/
 │   │   ├── SearchPage.tsx          # Main client component: all search UI state
-│   │   ├── CardCard.tsx            # Card thumbnail grid cell with flip, buy buttons
-│   │   ├── CardDetailPanel.tsx     # Mobile-friendly modal sheet for card details
-│   │   ├── ManaCost.tsx            # Renders {W}{U}{B}{R}{G} as SVG symbols
-│   │   ├── OracleText.tsx          # Renders oracle text with inline mana symbols
-│   │   ├── KeywordWithTooltip.tsx  # Keyword badge with hover tooltip
+│   │   ├── CardCard.tsx            # Card grid cell with flip, buy buttons
+│   │   ├── CardDetailPanel.tsx     # Card detail <dialog>
 │   │   ├── QueryTokenPreview.tsx   # Tokenized Scryfall query display
-│   │   ├── ThemeToggle.tsx         # Light/dark mode toggle
-│   │   ├── ScrollToTop.tsx         # Floating back-to-top button
-│   │   ├── CookieBanner.tsx        # GDPR cookie consent banner
-│   │   ├── BugReportButton.tsx     # Floating bug report → email via Resend
-│   │   └── AdBanner.tsx            # Google AdSense banner
-│   ├── hooks/
-│   │   └── useAdBlockDetection.ts
+│   │   ├── CookieBanner.tsx        # Consent banner (Reject opts out of analytics)
+│   │   ├── ConsentAnalytics.tsx    # Vercel Analytics, respecting the consent choice
+│   │   ├── BugReportButton.tsx     # Bug report <dialog> → email via Resend
+│   │   └── …                       # ManaCost, OracleText, KeywordWithTooltip, ThemeToggle, ScrollToTop
+│   ├── hooks/usePagerAnimation.ts
 │   └── api/
-│       ├── search/route.ts         # POST /api/search — main search endpoint
+│       ├── search/route.ts         # POST /api/search — rate-limited main search endpoint
 │       ├── card/[id]/route.ts      # GET /api/card/:id — full card from Scryfall
-│       ├── sets/route.ts
-│       ├── catalogs/route.ts
-│       ├── keywords/route.ts
-│       ├── keyword-definitions/route.ts
-│       ├── report-bug/route.ts     # Sends bug reports via Resend
-│       └── cron/midnight/route.ts  # Vercel cron job (daily cache refresh)
+│       ├── report-bug/route.ts     # Rate-limited bug reports via Resend
+│       └── sets/, catalogs/, keywords/, keyword-definitions/
 ├── lib/
+│   ├── ai-client.ts                # OpenAI / Anthropic calls (plain + structured)
 │   ├── search-pipeline/
 │   │   ├── types.ts                # IR types: SearchPipelineIR, QueryIntent, etc.
 │   │   ├── runSearchPipeline.ts    # Public entry point — delegates to V2
 │   │   ├── resolveIntentClauses.ts # Intent resolver: similar/art-like/synergy named-card intents
+│   │   ├── similar-cards.ts        # Similar-card and art-like resolvers
+│   │   ├── synergy-cards.ts        # Synergy resolver
+│   │   ├── card-query-sanitize.ts  # Sanitizers for LLM-produced clauses
 │   │   ├── assembleQuery.ts        # IR → Scryfall query string
 │   │   ├── compound.ts             # Splits top-level "or" queries into branches
-│   │   ├── similar-cards.ts        # Similar-card and art-like resolvers
 │   │   ├── v2/                     # The pipeline: one AI extraction + guardrails
 │   │   │   ├── runV2.ts                # Orchestrator: passthrough, compound, cache, wiring
 │   │   │   ├── prePass.ts              # Card-name recognition (n-gram catalog lookup)
@@ -175,40 +164,32 @@ findthatcard/
 │   │   │   └── v2.test.ts              # Deterministic self-check (no live AI)
 │   │   └── phase3/finalizeQuery.ts # Archetype injection, sanitization, game filter, truncation
 │   ├── scryfall/
-│   │   ├── client.ts               # Pagination math, multi-page fetching
-│   │   ├── query-converter.ts      # Scryfall query helpers: archetype registry, sanitizers, direct-query detection
-│   │   ├── response-transformer.ts # Alchemy substitution, TCGPlayer links
-│   │   ├── symbols.ts              # Mana symbol SVG cache
+│   │   ├── http.ts                 # scryfallFetch: headers, timeout, 429 retry
+│   │   ├── client.ts               # Search + pagination
+│   │   ├── query-converter.ts      # Query helpers: archetypes, quoting/balancing/truncation, direct-query detection
+│   │   ├── response-transformer.ts # Alchemy substitution, buy links
+│   │   ├── catalogs.ts, sets.ts    # Reference-data caches
+│   │   ├── catalog-index.ts        # In-memory indexes for subtype / card-name matching
 │   │   ├── lookup.ts               # Fuzzy card lookup via /cards/named
-│   │   ├── catalogs.ts             # Daily-refreshed catalog cache
-│   │   ├── sets.ts                 # Set cache + set filter resolution
-│   │   ├── catalog-index.ts        # In-memory indexes for fuzzy subtype matching
-│   │   └── tagger-graphql.ts       # Tagger GraphQL API (CSRF + session)
-│   ├── prompts/
-│   │   ├── system.ts               # Dynamic system prompt
-│   │   ├── user.ts                 # User prompt + tag context formatting
-│   │   ├── promptModules.ts        # Modular prompt packs with selectPacks()
-│   │   └── regeneration.ts         # Regeneration prompt for invalid-tag fallback
-│   ├── tagger/
-│   │   ├── cache.ts                # Fetches/caches art: and function: tags
-│   │   ├── context.ts              # Narrows relevant tags for the current query
-│   │   └── validation.ts           # Tag extraction and validation
-│   ├── strategies/
-│   │   └── oracletagStrategies.ts  # Strategy → oracletag expansion map
-│   ├── cardtrader/links.ts
-│   ├── tcgplayer/links.ts
-│   ├── mtg-keywords.ts             # Keyword cache + filter injection
+│   │   ├── symbols.ts              # Mana symbol SVG cache (browser)
+│   │   └── tagger-graphql.ts       # Tagger GraphQL API (CSRF session, reused)
+│   ├── tagger/                     # Tagger tag cache, query context, validation
+│   ├── utils/                      # Cache loader, rate limiter, validation, errors, text
+│   ├── seo-pages.ts                # Pre-built search pages (server render)
+│   ├── search-slug.ts              # /search/<slug> ↔ query
+│   ├── mtg-keywords.ts             # Keyword cache + reminder text
 │   ├── query-tokens.ts             # Scryfall query tokenizer for QueryTokenPreview
-│   ├── example-queries.ts          # 350+ example query strings
-│   ├── pro-tips.ts                 # Tips shown during loading
+│   ├── example-queries.ts          # Example query strings
 │   └── cache-paths.ts              # /tmp on serverless, ./data locally
-├── types/
-│   └── scryfall.ts                 # ScryfallCard, CardResult, SearchResponse, etc.
+├── scripts/
+│   ├── seed-caches.ts              # npm run seed
+│   ├── verify-seo-queries.ts       # npm run seo:verify
+│   └── search-qabot.ts             # npm run search:qa
 ├── data/
-│   ├── mtg-keywords.json
-│   ├── mtg-keyword-reminders.json
-│   └── scryfall-catalogs.json
-└── vercel.json                     # Cron job: /api/cron/midnight at 0 0 * * *
+│   ├── seed/                       # Committed cache snapshots (fresh-instance fallback)
+│   ├── seo-queries.json            # Pre-built search pages
+│   └── mtg-keyword-reminders.json
+└── types/scryfall.ts
 ```
 
 ## Deployment to Vercel
@@ -217,8 +198,6 @@ findthatcard/
 2. Import the repository at [vercel.com](https://vercel.com)
 3. Add environment variables in Vercel project settings
 4. Deploy — Next.js App Router is detected automatically
-
-The `CRON_SECRET` env var is required for the midnight cron job. Set it in Vercel and it will be validated against the `Authorization` header sent by Vercel Cron.
 
 ## Usage Examples
 

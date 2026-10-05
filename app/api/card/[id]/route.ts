@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { CardDetailData } from "@/types/scryfall";
 import { mergeKeywordMentions } from "@/lib/keyword-mentions";
 import { getKeywordDefinitionsMap, getMtgKeywordList } from "@/lib/mtg-keywords";
+import { scryfallFetch, SCRYFALL_BASE_URL } from "@/lib/scryfall/http";
 
-const SCRYFALL_BASE_URL = "https://api.scryfall.com";
-const SCRYFALL_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 
 export async function GET(
   _request: NextRequest,
@@ -18,11 +16,7 @@ export async function GET(
   }
 
   try {
-    const response = await fetch(`${SCRYFALL_BASE_URL}/cards/${id}`, {
-      headers: {
-        "User-Agent": SCRYFALL_USER_AGENT,
-        Accept: "application/json",
-      },
+    const response = await scryfallFetch(`${SCRYFALL_BASE_URL}/cards/${id}`, {
       next: { revalidate: 3600 },
     });
 

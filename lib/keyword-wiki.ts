@@ -1,3 +1,4 @@
+import { scryfallFetch } from "@/lib/scryfall/http";
 /**
  * Reminder text for keywords from the MTG Wiki (mtg.wiki). Every keyword and
  * ability word page carries an infobox with a `| reminder = …` field; we read the
@@ -7,8 +8,6 @@
  */
 
 const WIKI_API = "https://mtg.wiki/api.php";
-const USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 
 /** Pulls the infobox `reminder` parameter (may span lines) out of page wikitext. */
 export function extractReminderFromWikitext(wikitext: string): string | null {
@@ -35,7 +34,7 @@ export function cleanWikiMarkup(raw: string): string {
 
 async function fetchWikitext(title: string): Promise<string | null> {
   const url = `${WIKI_API}?action=parse&prop=wikitext&format=json&redirects=1&page=${encodeURIComponent(title)}`;
-  const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/json" } });
+  const res = await scryfallFetch(url);
   if (!res.ok) return null;
   const json = (await res.json()) as { parse?: { wikitext?: { "*"?: string } } };
   return json.parse?.wikitext?.["*"] ?? null;

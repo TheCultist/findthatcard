@@ -45,7 +45,7 @@ function baseExtraction(overrides: Partial<V2Extraction>): V2Extraction {
     archetypes: [],
     oraclePhrases: [],
     negatedOraclePhrases: [],
-    oracleSequences: [],
+    triggeredEffects: [],
     ...overrides,
   };
 }
@@ -209,19 +209,34 @@ async function main(): Promise<void> {
 
     // Linked trigger→effect stays one ordered same-sentence regex, not two
     // independent o: tokens (o:"dies" o:"draw" matched Aclazotz).
-    const seq = await buildIRFromExtraction(
-      baseExtraction({ oracleSequences: [["dies", "draws a card"]] }),
-      "creatures that draw cards when they die"
+    const open = assembleQueryFromIR(
+      await buildIRFromExtraction(
+        baseExtraction({ triggeredEffects: [{ subject: null, trigger: "dies", effect: "draws 2 cards" }] }),
+        "death triggers that draw"
+      )
     );
-    const sq = assembleQueryFromIR(seq);
-    check("oracle sequence → ordered regex", sq.includes("o:/die[^.]*draw a card/") && !sq.includes('o:"draw'), sq);
+    check("triggered effect → ordered regex", open.includes("o:/die[^.]*draw[^.]*cards/") && !open.includes('o:"draw'), open);
 
-    const flat = await buildIRFromExtraction(
-      baseExtraction({ oracleSequences: ["enters", "gain"] as unknown as string[][] }),
-      "gain life on etb"
+    // Subject "~" (or a pronoun) = the card itself; a noun = another object, so
+    // "this creature enters" (self-ETB) must not satisfy "a creature enters".
+    const self = assembleQueryFromIR(
+      await buildIRFromExtraction(
+        baseExtraction({ triggeredEffects: [{ subject: "it", trigger: "dies", effect: "draw" }] }),
+        "draw when it dies"
+      )
     );
-    const fq = assembleQueryFromIR(flat);
-    check("flat sequence coerced to one sequence", fq.includes("o:/enter[^.]*gain/"), fq);
+    check("self subject → ~", self.includes("o:/~[^.]*die[^.]*draw/"), self);
+    const otherIR = await buildIRFromExtraction(
+      // Claude sometimes returns nested values as JSON text.
+      baseExtraction({
+        triggeredEffects: '[{"subject":"creature","trigger":"enters","effect":"draw"}]' as unknown as V2Extraction["triggeredEffects"],
+      }),
+      "draw when a creature enters"
+    );
+    const other = assembleQueryFromIR(otherIR);
+    check("JSON-text triggers decoded; other subject excludes self", other.includes("o:/(?<!this )creature[^.]*enter[^.]*draw/"), other);
+    const otherFinal = (await finalizeQuery(otherIR)).queryForScryfall;
+    check("finalize leaves regex clause intact", otherFinal.includes("o:/(?<!this )creature[^.]*enter[^.]*draw/"), otherFinal);
   }
 
   // 1e. Format allowlist + aliases (pauper edh → paupercommander; unknown dropped).

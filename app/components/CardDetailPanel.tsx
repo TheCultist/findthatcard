@@ -1,7 +1,7 @@
 "use client";
 
 import { CardResult, CardDetailData } from "@/types/scryfall";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useId } from "react";
 import Image from "next/image";
 import ManaCost from "@/app/components/ManaCost";
 import OracleText from "@/app/components/OracleText";
@@ -207,10 +207,22 @@ export default function CardDetailPanel({
   const dragActive = useRef(false);
 
   const canNavigate = hasPrev || hasNext;
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 10);
     return () => clearTimeout(t);
+  }, []);
+
+  // Native modal: focus trap, inert page behind, top layer. The panel unmounts
+  // instead of calling close(), so focus is handed back to the opener by hand.
+  // The `open` guard keeps Strict Mode's double-mount from throwing.
+  useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
+    return () => opener?.focus();
   }, []);
 
   const handleClose = useCallback(() => {
@@ -376,9 +388,8 @@ export default function CardDetailPanel({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        handleClose();
-      } else if (e.key === "ArrowLeft") {
+      // Esc arrives as the dialog's `cancel` event instead.
+      if (e.key === "ArrowLeft") {
         navigate(-1);
       } else if (e.key === "ArrowRight") {
         navigate(1);
@@ -386,7 +397,7 @@ export default function CardDetailPanel({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleClose, navigate]);
+  }, [navigate]);
 
   useEffect(() => {
     const { body, documentElement: root } = document;
@@ -432,9 +443,17 @@ export default function CardDetailPanel({
   const offers = getStoreOffers(card, tcgFirst);
 
   return (
-    <div
-      // Above the z-50 floating bug/scroll-to-top buttons, which otherwise overlap the buy row.
-      className={`fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 transition-all duration-200 ${
+    // Full-viewport dialog acting as its own (animated) backdrop; the UA ::backdrop stays clear.
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={titleId}
+      // Keep the animated close; if the browser forces the close anyway, still tear down.
+      onCancel={(e) => {
+        e.preventDefault();
+        handleClose();
+      }}
+      onClose={onClose}
+      className={`fixed inset-0 z-[60] m-0 hidden open:flex h-full max-h-none w-full max-w-none items-end sm:items-center justify-center border-0 p-0 sm:p-4 text-foreground backdrop:bg-transparent transition-all duration-200 ${
         visible && !isSwipingAway ? "bg-foreground/60 backdrop-blur-sm" : "bg-transparent pointer-events-none"
       }`}
       onClick={handleClose}
@@ -499,7 +518,7 @@ export default function CardDetailPanel({
           )}
 
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <h2 className="text-base font-bold text-foreground truncate">{card.name}</h2>
+            <h2 id={titleId} className="text-base font-bold text-foreground truncate">{card.name}</h2>
             {detailData?.rarity && (
               <span className={`text-xs font-medium flex-shrink-0 ${rarityColor}`}>
                 {capitalize(detailData.rarity)}
@@ -810,6 +829,6 @@ export default function CardDetailPanel({
           </p>
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

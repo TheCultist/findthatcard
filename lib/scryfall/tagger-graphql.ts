@@ -1,11 +1,27 @@
+import { scryfallFetch } from "@/lib/scryfall/http";
+
 const TAGGER_BASE = "https://tagger.scryfall.com";
-const TAGGER_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
+const SESSION_TTL_MS = 10 * 60_000;
 
 type TaggerSession = {
   csrfToken: string;
   cookies: string;
 };
+
+// One session serves every lookup for SESSION_TTL_MS instead of scraping the homepage per card.
+let cachedSession: { session: Promise<TaggerSession | null>; expiresAt: number } | null = null;
+
+function getTaggerSession(): Promise<TaggerSession | null> {
+  if (!cachedSession || Date.now() >= cachedSession.expiresAt) {
+    const session = fetchTaggerSession();
+    cachedSession = { session, expiresAt: Date.now() + SESSION_TTL_MS };
+    // A failed fetch isn't kept — the next lookup tries again.
+    void session.then((s) => {
+      if (!s && cachedSession?.session === session) cachedSession = null;
+    });
+  }
+  return cachedSession.session;
+}
 
 /**
  * Fetches a CSRF token + session cookies from the Tagger SPA.
@@ -13,10 +29,10 @@ type TaggerSession = {
  * every Tagger HTML page. The session cookie is required for the GraphQL
  * endpoint to accept the token.
  */
-async function getTaggerSession(): Promise<TaggerSession | null> {
+async function fetchTaggerSession(): Promise<TaggerSession | null> {
   try {
-    const res = await fetch(`${TAGGER_BASE}/`, {
-      headers: { "User-Agent": TAGGER_USER_AGENT },
+    const res = await scryfallFetch(`${TAGGER_BASE}/`, {
+      headers: { Accept: "text/html" },
       redirect: "follow",
     });
     if (!res.ok) return null;
@@ -97,11 +113,10 @@ export async function fetchTaggerCardData(
   if (!session) return null;
 
   try {
-    const res = await fetch(`${TAGGER_BASE}/graphql`, {
+    const res = await scryfallFetch(`${TAGGER_BASE}/graphql`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": TAGGER_USER_AGENT,
         "X-CSRF-Token": session.csrfToken,
         Cookie: session.cookies,
       },
@@ -113,6 +128,7 @@ export async function fetchTaggerCardData(
 
     if (!res.ok) {
       console.warn(`[Tagger GQL] GraphQL request failed: ${res.status}`);
+      cachedSession = null; // the session may have expired upstream — refresh on the next lookup
       return null;
     }
 

@@ -9,6 +9,19 @@ import { fetchCardByName, ScryfallNamedCard } from "@/lib/scryfall/lookup";
 import { fetchTaggerCardData } from "@/lib/scryfall/tagger-graphql";
 import { getTaggerTagContext } from "@/lib/tagger/context";
 import { validateTaggerTags } from "@/lib/tagger/validation";
+import { quoteScryfallValue } from "@/lib/scryfall/query-converter";
+
+/**
+ * Last resort for an LLM clause: strip tags that don't exist, then drop any OR branch left
+ * without a selective anchor — a branch reduced to `(t:instant OR t:sorcery)` floods the
+ * results with every instant/sorcery. Null when nothing anchored is left.
+ */
+export function stripInvalidTagsAnchored(
+  clause: string,
+  invalidTags: Array<{ type: "art" | "function"; tag: string }>
+): string | null {
+  return dropUnanchoredOrBranches(removeInvalidTagsFromQuery(clause, invalidTags));
+}
 
 const shouldLog = isAiPromptLoggingEnabled;
 
@@ -152,8 +165,8 @@ function sanitizeScryfallQuery(raw: string, cardName: string): string | null {
   const clause = sanitizeFunctionalClause(raw);
   if (!clause) return null;
 
-  if (!clause.includes(`-name:"${cardName}"`)) {
-    return `${clause} -name:"${cardName}"`;
+  if (!clause.includes(`-name:${quoteScryfallValue(cardName)}`)) {
+    return `${clause} -name:${quoteScryfallValue(cardName)}`;
   }
   return clause;
 }
@@ -298,15 +311,11 @@ export async function resolveSynergyQuery(cardName: string): Promise<SynergyQuer
     }
   }
 
-  // Last resort: strip tags that are still invalid, then drop any OR branch
-  // left without a selective anchor — a branch reduced to `(t:instant OR
-  // t:sorcery)` floods the results with every instant/sorcery.
   if (invalidTags.length > 0) {
     console.warn(
       `[Synergy] Retry still used nonexistent tags [${invalidTags.map((t) => t.tag).join(", ")}]; stripping them`
     );
-    const stripped = removeInvalidTagsFromQuery(clause, invalidTags);
-    const anchored = dropUnanchoredOrBranches(stripped);
+    const anchored = stripInvalidTagsAnchored(clause, invalidTags);
     if (!anchored) {
       console.warn(`[Synergy] No anchored clause left after stripping invalid tags for "${card.name}"`);
       return null;
@@ -314,9 +323,9 @@ export async function resolveSynergyQuery(cardName: string): Promise<SynergyQuer
     clause = anchored;
   }
 
-  const query = clause.includes(`-name:"${card.name}"`)
+  const query = clause.includes(`-name:${quoteScryfallValue(card.name)}`)
     ? clause
-    : `${clause} -name:"${card.name}"`;
+    : `${clause} -name:${quoteScryfallValue(card.name)}`;
 
   console.log(`[Synergy] Result for "${card.name}": ${query}`);
   if (parsed.reasoning) {

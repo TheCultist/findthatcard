@@ -2,8 +2,9 @@ import { promises as fs } from "fs";
 import path from "path";
 import { getCacheDir } from "@/lib/cache-paths";
 import { ensureScryfallCatalogCache, getCatalog } from "@/lib/scryfall/catalogs";
-import { formatTodayStamp, shouldSkipUpdate } from "@/lib/utils/cache";
+import { createCacheLoader, readCacheJson, formatTodayStamp, shouldSkipUpdate, stampedToday } from "@/lib/utils/cache";
 import { fetchWikiReminder } from "@/lib/keyword-wiki";
+import { scryfallFetch } from "@/lib/scryfall/http";
 
 type MtgKeywordEntry = {
   name: string;
@@ -32,14 +33,11 @@ const KEYWORD_REMINDERS_FILE_PATH = path.join(
 /** Same basename in the cache dir: locally that resolves to the tracked data/ file itself. */
 const LEARNED_REMINDERS_FILE_PATH = path.join(getCacheDir(), "mtg-keyword-reminders.json");
 
-const SCRYFALL_USER_AGENT =
-  process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 
 const KEYWORDS_FILE_PATH = path.join(getCacheDir(), "mtg-keywords.json");
 
 let keywordCache: MtgKeywordEntry[] | null = null;
 let keywordCacheUpdatedAt: string | null = null;
-let keywordCachePromise: Promise<void> | null = null;
 let keywordIndex: MtgKeywordIndex | null = null;
 
 function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
@@ -77,8 +75,7 @@ function buildKeywordIndex(entries: MtgKeywordEntry[]): MtgKeywordIndex {
 
 async function readKeywordFile(): Promise<MtgKeywordCacheFile | null> {
   try {
-    const raw = await fs.readFile(KEYWORDS_FILE_PATH, "utf-8");
-    const parsed = JSON.parse(raw);
+    const parsed = await readCacheJson(KEYWORDS_FILE_PATH, () => import("@/data/seed/mtg-keywords.json"));
 
     if (Array.isArray(parsed)) {
       const keywords = parsed
@@ -201,12 +198,7 @@ type ScryfallKeywordResponse = {
 
 
 async function fetchKeywordsFromScryfall(): Promise<MtgKeywordEntry[]> {
-  const response = await fetch(SCRYFALL_KEYWORDS_URL, {
-    headers: {
-      "User-Agent": SCRYFALL_USER_AGENT,
-      Accept: "application/json",
-    },
-  });
+  const response = await scryfallFetch(SCRYFALL_KEYWORDS_URL);
 
   if (!response.ok) {
     throw new Error(
@@ -276,16 +268,16 @@ async function fetchCatalogKeywordExtras(): Promise<MtgKeywordEntry[]> {
 }
 
 async function initializeKeywordCache(): Promise<void> {
-  if (keywordCache !== null) {
-    return;
-  }
-
+  const firstLoad = keywordCache === null;
   const existing = await readKeywordFile();
   if (existing) {
     keywordCache = existing.keywords;
     keywordCacheUpdatedAt = existing.updatedAt || null;
     keywordIndex = buildKeywordIndex(keywordCache);
   }
+
+  // Serve file/seed data at once; a stale stamp makes the loader refresh it in the background.
+  if (firstLoad && existing) return;
 
   const todayStamp = formatTodayStamp();
   if (existing && shouldSkipUpdate(existing.updatedAt, todayStamp)) {
@@ -338,7 +330,8 @@ async function initializeKeywordCache(): Promise<void> {
       `[MTG Keywords] Cache updated (${keywordCacheUpdatedAt}): ${merged.length} keywords`,
     );
 
-    await learnMissingReminders(merged).catch((error) =>
+    // Background: up to 25 sequential wiki fetches must not hold up the request that loaded keywords.
+    void learnMissingReminders(merged).catch((error) =>
       console.warn("[MTG Keywords] Reminder learning failed:", error),
     );
 
@@ -361,28 +354,16 @@ async function initializeKeywordCache(): Promise<void> {
       console.log("[MTG Keywords] No keyword content changes detected");
     }
   } catch (error) {
+    // Stale file data (if any) stays; with none the cache stays null and is retried.
     console.error("[MTG Keywords] Failed to refresh cache:", error);
-    if (!keywordCache) {
-      keywordCache = [];
-      keywordIndex = buildKeywordIndex([]);
-    }
   }
 }
 
-export async function ensureMtgKeywordCache(): Promise<void> {
-  if (keywordCache !== null) {
-    return;
-  }
-
-  if (keywordCachePromise === null) {
-    keywordCachePromise = initializeKeywordCache().catch((error) => {
-      keywordCachePromise = null;
-      throw error;
-    });
-  }
-
-  await keywordCachePromise;
-}
+export const ensureMtgKeywordCache = createCacheLoader(
+  () => keywordCache !== null,
+  initializeKeywordCache,
+  { isFresh: stampedToday(() => keywordCacheUpdatedAt) }
+);
 
 async function getKeywordIndex(): Promise<MtgKeywordIndex> {
   await ensureMtgKeywordCache();
