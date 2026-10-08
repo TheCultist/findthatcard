@@ -4,7 +4,7 @@
  *
  * OpenAI env vars: OPENAI_API_KEY, OPENAI_MODEL (default: gpt-4.1-mini)
  * Optional: OPENAI_REASONING_EFFORT=low|medium|high for reasoning-capable models only (Responses API).
- * Claude env vars:  ANTHROPIC_API_KEY, CLAUDE_MODEL (default: claude-haiku-4-5)
+ * Claude env vars:  ANTHROPIC_API_KEY, CLAUDE_MODEL (default: claude-haiku-5-5)
  */
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
@@ -161,11 +161,21 @@ function getAnthropicClient(): Anthropic {
   return anthropicClient;
 }
 
+const DEFAULT_CLAUDE_MODEL = "claude-haiku-5-5";
+
+// Haiku 4.5 takes `temperature` but rejects `effort`. Haiku 5.5+ is the reverse:
+// non-default sampling params 400, and adaptive thinking is on by default (it
+// counts toward max_tokens), so short routes run at low effort instead.
+// ponytail: prefix check covers the one legacy model this project ran on; other
+// pre-4.6 models would need adding here.
+const isLegacyClaude = (model: string) => model.startsWith("claude-haiku-4");
+
 async function callClaude(params: AIRequestParams): Promise<AIResponse> {
-  const model = process.env.CLAUDE_MODEL || "claude-haiku-4-5";
+  const model = process.env.CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL;
 
   const response = await getAnthropicClient().messages.create({
     model,
+    ...(isLegacyClaude(model) ? {} : { output_config: { effort: "low" as const } }),
     ...(params.system ? { system: params.system } : {}),
     messages: [{ role: "user", content: params.user }],
     max_tokens: params.max_output_tokens,
@@ -192,15 +202,16 @@ async function callClaude(params: AIRequestParams): Promise<AIResponse> {
 async function callClaudeStructured<T>(
   params: AIStructuredParams
 ): Promise<AIStructuredResponse<T>> {
-  const model = process.env.CLAUDE_MODEL || "claude-haiku-4-5";
+  const model = process.env.CLAUDE_MODEL || DEFAULT_CLAUDE_MODEL;
 
   // Forced tool use is Claude's structured-output mechanism: the model must call
-  // the single provided tool, and its `input` conforms to the JSON Schema.
-  // temperature 0: extraction must be deterministic — at the default 1.0 Haiku
-  // returned different (and sometimes contradictory) constraints for the same query.
+  // the single provided tool, and its `input` conforms to the JSON Schema (it also
+  // skips thinking on Haiku 5.5).
+  // temperature 0 (legacy only): at the default 1.0 Haiku 4.5 returned different
+  // (and sometimes contradictory) constraints for the same query. Haiku 5.5 400s on it.
   const response = await getAnthropicClient().messages.create({
     model,
-    temperature: 0,
+    ...(isLegacyClaude(model) ? { temperature: 0 } : {}),
     ...(params.system ? { system: params.system } : {}),
     messages: [{ role: "user", content: params.user }],
     max_tokens: params.max_output_tokens,
