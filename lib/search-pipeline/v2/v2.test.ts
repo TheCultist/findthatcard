@@ -31,6 +31,7 @@ function baseExtraction(overrides: Partial<V2Extraction>): V2Extraction {
     subtypes: [],
     supertypes: [],
     stats: [],
+    mvParity: null,
     rarity: null,
     year: null,
     keywords: [],
@@ -173,6 +174,16 @@ async function main(): Promise<void> {
     );
     const bq = assembleQueryFromIR(bad);
     check("malformed stat/rarity dropped", !bq.includes("mv") && !/r[:<>]/.test(bq), bq);
+
+    // Mana value parity: odd/even → mv:odd; a scalar-in-array shape is coerced, garbage dropped.
+    const odd = (await finalizeQuery(await buildIRFromExtraction(baseExtraction({ mvParity: "odd" }), "odd mana value"))).queryForLogs;
+    check("mv parity emitted through finalize", odd.includes("mv:odd"), odd);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const arr = assembleQueryFromIR(await buildIRFromExtraction(baseExtraction({ mvParity: ["EVEN"] as any }), "even cmc"));
+    check("array-shaped parity coerced", arr.includes("mv:even"), arr);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const junk = assembleQueryFromIR(await buildIRFromExtraction(baseExtraction({ mvParity: "prime" as any }), "prime mv"));
+    check("unknown parity dropped", !junk.includes("mv:"), junk);
   }
 
   // 1d. Verb-initial oracle phrases are split into stem + rest so quoted

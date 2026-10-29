@@ -46,6 +46,7 @@ const RARITY_OPS = new Set([":", "<=", ">="]);
 const COLOR_OPS = new Set([":", "=", ">=", "<="]);
 const STAT_FIELDS = new Set(["mv", "pow", "tou", "loy"]);
 const RARITY_CODES = new Set(["c", "u", "r", "m"]);
+const MV_PARITIES = new Set(["odd", "even"]);
 /** Archetypes whose qualifier is the effect's target, not a filter on the card (see buildIR). */
 const TARGET_QUALIFIER_ARCHETYPES = new Set(["removal", "damage", "reanimator"]);
 /** Token qualifiers that are classes the tokens tags already encode (not a specific kind). */
@@ -70,6 +71,7 @@ function toObjectArray<T>(value: unknown): T[] {
 function normalizeExtraction(raw: Partial<V2Extraction> | null | undefined): V2Extraction {
   const e = (raw ?? {}) as Record<string, unknown>;
   const scalar = <T>(v: unknown): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null)) as T | null;
+  const parity = String(scalar(e.mvParity) ?? "").toLowerCase();
   return {
     intent: (typeof e.intent === "string" ? e.intent : "search") as V2Extraction["intent"],
     cardName: typeof scalar(e.cardName) === "string" ? scalar<string>(e.cardName) : null,
@@ -81,6 +83,7 @@ function normalizeExtraction(raw: Partial<V2Extraction> | null | undefined): V2E
     subtypes: toStringArray(e.subtypes),
     supertypes: toStringArray(e.supertypes),
     stats: toObjectArray<V2Extraction["stats"][number]>(e.stats),
+    mvParity: MV_PARITIES.has(parity) ? (parity as "odd" | "even") : null,
     rarity: scalar<V2Extraction["rarity"]>(e.rarity),
     year: scalar<V2Extraction["year"]>(e.year),
     keywords: toStringArray(e.keywords),
@@ -406,6 +409,7 @@ export async function buildIRFromExtraction(
     }
     must.push({ value: `${stat.field}${stat.op}${Math.round(stat.value)}`, source: "phase1:stat" });
   }
+  if (extraction.mvParity) must.push({ value: `mv:${extraction.mvParity}`, source: "phase1:stat" });
   if (extraction.rarity) {
     // `codes` may arrive as a scalar, an array, or the legacy `code` key.
     const rawCodes = toStringArray(

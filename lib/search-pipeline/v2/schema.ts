@@ -48,6 +48,8 @@ export interface V2Extraction {
   supertypes: string[];
   /** Numeric stat filters. */
   stats: Array<{ field: "mv" | "pow" | "tou" | "loy"; op: NumericOp; value: number }>;
+  /** Mana value parity ("odd mana value" → mv:odd). */
+  mvParity: "odd" | "even" | null;
   /** Rarity filter. `codes` may list several ("common and uncommon" → ["c","u"]). */
   rarity: { op: RarityOp; codes: Array<"c" | "u" | "r" | "m"> } | null;
   /** Printed-year filter. */
@@ -132,6 +134,7 @@ export const V2_EXTRACTION_SCHEMA: Record<string, unknown> = {
         },
       },
     },
+    mvParity: { type: ["string", "null"], enum: ["odd", "even", null] },
     rarity: {
       type: ["object", "null"],
       additionalProperties: false,

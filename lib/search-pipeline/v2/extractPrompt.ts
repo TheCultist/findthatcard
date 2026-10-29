@@ -63,6 +63,10 @@ const EXAMPLES: Array<[string, Record<string, unknown>]> = [
       archetypes: [{ name: "ramp", qualifier: null }],
     },
   ],
+  [
+    "sphinxes in esper with odd mana value",
+    { intent: "search", colors: { mode: "identity", op: ":", letters: "wub", combine: "and" }, subtypes: ["sphinx"], mvParity: "odd" },
+  ],
   ["counterspells that cost 1", { intent: "search", stats: [{ field: "mv", op: "=", value: 1 }], archetypes: [{ name: "counterspell", qualifier: null }] }],
   ["goblin tribal payoffs for EDH", { intent: "search", format: "commander", functionTags: ["tribal-goblin"] }],
   [
@@ -146,7 +150,7 @@ export function buildExtractSystemPrompt(): string {
     "- colors: mode 'identity' (Scryfall id:, the default for colour requests) or 'color' (c:, only when the user clearly means the card's own colours). letters w u b r g (c colorless). op ':' contains, '=' exactly, '>=' / '<=' at least / at most. combine 'and' = must have ALL (guild/shard/wedge names: azorius=wu, jund=brg, 'red and green'); 'or' = alternatives ('red or green', 'white, blue, or black'). Single colour → 'and'. negatedColors: letters the card must NOT be ('not blue' → 'u', 'non-red' → 'r').",
     "- typesAll: base types the card must have ALL of ('artifact creatures' → [artifact, creature]; a single type also goes here). typesAny: enumerated alternatives ('instants or sorceries', 'instants and sorceries' → [instant, sorcery] — one card is never both). negatedTypes: excluded base types. Base types only: creature, instant, sorcery, artifact, enchantment, land, planeswalker, battle.",
     "- subtypes: dragon, goblin, equipment, aura, saga… supertypes: legendary, snow, basic, world.",
-    "- stats: mv (mana value), pow, tou, loy with op and value. cheap → mv<=2; expensive → mv>=6; big → pow>=5; small creatures → pow<=1.",
+    "- stats: mv (mana value), pow, tou, loy with op and value. cheap → mv<=2; expensive → mv>=6; big → pow>=5; small creatures → pow<=1. mvParity: 'odd' / 'even' for 'odd/even mana value' or 'odd/even cmc'.",
     "- rarity: op + codes list (c/u/r/m). 'common and uncommon' → ':' [c,u]; 'uncommon or better' → '>=' [u]. year: 4-digit year + op.",
     "- keywords: ability keywords the card ITSELF has (flying, ward, flash…). Keywords it GRANTS to others are oraclePhrases, not keywords. negatedKeywords: keywords the card must NOT have ('without flying').",
     `- format: exactly one slug from: ${SCRYFALL_FORMAT_PROMPT_LIST}. 'edh' → commander; 'pauper edh' / 'pdh' / 'pedh' → paupercommander (never pauper + commander); 'penny dreadful' → penny; 'duel commander' → duel; 'old school' / '93/94' → oldschool; 'standard brawl' → standardbrawl; 'tiny leaders' → tlr. Only set format when the user names one.`,

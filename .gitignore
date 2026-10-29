@@ -46,3 +46,4 @@ data/scryfall-catalogs.json
 tasks/*
 
 graphify-out/*
+brag-output*
