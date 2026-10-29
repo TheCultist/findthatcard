@@ -223,4 +223,4 @@ Unofficial fan content. Card data and images from [Scryfall](https://scryfall.co
 
 ## License
 
-MIT
+[MIT](LICENSE)
