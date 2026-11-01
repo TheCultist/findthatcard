@@ -1,53 +1,37 @@
+import { parseQuery, walkQuery, type QueryTerm } from "@/lib/scryfall/query-ast";
 import { ensureTaggerTagCache, getTaggerTagCache } from "@/lib/tagger/cache";
 
+const ART_TAG_FIELDS = new Set(["art", "atag", "arttag"]);
+const FUNCTION_TAG_FIELDS = new Set(["function", "otag", "oracletag"]);
+
+export type TaggerTagRef = { type: "art" | "function"; tag: string };
+
 /**
- * Extracts Tagger tags from a Scryfall query
- * Returns an array of { type: 'art' | 'function', tag: string, fullMatch: string }
+ * The Tagger tag a parsed term refers to (`function:storm`, `-atag:"night sky"`), or null when
+ * the term is not a tag clause. Regex values are not tags.
+ */
+export function taggerTagOf(term: QueryTerm): TaggerTagRef | null {
+  if (term.field === undefined || term.valueKind === "regex" || term.unterminated) return null;
+  const field = term.field.toLowerCase();
+  const type = ART_TAG_FIELDS.has(field) ? "art" : FUNCTION_TAG_FIELDS.has(field) ? "function" : null;
+  if (!type || !term.value) return null;
+  return { type, tag: term.value };
+}
+
+/**
+ * Extracts Tagger tags from a Scryfall query, negated ones included, wherever they sit (inside
+ * groups too). Text inside quoted or regex values is never a tag. `fullMatch` is the clause as
+ * written. Uses the shared parser in lib/scryfall/query-ast.
  */
 export function extractTaggerTags(
   query: string
 ): Array<{ type: "art" | "function"; tag: string; fullMatch: string }> {
-  const tags: Array<{ type: "art" | "function"; tag: string; fullMatch: string }> =
-    [];
-
-  // A tag can be preceded by start-of-string, whitespace, or an open paren —
-  // assembled queries routinely emit `((function:tag …`, and requiring
-  // whitespace made every parenthesized tag invisible to validation.
-  // Patterns for art tags: art:, atag:, arttag:
-  const artPattern = /(?:^|[\s(])(?:art|atag|arttag):([^\s"()]+|"[^"]+")/gi;
-  // Patterns for function tags: function:, otag:, oracletag:
-  const functionPattern = /(?:^|[\s(])(?:function|otag|oracletag):([^\s"()]+|"[^"]+")/gi;
-
-  // Also handle negated tags (-art:, -function:, etc.)
-  const negatedArtPattern = /(?:^|[\s(])-(?:art|atag|arttag):([^\s"()]+|"[^"]+")/gi;
-  const negatedFunctionPattern =
-    /(?:^|[\s(])-(?:function|otag|oracletag):([^\s"()]+|"[^"]+")/gi;
-
-  // Extract art tags
-  let match;
-  while ((match = artPattern.exec(query)) !== null) {
-    const tag = match[1].replace(/^"|"$/g, ""); // Remove quotes
-    tags.push({ type: "art", tag, fullMatch: match[0].trim() });
+  const tags: Array<{ type: "art" | "function"; tag: string; fullMatch: string }> = [];
+  for (const node of walkQuery(parseQuery(query).root)) {
+    if (node.type !== "term") continue;
+    const ref = taggerTagOf(node.term);
+    if (ref) tags.push({ ...ref, fullMatch: node.term.raw });
   }
-
-  // Extract function tags
-  while ((match = functionPattern.exec(query)) !== null) {
-    const tag = match[1].replace(/^"|"$/g, ""); // Remove quotes
-    tags.push({ type: "function", tag, fullMatch: match[0].trim() });
-  }
-
-  // Extract negated art tags (we still want to validate them)
-  while ((match = negatedArtPattern.exec(query)) !== null) {
-    const tag = match[1].replace(/^"|"$/g, "");
-    tags.push({ type: "art", tag, fullMatch: match[0].trim() });
-  }
-
-  // Extract negated function tags
-  while ((match = negatedFunctionPattern.exec(query)) !== null) {
-    const tag = match[1].replace(/^"|"$/g, "");
-    tags.push({ type: "function", tag, fullMatch: match[0].trim() });
-  }
-
   return tags;
 }
 

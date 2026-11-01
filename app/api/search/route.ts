@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateNaturalQuery, formatErrorMessage } from "@/lib/utils";
 import { SearchRequest, SearchResponse, ErrorResponse } from "@/types/scryfall";
 import { CARDS_PER_PAGE, ScryfallResponseError } from "@/lib/scryfall/client";
+import { isScryfallQuery } from "@/lib/scryfall/query-converter";
 import { searchResultsPage } from "@/lib/scryfall/response-transformer";
 import { runSearchPipeline } from "@/lib/search-pipeline/runSearchPipeline";
 import { getActiveProvider } from "@/lib/ai-client";
@@ -29,19 +30,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const provider = getActiveProvider();
-    const apiKeyMissing =
-      provider === "claude"
-        ? !process.env.ANTHROPIC_API_KEY
-        : !process.env.OPENAI_API_KEY;
-    if (apiKeyMissing) {
-      console.error(`[Search] ${provider} API key is not configured`);
-      return NextResponse.json<ErrorResponse>(
-        { error: "Search is temporarily unavailable." },
-        { status: 503 }
-      );
-    }
-
     let body: SearchRequest;
     try {
       body = await request.json();
@@ -63,6 +51,20 @@ export async function POST(request: NextRequest) {
     const page = body.page ?? 1;
     if (!Number.isInteger(page) || page < 1 || page > MAX_PAGE) {
       return NextResponse.json<ErrorResponse>({ error: "Invalid page" }, { status: 400 });
+    }
+
+    // Raw Scryfall syntax never reaches the AI, so it works without a key.
+    const provider = getActiveProvider();
+    const apiKeyMissing =
+      provider === "claude"
+        ? !process.env.ANTHROPIC_API_KEY
+        : !process.env.OPENAI_API_KEY;
+    if (apiKeyMissing && !isScryfallQuery(body.naturalQuery)) {
+      console.error(`[Search] ${provider} API key is not configured`);
+      return NextResponse.json<ErrorResponse>(
+        { error: "Search is temporarily unavailable." },
+        { status: 503 }
+      );
     }
 
     let scryfallQuery: string | undefined;

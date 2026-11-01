@@ -14,7 +14,7 @@ import { buildScryfallQuery } from "@/lib/scryfall/client";
 import { balanceScryfallQuery, PREFER_BEST_PREFIX } from "@/lib/scryfall/query-converter";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
 import { splitCompoundQuery } from "@/lib/search-pipeline/compound";
-import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
+import { finalizeQuery, removeInvalidTagsFromQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
 import { buildIRFromExtraction } from "@/lib/search-pipeline/v2/buildIR";
 import { recognizeCardNames, runPrePass } from "@/lib/search-pipeline/v2/prePass";
 import { buildDirectIR, combineCompoundBranches } from "@/lib/search-pipeline/v2/runV2";
@@ -326,6 +326,42 @@ async function main(): Promise<void> {
       found.includes("heroic-payoff") && found.includes("card-draw-payoff"),
       found.join("|")
     );
+  }
+
+  // Tag extraction and removal go through the shared parser: only real tag clauses count, text
+  // inside quoted/regex values is never a tag, and removal leaves a clean query behind.
+  {
+    const storm = [{ type: "function" as const, tag: "storm" }];
+    const rm = (q: string) => removeInvalidTagsFromQuery(q, storm);
+    check("tag removal: quoted text untouched", rm('o:"function:storm rules" t:creature') === 'o:"function:storm rules" t:creature', rm('o:"function:storm rules" t:creature'));
+    check("tag removal: or or inside quotes untouched", rm('o:"this or or that" function:storm') === 'o:"this or or that"', rm('o:"this or or that" function:storm'));
+    check("tag removal: emptied group disappears", rm("(function:storm) t:creature") === "t:creature", rm("(function:storm) t:creature"));
+    check("tag removal: nested emptied group disappears", rm("((function:storm) or (t:x))") === "(t:x)", rm("((function:storm) or (t:x))"));
+    check("tag removal: or branch removed", rm("(function:storm or function:card-draw) t:creature") === "(function:card-draw) t:creature");
+    check("tag removal: last or branch removed", rm("(function:card-draw or function:storm)") === "(function:card-draw)");
+    check("tag removal: negated tag removed", rm("t:creature -function:storm") === "t:creature");
+    check("tag removal: quoted tag removed", rm('function:"storm" t:creature') === "t:creature" && rm("function:'storm' t:creature") === "t:creature");
+    check("tag removal: alias otag removed", rm("otag:storm t:elf") === "t:elf");
+    check("tag removal: case-insensitive field and tag", rm("FUNCTION:Storm t:elf") === "t:elf");
+    check("tag removal: regex value untouched", rm("o:/function:storm/ t:creature") === "o:/function:storm/ t:creature");
+    check("tag removal: longer tag not touched", rm("function:storm-like t:creature") === "function:storm-like t:creature");
+    check("tag removal: other type not touched", rm("art:storm function:storm") === "art:storm");
+    check("tag removal: whole query removed → empty", rm("function:storm") === "" && rm("(function:storm or function:storm)") === "");
+    check("tag removal: whitespace collapsed outside values", rm('a  function:storm   o:"x  y"') === 'a o:"x  y"', rm('a  function:storm   o:"x  y"'));
+    check("tag removal: no invalid tags → query unchanged", removeInvalidTagsFromQuery("a  b ( )", []) === "a  b ( )");
+    check("tag removal: tag case ignored", rm("FUNCTION:Storm t:a") === "t:a", rm("FUNCTION:Storm t:a"));
+    check("tag removal: nested negated group", rm("(-(function:storm or t:a)) t:b") === "(-(t:a)) t:b", rm("(-(function:storm or t:a)) t:b"));
+    check("tag removal: text glued after the value survives", rm('function:"storm"x t:a') === "x t:a", rm('function:"storm"x t:a'));
+    check("tag removal: regex value is not a tag", rm("function:/storm/ t:a") === "function:/storm/ t:a", rm("function:/storm/ t:a"));
+    check("tag removal: unterminated value is not a tag", rm('t:a function:"storm') === 't:a function:"storm', rm('t:a function:"storm'));
+    const nested = "prefer:best (t:enchantment f:commander (function:storm or function:repeatable-artifact-tokens) game:paper) id:wbg";
+    check("tag removal: deep in a real query", rm(nested) === "prefer:best (t:enchantment f:commander (function:repeatable-artifact-tokens) game:paper) id:wbg", rm(nested));
+
+    const tags = (q: string) => extractTaggerTags(q).map((t) => `${t.type}:${t.tag}`).join(",");
+    check("tag extraction: not inside quotes", tags('o:"x function:storm y" t:a') === "");
+    check("tag extraction: not inside regex", tags("o:/function:storm/") === "");
+    check("tag extraction: quoted, negated, aliases", tags('function:"pure draw" -atag:sky oracletag:x arttag:y') === "function:pure draw,art:sky,function:x,art:y");
+    check("tag extraction: fullMatch is the clause", extractTaggerTags("(-function:storm)")[0].fullMatch === "-function:storm");
   }
 
   // 4. Negations become mustNot clauses.

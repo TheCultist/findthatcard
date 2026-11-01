@@ -611,6 +611,23 @@ async function run() {
   }
 
   {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    const { NextRequest } = await import("next/server");
+    const { POST } = await import("@/app/api/search/route");
+    const post = (naturalQuery: string) =>
+      POST(new NextRequest("http://localhost/api/search", { method: "POST", body: JSON.stringify({ naturalQuery }) }));
+    fake.reset();
+    const raw = await post("t:fixture");
+    assert.equal(raw.status, 200);
+    assert.equal(fake.requests.filter((r) => r.path === "/cards/search").length, 1);
+    fake.reset();
+    assert.equal((await post("red dragons")).status, 503);
+    assert.equal(fake.requests.length, 0, "no key: an English query never reaches the pipeline");
+    pass("with no AI key raw Scryfall syntax still searches and English queries get a 503");
+  }
+
+  {
     // Last, because a 429 with no Retry-After locks the app out for a full minute.
     fake.reset();
     fake.failOnce(/q=/, 429);

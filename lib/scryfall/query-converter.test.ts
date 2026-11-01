@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import seo from "@/data/seo-queries.json";
 import type { TaggerTagContext } from "@/lib/tagger/context";
 import { buildScryfallQuery } from "@/lib/scryfall/client";
 import {
@@ -198,6 +199,41 @@ const isQueryCases: IsQueryCase[] = [
     query: "type tag: is my favorite",
     expected: false,
   },
+  // Syntax the old operator list missed.
+  { name: "accepts mv with comparison", query: "mv>=3", expected: true },
+  { name: "accepts power vs toughness", query: "pow>tou", expected: true },
+  { name: "accepts f: format alias", query: "f:commander", expected: true },
+  { name: "accepts exact quoted name", query: '!"Lightning Bolt"', expected: true },
+  { name: "accepts exact bare name", query: "!fire", expected: true },
+  { name: "accepts upper-case fields", query: "T:Creature MV>=3", expected: true },
+  { name: "accepts regex value", query: "o:/draw.*card/", expected: true },
+  { name: "accepts groups, or, negation", query: "-(t:creature or t:instant) c:r", expected: true },
+  { name: "accepts quoted phrase beside a filter", query: 't:creature "draw a card"', expected: true },
+  { name: "accepts prices and years", query: "year>=2020 usd<1", expected: true },
+  { name: "accepts no-break space between terms", query: "t:creature\u00a0o:draw", expected: true },
+  // English that happens to contain a field.
+  { name: "rejects field with no value", query: "set: neo cards", expected: false },
+  { name: "rejects a lone field with no value", query: "t:", expected: false },
+  { name: "accepts ci:", query: "ci:wu", expected: true },
+  { name: "accepts commander:", query: "commander:wu", expected: true },
+  { name: "accepts dir:", query: "dir:asc t:creature", expected: true },
+  { name: "accepts lore:", query: "lore:1", expected: true },
+  { name: "accepts flavour:", query: "flavour:fire", expected: true },
+  { name: "accepts collector:", query: "collector:1", expected: true },
+  { name: "rejects keywords: (not a Scryfall field)", query: "keywords:flying", expected: false },
+  { name: "rejects foil: (not a Scryfall field)", query: "foil:yes", expected: false },
+  { name: "rejects is: in a question", query: "what does is: mean", expected: false },
+  { name: "rejects English around a filter", query: "what is t:creature", expected: false },
+  { name: "rejects mixed English and filter", query: "red creatures c:r", expected: false },
+  { name: "rejects bare name beside a filter", query: "t:creature dragon", expected: false },
+  { name: "rejects unknown field", query: "foo:bar", expected: false },
+  { name: "rejects URL", query: "http://scryfall.com", expected: false },
+  { name: "rejects time", query: "3:00", expected: false },
+  { name: "rejects quoted phrase alone", query: '"Lightning Bolt"', expected: false },
+  { name: "rejects card name", query: "Urza's Fire // Ice", expected: false },
+  { name: "rejects empty", query: "", expected: false },
+  { name: "rejects lone or", query: "or", expected: false },
+  { name: "rejects empty group", query: "()", expected: false },
 ];
 
 function runFinalizeTests() {
@@ -224,6 +260,16 @@ function runFinalizeTests() {
 
 function runIsQueryTests() {
   let passed = 0;
+  // Corpus: every pre-rendered SEO page pairs an English query with its Scryfall query.
+  const pages = (seo.pages as { query: string; scryfallQuery: string }[]);
+  const englishFlagged = pages.filter((p) => isScryfallQuery(p.query));
+  assert.deepEqual(englishFlagged.map((p) => p.query), [], "SEO English queries flagged as Scryfall syntax");
+  console.log(`[PASS] isScryfallQuery: none of ${pages.length} SEO English queries is syntax`);
+  passed += 1;
+  const syntaxMissed = pages.filter((p) => !isScryfallQuery(p.scryfallQuery));
+  assert.deepEqual(syntaxMissed.map((p) => p.scryfallQuery), [], "SEO Scryfall queries not recognized");
+  console.log(`[PASS] isScryfallQuery: all ${pages.length} SEO Scryfall queries are syntax`);
+  passed += 1;
   for (const testCase of isQueryCases) {
     try {
       const result = isScryfallQuery(testCase.query);

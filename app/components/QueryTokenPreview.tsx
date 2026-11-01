@@ -133,7 +133,7 @@ export default function QueryTokenPreview({
             key={`${token.raw}-${index}`}
             onClick={(e) => handleTokenTap(index, e)}
             aria-expanded={activeTooltip === index}
-            className={`group relative z-0 inline-flex items-center cursor-help px-1.5 py-1 leading-none hover:z-30 focus-visible:z-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:px-2 ${getTokenClassName(
+            className={`group relative z-0 inline-flex max-w-full items-center break-all cursor-help px-1.5 py-1 text-left leading-tight hover:z-30 focus-visible:z-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:px-2 ${getTokenClassName(
               token
             )}`}
           >

@@ -12,7 +12,8 @@ import {
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
 import { getTaggerTagContext } from "@/lib/tagger/context";
-import { validateTaggerTags } from "@/lib/tagger/validation";
+import { taggerTagOf, validateTaggerTags } from "@/lib/tagger/validation";
+import { parseQuery, printQuery, pruneQuery } from "@/lib/scryfall/query-ast";
 import { escapeRegex } from "@/lib/utils/text";
 
 const DEFAULT_GAME_FILTER = "game:paper";
@@ -563,32 +564,23 @@ function prependPreferBest(value: string): string {
   return `${PREFER_BEST_PREFIX}${value}`.trim();
 }
 
+/**
+ * Drops the clauses that carry an invalid Tagger tag — `function:storm`, `-otag:"storm"`, … — and
+ * nothing else: quoted and regex values are never edited, and the tree is simplified afterwards so
+ * no empty group or dangling `or` is left behind. Uses the shared parser in lib/scryfall/query-ast.
+ */
 export function removeInvalidTagsFromQuery(
   query: string,
   invalidTags: Array<{ type: "art" | "function"; tag: string }>
 ): string {
-  let updated = query;
-  for (const invalid of invalidTags) {
-    const operators = invalid.type === "art" ? "(?:art|atag|arttag)" : "(?:function|otag|oracletag)";
-    const escapedTag = escapeRegex(invalid.tag);
-    // Require a true token boundary: do not match `function:storm` inside `function:storm-like`
-    // when stripping a shorter invalid tag like `storm`.
-    const pattern = new RegExp(
-      `\\s*-?${operators}:(?:"${escapedTag}"|${escapedTag})(?![a-z0-9-])\\b`,
-      "gi"
-    );
-    updated = updated.replace(pattern, " ");
-  }
-  // Clean up orphaned OR operators left inside groups after tag removal:
-  //   "(X or or Y)" → "(X or Y)"  (middle removal)
-  //   "(X or )"     → "(X)"       (trailing or)
-  //   "(or X)"      → "(X)"       (leading or)
-  //   "(or)"        → ""          (empty group)
-  updated = updated.replace(/\bor\s+or\b/gi, "or");
-  updated = updated.replace(/\(\s*([^)]+?)\s+or\s*\)/gi, "($1)");
-  updated = updated.replace(/\(\s*or\s+([^)]+)\)/gi, "($1)");
-  updated = updated.replace(/\(\s*or\s*\)/gi, "");
-  return updated.replace(/\s{2,}/g, " ").trim();
+  if (invalidTags.length === 0) return query;
+  const invalid = new Set(invalidTags.map((entry) => `${entry.type}:${entry.tag.toLowerCase()}`));
+  const pruned = pruneQuery(parseQuery(query), (node) => {
+    if (node.type !== "term") return true;
+    const tag = taggerTagOf(node.term);
+    return !tag || !invalid.has(`${tag.type}:${tag.tag.toLowerCase()}`);
+  });
+  return printQuery(pruned).trim();
 }
 
 function injectArchetypeTagsFromResolvedFragments(

@@ -1,3 +1,4 @@
+import { isScryfallField, parseQuery, walkQuery } from "@/lib/scryfall/query-ast";
 import { TaggerTagContext, extractArtKeywords } from "@/lib/tagger/context";
 import { SCRYFALL_FORMATS, stripRedundantTypesForCommanderEligible } from "@/lib/scryfall/formats";
 import { escapeRegex } from "@/lib/utils/text";
@@ -1429,7 +1430,7 @@ function scanScryfallQuery(query: string) {
       else if (ch === closer) closer = null;
       continue;
     }
-    if (ch === '"' || ((ch === "'" || ch === "/") && /[:=<>!]/.test(query[i - 1] ?? ""))) {
+    if (ch === '"' || (ch === "'" && /[:=<>!]/.test(query[i - 1] ?? "")) || (ch === "/" && /[:=<>]/.test(query[i - 1] ?? ""))) {
       closer = ch;
       valueStart = i;
     } else if (ch === "(") {
@@ -1471,77 +1472,29 @@ export function truncateScryfallQuery(
 }
 
 /**
- * Checks if a query looks like a Scryfall query (contains operators like :, t:, c:, art:, etc.)
- * Only matches actual Scryfall operators, not just any word followed by a colon
+ * Decides whether a query is raw Scryfall syntax (passed straight to Scryfall) rather than plain
+ * English for the AI. Rule: every word must be Scryfall syntax and at least one must be a real
+ * filter.
+ *  - Syntax: a known field with a value (`t:creature`, `mv>=3`, `-f:commander`, `pow>tou`), an
+ *    exact name (`!"Lightning Bolt"`, `!fire`); `or`/`and`, parentheses and bare quoted phrases
+ *    (`"draw a card"`) are allowed alongside them but do not count on their own.
+ *  - English: any plain word (`what is t:creature`, `red creatures c:r`), a known field with no
+ *    value (`set: neo` — the colon is punctuation), or an unknown field (`tag: removal`).
+ * Mixed queries therefore go to the AI, which understands Scryfall terms inside English.
  */
 export function isScryfallQuery(query: string): boolean {
-  const trimmed = query.trim();
-
-  // List of known Scryfall operators (common ones)
-  // These must be complete words immediately followed by a colon
-  // This ensures "function tag:" doesn't match, but "function:" does
-  const scryfallOperators = [
-    "t:",
-    "type:",
-    "c:",
-    "color:",
-    "cmc:",
-    "mana:",
-    "m:",
-    "power:",
-    "p:",
-    "toughness:",
-    "loyalty:",
-    "oracle:",
-    "o:",
-    "kw:",
-    "keyword:",
-    "art:",
-    "atag:",
-    "arttag:",
-    "function:",
-    "otag:",
-    "oracletag:",
-    "set:",
-    "s:",
-    "rarity:",
-    "r:",
-    "is:",
-    "in:",
-    "not:",
-    "format:",
-    "game:",
-    "border:",
-    "frame:",
-    "lang:",
-    "foil:",
-    "promo:",
-    "date:",
-    "year:",
-    "artist:",
-    "watermark:",
-    "banned:",
-    "legal:",
-    "id:",
-    "id=",
-    "name:",
-    "number:",
-    "block:",
-    "set-type:",
-  ];
-
-  // Check if the query contains any Scryfall operator
-  // Pattern: word boundary + operator word + colon (colon must immediately follow the word)
-  // This ensures "function tag:" doesn't match because there's a space before "tag:"
-  for (const operator of scryfallOperators) {
-    // Escape special regex characters in the operator
-    const escapedOperator = escapeRegex(operator);
-    // Match: word boundary + operator (colon must immediately follow, no space)
-    const pattern = new RegExp(`\\b${escapedOperator}`, "i");
-    if (pattern.test(trimmed)) {
-      return true;
+  let filters = 0;
+  for (const node of walkQuery(parseQuery(query).root)) {
+    if (node.type !== "term") continue;
+    const { term } = node;
+    if (term.exact) {
+      filters += 1;
+    } else if (term.field !== undefined) {
+      if (!term.value || !isScryfallField(term.field)) return false;
+      filters += 1;
+    } else if (term.valueKind === "bare") {
+      return false;
     }
   }
-
-  return false;
+  return filters > 0;
 }

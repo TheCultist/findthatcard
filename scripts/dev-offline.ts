@@ -8,8 +8,7 @@
  * `is:dfc`, `fixture:400`…) — it passes straight through the pipeline to /api/search, which
  * fetches from the fake, runs the digital→paper substitution and renders the grid; paging; the
  * card detail panel. Natural-language queries need a real AI key and network, so without one
- * they fail with the app's normal error. A placeholder key is set if none is configured, only
- * so /api/search doesn't answer 503 before reaching Scryfall.
+ * they fail with the app's normal error.
  */
 
 import { spawn } from "node:child_process";
@@ -28,11 +27,6 @@ async function main() {
     // Background refreshes of the catalog/sets/tagger caches would fail without network.
     CACHE_REFRESH: process.env.CACHE_REFRESH ?? "off",
   };
-  const keyVar = env.AI_PROVIDER?.toLowerCase().trim() === "claude" ? "ANTHROPIC_API_KEY" : "OPENAI_API_KEY";
-  if (!env[keyVar]) {
-    env[keyVar] = "offline-placeholder";
-    console.log(`[dev-offline] ${keyVar} not set — using a placeholder; only Scryfall-syntax searches will work`);
-  }
 
   const nextBin = process.platform === "win32" ? "next.cmd" : "next";
   const next = spawn(nextBin, ["dev", ...process.argv.slice(2)], { stdio: "inherit", env, shell: process.platform === "win32" });

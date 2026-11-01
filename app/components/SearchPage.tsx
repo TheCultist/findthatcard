@@ -745,6 +745,12 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
                   <span className="sm:hidden">Scryfall</span>
                   <span className="hidden sm:inline">View on Scryfall</span>
                 </a>
+                <Link
+                  href={`/explain?q=${encodeURIComponent(editableQuery)}`}
+                  className="flex flex-1 cursor-pointer items-center justify-center rounded-lg border border-border bg-surface-muted px-4 py-2.5 text-center text-sm text-foreground transition-colors duration-200 hover:border-accent/50 hover:bg-accent-muted/30 sm:flex-none sm:py-2 sm:text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  Explain
+                </Link>
               </div>
             </div>
             {getColorSemanticSelectors(editableQuery).map((selector) => (
@@ -1010,6 +1016,10 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
           <p className="mt-2">
             <Link href="/about" className="text-accent hover:underline">
               About
+            </Link>
+            <span className="mx-2 text-muted-soft">•</span>
+            <Link href="/explain" className="text-accent hover:underline">
+              Explain a query
             </Link>
             <span className="mx-2 text-muted-soft">•</span>
             <Link href="/privacy" className="text-accent hover:underline">

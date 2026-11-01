@@ -19,6 +19,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     {
+      url: "https://www.findthatcard.net/explain",
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
+    {
       url: "https://www.findthatcard.net/about",
       lastModified: now,
       changeFrequency: "monthly",

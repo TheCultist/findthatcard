@@ -1,3 +1,5 @@
+import { parseQuery, parseTerm, type QueryNode, type QueryTerm } from "@/lib/scryfall/query-ast";
+
 export type QueryTokenType = "field" | "logical" | "group" | "text";
 
 export type QueryToken = {
@@ -263,7 +265,7 @@ const preferLabel = (value: string): string => {
   return PREFER_OPTIONS.find((o) => o.value === canonical)?.label ?? value;
 };
 
-const FORMAT_NAMES: Record<string, string> = {
+export const FORMAT_NAMES: Record<string, string> = {
   standard: "Standard",
   future: "Future Standard",
   historic: "Historic",
@@ -290,7 +292,7 @@ const FORMAT_NAMES: Record<string, string> = {
   explorer: "Explorer",
 };
 
-const RARITY_NAMES: Record<string, string> = {
+export const RARITY_NAMES: Record<string, string> = {
   common: "Common",
   c: "Common",
   uncommon: "Uncommon",
@@ -303,7 +305,7 @@ const RARITY_NAMES: Record<string, string> = {
   bonus: "Bonus",
 };
 
-const IS_FLAG_NAMES: Record<string, string> = {
+export const IS_FLAG_NAMES: Record<string, string> = {
   commander: "valid commander",
   spell: "non-land card",
   permanent: "permanent",
@@ -340,12 +342,13 @@ const IS_FLAG_NAMES: Record<string, string> = {
   battle: "battle",
 };
 
-const OP_WORDS: Record<string, string> = {
+export const OP_WORDS: Record<string, string> = {
   "<": "less than",
   "<=": "at most",
   ">": "greater than",
   ">=": "at least",
   "=": "exactly",
+  "!=": "not",
   ":": "",
 };
 
@@ -859,6 +862,16 @@ const OPERATOR_DESCRIPTIONS: Record<string, { title: string; description: string
     description:
       "Results can match either side of this operator — broadens the search to include both options.",
   },
+  and: {
+    title: "AND",
+    description:
+      "Results must match both sides of this operator. Scryfall combines terms with AND by default, so writing it out is optional.",
+  },
+  "-(": {
+    title: "Group (open, excluded)",
+    description:
+      "Opens a grouped expression whose matches are excluded from the results — cards matching anything inside are removed.",
+  },
   "(": {
     title: "Group (open)",
     description:
@@ -874,12 +887,14 @@ const OPERATOR_DESCRIPTIONS: Record<string, { title: string; description: string
 // Utilities
 // ---------------------------------------------------------------------------
 
-const FIELD_ALIASES: Record<string, string> = {
+export const FIELD_ALIASES: Record<string, string> = {
   color: "c",
   colors: "c",
   type: "t",
   oracle: "o",
   identity: "id",
+  ci: "id",
+  commander: "id",
   format: "format",
   f: "format",
   function: "function",
@@ -918,6 +933,7 @@ const FIELD_ALIASES: Record<string, string> = {
   prefer: "prefer",
   order: "order",
   direction: "direction",
+  dir: "direction",
   unique: "unique",
   year: "year",
   banned: "banned",
@@ -1026,66 +1042,74 @@ function buildValueAwareTitle(
 // Tokenizer
 // ---------------------------------------------------------------------------
 
+/**
+ * Flattens the shared query parser's tree into display chips, in source order. Whitespace is
+ * dropped; quoted ("…", '…') and regex (/…/) values stay inside their chip; `or`/`and` are
+ * logical chips; `(`, `-(` and `)` are group chips (an unmatched `)` still shows as one).
+ */
 export const tokenizeQuery = (value: string): QueryToken[] => {
   const tokens: QueryToken[] = [];
-  let buffer = "";
-  let inQuotes = false;
-
-  const pushToken = (raw: string) => {
-    if (!raw) return;
-    if (raw.toLowerCase() === "or") {
-      tokens.push({ raw, type: "logical" });
-      return;
-    }
-
-    let tokenValue = raw;
-    let negated = false;
-    if (tokenValue.startsWith("-")) {
-      negated = true;
-      tokenValue = tokenValue.slice(1);
-    }
-
-    // Match field + operator + value (supports :, =, <, >, <=, >=)
-    const fieldMatch = tokenValue.match(/^([a-z]+)(<=|>=|<|>|=|:)(.*)$/i);
-    if (fieldMatch) {
-      const field = fieldMatch[1].toLowerCase();
-      const op = fieldMatch[2];
-      const valuePart = fieldMatch[3];
-      tokens.push({ raw, type: "field", field, op, value: valuePart, negated });
-      return;
-    }
-
-    tokens.push({ raw, type: "text", negated });
-  };
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-
-    if (char === '"') {
-      buffer += char;
-      inQuotes = !inQuotes;
+  const parsed = parseQuery(value);
+  // Explicit stack (reverse order) instead of recursion so deeply nested groups cannot overflow.
+  type Work = { node: QueryNode } | { chip: QueryToken };
+  const work: Work[] = parsed.root ? [{ node: parsed.root }] : [];
+  while (work.length > 0) {
+    const item = work.pop()!;
+    if ("chip" in item) {
+      tokens.push(item.chip);
       continue;
     }
-
-    if (!inQuotes && (char === "(" || char === ")")) {
-      pushToken(buffer.trim());
-      buffer = "";
-      tokens.push({ raw: char, type: "group" });
-      continue;
+    const node = item.node;
+    switch (node.type) {
+      case "term":
+        tokens.push(termToToken(node.term));
+        break;
+      case "stray":
+        tokens.push({ raw: node.raw, type: node.reason === "unmatched-close" ? "group" : "logical" });
+        break;
+      case "group":
+        if (node.closed) work.push({ chip: { raw: ")", type: "group" } });
+        if (node.inner) work.push({ node: node.inner });
+        work.push({ chip: { raw: node.negated ? "-(" : "(", type: "group" } });
+        break;
+      case "and":
+      case "or":
+        for (let i = node.operands.length - 1; i >= 0; i--) {
+          work.push({ node: node.operands[i] });
+          const joiner = node.joiners[i - 1];
+          if (i > 0 && joiner.keyword) work.push({ chip: { raw: joiner.keyword, type: "logical" } });
+        }
+        break;
     }
-
-    if (!inQuotes && /\s/.test(char)) {
-      pushToken(buffer.trim());
-      buffer = "";
-      continue;
-    }
-
-    buffer += char;
   }
-
-  pushToken(buffer.trim());
   return tokens;
 };
+
+/**
+ * The value of a chip as a person reads it: without the `-`, field and operator, and without the
+ * surrounding `"…"`/`'…'` (`o:"draw a card"` → `draw a card`). A regex keeps its slashes so it
+ * is recognizable as one.
+ */
+function displayValue(raw: string): string {
+  const term = parseTerm(raw);
+  return term.valueKind === "regex" ? `/${term.value}/` : term.value;
+}
+
+/** Field chips keep `value` exactly as written after the operator (quotes included), as before. */
+function termToToken(term: QueryTerm): QueryToken {
+  if (term.field !== undefined && term.operator !== undefined) {
+    const prefixLength = (term.negated ? 1 : 0) + term.field.length + term.operator.length;
+    return {
+      raw: term.raw,
+      type: "field",
+      field: term.field.toLowerCase(),
+      op: term.operator,
+      value: term.raw.slice(prefixLength),
+      negated: term.negated,
+    };
+  }
+  return { raw: term.raw, type: "text", negated: term.negated };
+}
 
 // ---------------------------------------------------------------------------
 // Reason builder
@@ -1128,7 +1152,7 @@ const buildReason = (token: QueryToken, sourceQuery: string) => {
 
 export const getTokenMetadata = (token: QueryToken, sourceQuery: string): TokenMetadata => {
   if (token.type === "logical") {
-    const details = OPERATOR_DESCRIPTIONS.or;
+    const details = OPERATOR_DESCRIPTIONS[token.raw.toLowerCase()] ?? OPERATOR_DESCRIPTIONS.or;
     return {
       ...token,
       title: details.title,
@@ -1150,7 +1174,7 @@ export const getTokenMetadata = (token: QueryToken, sourceQuery: string): TokenM
   if (token.type === "field") {
     const canonicalField = FIELD_ALIASES[token.field ?? ""] ?? token.field ?? "";
     const op = token.op ?? ":";
-    const val = token.value ?? "";
+    const val = displayValue(token.raw);
 
     // Function / oracletag — look up the tag value first for rich descriptions
     if (canonicalField === "function" && val) {
@@ -1235,7 +1259,7 @@ export const getTokenMetadata = (token: QueryToken, sourceQuery: string): TokenM
 
   return {
     ...token,
-    title: token.negated ? `Excluding "${token.raw}"` : "Search term",
+    title: token.negated ? `Excluding "${displayValue(token.raw)}"` : "Search term",
     description: "A direct search term included in the Scryfall query.",
     reason: buildReason(token, sourceQuery),
   };

@@ -10,6 +10,7 @@ A Magic: The Gathering card search tool that converts natural language queries i
 - **AI Extraction Pipeline**: One schema-constrained AI call extracts colors, formats, types, keywords, stats, tags, and strategies, then deterministic guardrails validate the result against live Scryfall/Tagger catalogs
 - **Direct Scryfall Query Support**: Enter Scryfall queries directly (e.g., `t:creature c:r`) — the app detects and passes them through without conversion
 - **Editable Query Field**: View and edit the generated Scryfall query as tokenized chips or raw text
+- **Query Explainer**: `/explain` shows what each part of a Scryfall query does, reads it in plain English, and flags broken syntax
 - **Scryfall Tagger Support**: Native support for art and function tags from [Scryfall Tagger](https://tagger.scryfall.com)
   - Art tags: `art:`, `atag:`, `arttag:` (e.g., `art:dragon`, `art:"black cat"`)
   - Function tags: `function:`, `otag:`, `oracletag:` (e.g., `function:removal`, `function:card-advantage`)
@@ -193,6 +194,7 @@ findthatcard/
 │   │   ├── catalogs.ts, sets.ts    # Reference-data caches
 │   │   ├── catalog-index.ts        # In-memory indexes for subtype / card-name matching
 │   │   ├── lookup.ts               # Fuzzy card lookup via /cards/named
+│   │   ├── query-ast.ts                # Shared Scryfall query parser (browser-safe)
 │   │   ├── symbols.ts              # Mana symbol SVG cache (browser)
 │   │   └── tagger-graphql.ts       # Tagger GraphQL API (CSRF session, reused)
 │   ├── tagger/                     # Tagger tag cache, query context, validation
@@ -200,7 +202,8 @@ findthatcard/
 │   ├── seo-pages.ts                # Pre-built search pages (server render)
 │   ├── search-slug.ts              # /search/<slug> ↔ query
 │   ├── mtg-keywords.ts             # Keyword cache + reminder text
-│   ├── query-tokens.ts             # Scryfall query tokenizer for QueryTokenPreview
+│   ├── query-tokens.ts             # Query chips and tooltips for QueryTokenPreview
+│   ├── query-explain.ts            # Plain-English summary and warnings for /explain
 │   ├── example-queries.ts          # Example query strings
 │   └── cache-paths.ts              # /tmp on serverless, ./data locally
 ├── scripts/
