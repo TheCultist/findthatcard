@@ -53,6 +53,7 @@ export interface ScryfallCard {
   set_name?: string;
   set?: string; // Set code (e.g., "lea", "war")
   set_type?: string; // Set type (e.g., "commander", "expansion", "alchemy")
+  released_at?: string; // Release date of this printing (YYYY-MM-DD)
   oracle_id?: string; // Oracle ID for finding base card (useful for alchemy cards)
   digital?: boolean; // Whether this is a digital-only card
   collector_number?: string; // Collector number for this printing
@@ -89,6 +90,9 @@ export interface SearchResponse {
   page: number;
   per_page: number;
   cards: CardResult[];
+  excluded: number; // Alchemy cards with no paper printing hidden from this page (still in `total`)
+  incomplete: boolean; // Scryfall failed partway, so cards may be missing or show a digital printing
+  from_page?: number; // The page asked for, when pages with nothing to show were skipped to reach `page`
 }
 
 export interface CardResult {

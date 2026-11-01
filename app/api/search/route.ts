@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  validateNaturalQuery,
-  transformScryfallResponse,
-  formatErrorMessage,
-} from "@/lib/utils";
+import { validateNaturalQuery, formatErrorMessage } from "@/lib/utils";
 import { SearchRequest, SearchResponse, ErrorResponse } from "@/types/scryfall";
-import { CARDS_PER_PAGE, ScryfallResponseError, searchScryfall } from "@/lib/scryfall/client";
+import { CARDS_PER_PAGE, ScryfallResponseError } from "@/lib/scryfall/client";
+import { searchResultsPage } from "@/lib/scryfall/response-transformer";
 import { runSearchPipeline } from "@/lib/search-pipeline/runSearchPipeline";
 import { getActiveProvider } from "@/lib/ai-client";
 import { clientIp, createRateLimiter } from "@/lib/utils/rate-limit";
@@ -84,16 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      const { response: scryfallResponse, offset } = await searchScryfall(scryfallQuery, page);
-
-      const response: SearchResponse = await transformScryfallResponse(
-        scryfallQuery,
-        page,
-        offset,
-        scryfallResponse
-      );
-
-      return NextResponse.json<SearchResponse>(response);
+      return NextResponse.json<SearchResponse>(await searchResultsPage(scryfallQuery, page));
     } catch (scryfallError) {
       console.error("Scryfall search error:", scryfallError);
       const errorMessage = formatErrorMessage(scryfallError);
@@ -106,14 +94,18 @@ export async function POST(request: NextRequest) {
           page,
           per_page: CARDS_PER_PAGE,
           cards: [],
+          excluded: 0,
+          incomplete: false,
         };
         return NextResponse.json<SearchResponse>(emptyResponse);
       }
 
       // Scryfall's own 4xx explanation is about the query (and the user can edit it);
-      // timeouts, network failures and 5xx get a generic message.
+      // rate limits, timeouts, network failures and 5xx get a generic message.
       const queryProblem =
-        scryfallError instanceof ScryfallResponseError && scryfallError.status < 500;
+        scryfallError instanceof ScryfallResponseError &&
+        scryfallError.status < 500 &&
+        scryfallError.status !== 429;
       return NextResponse.json<ErrorResponse>(
         {
           error: queryProblem ? errorMessage : "Scryfall is unavailable right now — please try again.",

@@ -367,7 +367,7 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
       setSelectedIndex(null);
       return;
     }
-    if (pending && pending.page === results.page) {
+    if (pending && pending.page === (results.from_page ?? results.page)) {
       setSelectedIndex(pending.edge === "first" ? 0 : results.cards.length - 1);
       return;
     }
@@ -380,8 +380,11 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
 
   panelOpenRef.current = selectedCard !== null;
 
+  // Not `page - 1` when empty pages were skipped: asking for one of those lands back here.
+  const previousPage = results ? (results.from_page ?? results.page) - 1 : 0;
+
   const canStepBack =
-    selectedIndex !== null && !!results && (selectedIndex > 0 || results.page > 1);
+    selectedIndex !== null && !!results && (selectedIndex > 0 || previousPage >= 1);
   const canStepForward =
     selectedIndex !== null && !!results && !!resultCards &&
     (selectedIndex < resultCards.length - 1 || results.has_more);
@@ -398,7 +401,7 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
     }
     // Past the edge of the loaded page: pull the adjacent one and land on the
     // card that continues the sequence.
-    const nextPage = direction === 1 ? results.page + 1 : results.page - 1;
+    const nextPage = direction === 1 ? results.page + 1 : previousPage;
     if (direction === 1 ? !results.has_more : nextPage < 1) {
       return;
     }
@@ -841,18 +844,30 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
                 Found {results.total.toLocaleString()} card{results.total !== 1 ? "s" : ""}
                 {results.total > 0 && (
                   <span className="ml-1 text-muted-soft sm:ml-2">
-                    (p.{results.page}, {results.cards.length} shown)
+                    (p.{results.page}, {results.cards.length} shown
+                    {results.excluded > 0 && `, ${results.excluded} digital-only hidden`})
                   </span>
                 )}
               </div>
             </div>
 
+            {results.incomplete && (
+              <div
+                role="status"
+                className="mb-4 rounded-2xl border border-amber-300 bg-amber-50/30 px-3 py-2.5 text-sm text-amber-700 sm:mb-5 sm:px-4 sm:py-3 sm:text-base dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
+              >
+                Scryfall stopped answering partway, so this page may be missing cards or show digital
+                printings. Try again in a minute.
+              </div>
+            )}
+
             {results.cards.length === 0 ? (
               <div className="rounded-2xl border border-border bg-surface-muted p-10 text-center text-foreground">
-                No cards found. Try a different search query.
+                {results.excluded > 0
+                  ? "The cards here only exist digitally, so they're hidden."
+                  : "No cards found. Try a different search query."}
               </div>
             ) : (
-              <>
                 <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
                   {(() => {
                     const items: React.ReactNode[] = [];
@@ -881,13 +896,14 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
                     return items;
                   })()}
                 </div>
+            )}
 
                 {(results.has_more || results.page > 1) && (
                     <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:mt-8 sm:gap-4">
                     <div className="flex w-full items-center justify-center gap-3 rounded-2xl border border-border bg-surface-muted px-3 py-3 text-base text-foreground sm:w-auto sm:gap-4 sm:px-4">
                       <button
-                        onClick={() => handlePageChange(results.page - 1)}
-                        disabled={loading || results.page === 1}
+                        onClick={() => handlePageChange(previousPage)}
+                        disabled={loading || previousPage < 1}
                         className="min-h-[44px] rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:bg-accent-muted disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:px-4 sm:text-base"
                       >
                         Previous
@@ -966,8 +982,6 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
                     )}
                   </div>
                 )}
-              </>
-            )}
           </div>
         )}
 

@@ -44,12 +44,13 @@ export function buildScryfallQuery(query: string): string {
 
 /**
  * Executes Scryfall search
- * May fetch multiple Scryfall pages if needed to get 60 cards
+ * May fetch multiple Scryfall pages if needed to get 60 cards. `incomplete` means the second of
+ * them failed, so the page is short by however many cards it would have added.
  */
 export async function searchScryfall(
   query: string,
   page: number = 1
-): Promise<{ response: ScryfallSearchResponse; offset: number }> {
+): Promise<{ response: ScryfallSearchResponse; offset: number; incomplete: boolean }> {
   const { scryfallPage, offset } = calculateScryfallPage(page);
   const queryWithPrefer = buildScryfallQuery(query);
 
@@ -73,7 +74,8 @@ export async function searchScryfall(
         details: response.statusText,
       }));
 
-      if (response.status === 404) {
+      // 404 is "no matches". 422 past page 1 is a page beyond the end, which is not the query's fault.
+      if (response.status === 404 || (response.status === 422 && scryfallPage > 1)) {
         return {
           response: {
             object: "list",
@@ -82,6 +84,7 @@ export async function searchScryfall(
             data: [],
           },
           offset: 0,
+          incomplete: false,
         };
       }
 
@@ -100,20 +103,27 @@ export async function searchScryfall(
       nextPageUrl.searchParams.set("unique", "cards");
       nextPageUrl.searchParams.set("page", (scryfallPage + 1).toString());
 
-      const nextResponse = await scryfallFetch(nextPageUrl.toString());
+      try {
+        const nextResponse = await scryfallFetch(nextPageUrl.toString());
 
-      if (nextResponse.ok) {
-        const nextData: ScryfallSearchResponse = await nextResponse.json();
-        // Combine cards from both pages
-        const combinedData: ScryfallSearchResponse = {
-          ...data,
-          data: [...data.data, ...nextData.data],
-        };
-        return { response: combinedData, offset };
+        if (nextResponse.ok) {
+          const nextData: ScryfallSearchResponse = await nextResponse.json();
+          // Combine cards from both pages
+          const combinedData: ScryfallSearchResponse = {
+            ...data,
+            has_more: nextData.has_more,
+            data: [...data.data, ...nextData.data],
+          };
+          return { response: combinedData, offset, incomplete: false };
+        }
+        console.warn(`[Scryfall] Second page answered ${nextResponse.status}; returning a short page`);
+      } catch (error) {
+        console.warn("[Scryfall] Second page failed; returning a short page:", error);
       }
+      return { response: data, offset, incomplete: true };
     }
 
-    return { response: data, offset };
+    return { response: data, offset, incomplete: false };
   } catch (error) {
     if (error instanceof Error) {
       throw error;

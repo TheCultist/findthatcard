@@ -98,6 +98,7 @@ Scryfall catalogs, sets, keywords and Tagger tags are cached as JSON in `CACHE_D
 | `ANTHROPIC_API_KEY` | When provider is `claude` | — | Anthropic API key |
 | `CLAUDE_MODEL` | No | `claude-haiku-4-5` | Claude model for query extraction |
 | `SCRYFALL_USER_AGENT` | No | `find-that-card/1.0 (+https://findthatcard.net)` | User-Agent for Scryfall requests |
+| `SCRYFALL_BASE_URL` | No | `https://api.scryfall.com` | Scryfall API origin for search, card substitution and card detail (`npm run dev:offline` points it at the fake) |
 | `NEXT_PUBLIC_CARDTRADER_SHARE_CODE` | No | `thecultist` | CardTrader share code for buy links |
 | `TCG_PLAYER_PARTNER_LINK` | No | — | TCGPlayer partner link base URL |
 | `RESEND_API_KEY` | For bug reports | — | Resend API key (reports go to the address in `app/api/report-bug/route.ts`) |
@@ -114,6 +115,27 @@ npm run build     # includes the typecheck
 ```
 
 CI (`.github/workflows/ci.yml`) runs lint, tests and build on every push to `main` and every PR, against the seed snapshots (`CACHE_REFRESH=off`). For end-to-end checks against live AI + Scryfall, use `npm run search:qa` or `npm run seo:verify`.
+
+### Running the search-results path without Scryfall
+
+`test/fake-scryfall/` is a small in-process Scryfall stand-in: `/cards/search` over the fixture
+cards in `fixtures.ts` (paper, Alchemy, rebalanced `A-`, MTGO-only, double-faced, split, foil-only,
+plus 200 filler creatures so results span two Scryfall pages), `/cards/:id`, SVG placeholder images,
+and `fixture:400|404|429|500` tokens that force an upstream error. Queries support implicit AND,
+`or`, parentheses, `-` negation and `prefer:oldest|newest` with `unique=cards`. It mimics Scryfall's quirks that matter here: `q` is silently
+cut at 1024 characters (a cut inside parentheses is a 400), `limit` is ignored, no matches is a 404,
+a page past the end is a 422, and the rate limits are enforced with token buckets (2/s for
+`/cards/search|named|random|collection`, 10/s otherwise; a 429 with no Retry-After locks the whole API for a while). It records
+every request it receives and can inject one-off failures.
+
+- `lib/scryfall/search-results.test.ts` (part of `npm test`) drives the real `scryfallFetch` →
+  `searchScryfall` → `transformScryfallResponse` chain against it — pagination, the
+  digital→paper substitution and its fallbacks, paging when cards are hidden, field mapping, error handling, and partial failures.
+- `npm run dev:offline` starts the fake and `next dev` pointed at it (`SCRYFALL_BASE_URL`), so the
+  app works in a browser with no network: type Scryfall syntax such as `t:creature c:r`,
+  `name:pyromancer`, `name:ancestral`, `is:dfc` or `t:creature fixture:400`. Natural-language
+  queries still need an AI key and network. Extra arguments go to `next dev`
+  (`npm run dev:offline -- -p 3001`).
 
 ## Project Structure
 
@@ -164,10 +186,10 @@ findthatcard/
 │   │   │   └── v2.test.ts              # Deterministic self-check (no live AI)
 │   │   └── phase3/finalizeQuery.ts # Archetype injection, sanitization, game filter, truncation
 │   ├── scryfall/
-│   │   ├── http.ts                 # scryfallFetch: headers, timeout, 429 retry
+│   │   ├── http.ts                 # scryfallFetch: headers, rate-limit pacing (2/s search, 10/s rest), timeout, 429 retry and lockout
 │   │   ├── client.ts               # Search + pagination
 │   │   ├── query-converter.ts      # Query helpers: archetypes, quoting/balancing/truncation, direct-query detection
-│   │   ├── response-transformer.ts # Alchemy substitution, buy links
+│   │   ├── response-transformer.ts # Digital→paper substitution (batched lookups), paging, buy links
 │   │   ├── catalogs.ts, sets.ts    # Reference-data caches
 │   │   ├── catalog-index.ts        # In-memory indexes for subtype / card-name matching
 │   │   ├── lookup.ts               # Fuzzy card lookup via /cards/named
@@ -182,9 +204,11 @@ findthatcard/
 │   ├── example-queries.ts          # Example query strings
 │   └── cache-paths.ts              # /tmp on serverless, ./data locally
 ├── scripts/
+│   ├── dev-offline.ts              # npm run dev:offline — app + fake Scryfall, no network
 │   ├── seed-caches.ts              # npm run seed
 │   ├── verify-seo-queries.ts       # npm run seo:verify
 │   └── search-qabot.ts             # npm run search:qa
+├── test/fake-scryfall/             # In-process Scryfall stand-in + fixture cards (tests, dev:offline)
 ├── data/
 │   ├── seed/                       # Committed cache snapshots (fresh-instance fallback)
 │   ├── seo-queries.json            # Pre-built search pages

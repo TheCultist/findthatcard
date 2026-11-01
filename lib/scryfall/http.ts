@@ -1,43 +1,89 @@
-export const SCRYFALL_BASE_URL = "https://api.scryfall.com";
+// Overridable so tests and `npm run dev:offline` can point the app at a local fake Scryfall.
+export const SCRYFALL_BASE_URL =
+  process.env.SCRYFALL_BASE_URL?.replace(/\/+$/, "") || "https://api.scryfall.com";
 export const SCRYFALL_USER_AGENT =
   process.env.SCRYFALL_USER_AGENT || "find-that-card/1.0 (+https://findthatcard.net)";
 
 const TIMEOUT_MS = 10_000;
 const MAX_RETRY_WAIT_MS = 2_000;
-// Scryfall asks for 50–100 ms between requests (~10/s) and answers bursts with a 429 that warns
+// Scryfall's limits (https://scryfall.com/docs/api): 10 requests/s overall, and 2 requests/s for
+// /cards/search, /cards/named, /cards/random and /cards/collection. Bursts get a 429 that warns
 // access will be revoked if ignored.
 const MIN_SPACING_MS = 100;
+const SEARCH_SPACING_MS = 500;
+const SEARCH_CLASS_RE = /^\/cards\/(search|named|random|collection)(\/|$)/;
+// A 429 locks the API for a while and hammering it risks a ban: the docs say 30 s, the 429 body
+// seen in practice said 60. Used when the response has no Retry-After.
+const DEFAULT_LOCKOUT_MS = 60_000;
 
-// ponytail: per-instance spacing — N warm instances can together exceed 10/s. Upgrade path: a
-// shared token bucket (Upstash/Vercel KV) if traffic ever gets there.
+function isSearchClassUrl(url: string): boolean {
+  try {
+    return SEARCH_CLASS_RE.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isScryfallApi(url: string): boolean {
+  return url.startsWith(SCRYFALL_BASE_URL) || url.startsWith("https://api.scryfall.com");
+}
+
+// ponytail: per-instance spacing and lockout — N warm instances can together exceed the limits, and
+// each has to hit its own 429. Upgrade path: a shared token bucket (Upstash/Vercel KV) if traffic
+// ever gets there.
+let lockedUntil = 0;
 let nextSlot = 0;
-function waitForSlot(): Promise<void> {
+let nextSearchSlot = 0;
+/** Reserves the next slot: every request is ≥100 ms after the previous one, and a search-class request is also ≥500 ms after the previous search-class one. */
+function waitForSlot(searchClass: boolean): Promise<void> {
   const now = Date.now();
-  const wait = Math.max(0, nextSlot - now);
-  nextSlot = Math.max(now, nextSlot) + MIN_SPACING_MS;
+  let at = Math.max(now, nextSlot);
+  if (searchClass) at = Math.max(at, nextSearchSlot);
+  nextSlot = at + MIN_SPACING_MS;
+  if (searchClass) nextSearchSlot = at + SEARCH_SPACING_MS;
+  const wait = at - now;
   return wait > 0 ? new Promise((resolve) => setTimeout(resolve, wait)) : Promise.resolve();
+}
+
+/** What the API would answer during a lockout, without sending it another request. */
+function lockedOutResponse(): Response {
+  const details = "Not sent: Scryfall rate limited this app and the lockout has not passed yet.";
+  return new Response(JSON.stringify({ object: "error", code: "too_many_requests", status: 429, details }), {
+    status: 429,
+    headers: { "Retry-After": String(Math.ceil((lockedUntil - Date.now()) / 1000)) },
+  });
 }
 
 /**
  * fetch() for Scryfall-run hosts (api, tagger, docs) and the MTG Wiki: sets the User-Agent and
- * Accept headers Scryfall requires (callers may override), spaces requests ≥100 ms apart, aborts
- * after 10s so a hung upstream can't pin a serverless invocation, and retries a 429 once — only
- * when its Retry-After asks for ≤2s. A longer (or unstated) back-off is returned to the caller
- * as-is: retrying early is exactly what Scryfall warns against.
+ * Accept headers Scryfall requires (callers may override), paces requests to Scryfall's limits
+ * (≥100 ms apart, ≥500 ms between search-class requests), aborts after 10s so a hung upstream
+ * can't pin a serverless invocation, and retries a 429 once — only when its Retry-After asks for
+ * ≤2s. A longer (or unstated) back-off is returned to the caller as-is, and until it has passed
+ * every API call gets that same 429 back without touching the network: retrying early is exactly
+ * what Scryfall warns against.
  */
 export async function scryfallFetch(url: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   if (!headers.has("User-Agent")) headers.set("User-Agent", SCRYFALL_USER_AGENT);
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
 
+  const searchClass = isSearchClassUrl(url);
+  const scryfallApi = isScryfallApi(url);
   for (let attempt = 0; ; attempt++) {
-    await waitForSlot();
+    await waitForSlot(searchClass);
+    // Checked after the wait: a request queued behind the one that got the 429 must not go out.
+    if (scryfallApi && Date.now() < lockedUntil) return lockedOutResponse();
     const timeout = AbortSignal.timeout(TIMEOUT_MS);
     const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
     const response = await fetch(url, { ...init, headers, signal });
-    if (response.status !== 429 || attempt > 0) return response;
+    if (response.status !== 429) return response;
     const retryAfterMs = Number(response.headers.get("Retry-After")) * 1000;
-    if (!(retryAfterMs > 0 && retryAfterMs <= MAX_RETRY_WAIT_MS)) return response;
-    await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+    if (attempt === 0 && retryAfterMs > 0 && retryAfterMs <= MAX_RETRY_WAIT_MS) {
+      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+      continue;
+    }
+    if (scryfallApi) lockedUntil = Date.now() + (retryAfterMs > 0 ? retryAfterMs : DEFAULT_LOCKOUT_MS);
+    return response;
   }
 }

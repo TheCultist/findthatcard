@@ -1,7 +1,6 @@
 import { unstable_cache } from "next/cache";
 import seo from "@/data/seo-queries.json";
-import { searchScryfall } from "@/lib/scryfall/client";
-import { transformScryfallResponse } from "@/lib/scryfall/response-transformer";
+import { searchResultsPage } from "@/lib/scryfall/response-transformer";
 import type { SearchResponse } from "@/types/scryfall";
 
 /**
@@ -17,8 +16,10 @@ export const SEO_PAGES: readonly SeoPage[] = [...pages.values()];
 
 const cachedFirstPage = unstable_cache(
   async (scryfallQuery: string): Promise<SearchResponse> => {
-    const { response, offset } = await searchScryfall(scryfallQuery, 1);
-    return transformScryfallResponse(scryfallQuery, 1, offset, response);
+    const result = await searchResultsPage(scryfallQuery, 1);
+    // Throwing keeps a partial page out of the 24-hour cache; the client searches instead.
+    if (result.incomplete) throw new Error(`Incomplete results for "${scryfallQuery}"`);
+    return result;
   },
   ["seo-first-page"],
   { revalidate: 24 * 60 * 60 }
