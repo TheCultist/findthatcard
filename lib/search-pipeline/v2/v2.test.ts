@@ -10,12 +10,14 @@
 
 import assert from "node:assert/strict";
 import { ensureCatalogIndex } from "@/lib/scryfall/catalog-index";
+import { buildScryfallQuery } from "@/lib/scryfall/client";
+import { balanceScryfallQuery, PREFER_BEST_PREFIX } from "@/lib/scryfall/query-converter";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
 import { splitCompoundQuery } from "@/lib/search-pipeline/compound";
 import { finalizeQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
 import { buildIRFromExtraction } from "@/lib/search-pipeline/v2/buildIR";
 import { recognizeCardNames, runPrePass } from "@/lib/search-pipeline/v2/prePass";
-import { buildDirectIR } from "@/lib/search-pipeline/v2/runV2";
+import { buildDirectIR, combineCompoundBranches } from "@/lib/search-pipeline/v2/runV2";
 import type { V2Extraction } from "@/lib/search-pipeline/v2/schema";
 import { extractTaggerTags, validateTaggerTags } from "@/lib/tagger/validation";
 
@@ -592,6 +594,26 @@ async function main(): Promise<void> {
       "empty extraction yields safety-net fragment",
       ir.unresolvedFragments.length > 0 || ir.mustClauses.length > 0
     );
+  }
+
+  // 9. Scryfall keeps the first 1024 characters of q: the cut has to be ours, so groups stay closed
+  //    even once client.ts appends -is:art to a DFC search.
+  {
+    const phrases = (branch: string) =>
+      Array.from({ length: 40 }, (_, i) => `o:"${branch}${i}"`).join(" or ");
+    const fullLength = (query: string) => buildScryfallQuery(`is:dfc ${query}`).length - "is:dfc ".length;
+
+    const compound = combineCompoundBranches(["a", "b", "c"].map(phrases));
+    const compoundQ = `${PREFER_BEST_PREFIX}${compound}`;
+    check("compound over the limit is cut to fit", fullLength(compoundQ) <= 1024, String(fullLength(compoundQ)));
+    check("compound keeps its closing paren and game filter", /\)\) game:paper$/.test(compound), compound);
+    check("compound stays balanced", balanceScryfallQuery(compoundQ) === compoundQ, compoundQ);
+
+    const ir = await buildIRFromExtraction(baseExtraction({ typesAll: ["creature"] }), "long query");
+    ir.mustClauses.push({ value: `(${phrases("long")} or ${phrases("longer")})`, source: "phase1:direct" });
+    const single = (await finalizeQuery(ir)).queryForScryfall;
+    check("generated query over the limit is cut to fit", fullLength(single) <= 1024, String(fullLength(single)));
+    check("generated query stays balanced", balanceScryfallQuery(single) === single, single);
   }
 
   console.log(`\nAll ${passed} V2 self-checks passed.`);

@@ -140,6 +140,12 @@ async function runSingle(query: string): Promise<SearchPipelineResult> {
   };
 }
 
+/** Truncates the OR body, not the whole string, so the wrapper and game filter always survive. */
+export function combineCompoundBranches(branches: string[]): string {
+  const orBody = branches.map((b) => `(${b})`).join(" or ");
+  return `(${truncateScryfallQuery(orBody, EFFECTIVE_MAX_QUERY_LENGTH - COMPOUND_WRAPPER_LENGTH)}) game:paper`;
+}
+
 /**
  * Processes each compound branch through V2 and OR-combines them. Returns null
  * (so the caller falls back to single-query mode) when any branch resolves to a
@@ -166,9 +172,7 @@ async function runCompound(
       .trim()
   );
 
-  // Truncate the OR body, not the whole string, so the wrapper and game filter always survive.
-  const orBody = strippedBranches.map((b) => `(${b})`).join(" or ");
-  const compound = `(${truncateScryfallQuery(orBody, EFFECTIVE_MAX_QUERY_LENGTH - COMPOUND_WRAPPER_LENGTH)}) game:paper`;
+  const compound = combineCompoundBranches(strippedBranches);
   const queryForScryfall = `${PREFER_BEST_PREFIX}${compound}`.trim();
 
   logSummary(originalQuery, {

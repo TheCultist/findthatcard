@@ -1,5 +1,6 @@
 import { ScryfallError, ScryfallSearchResponse } from "@/types/scryfall";
 import { scryfallFetch, SCRYFALL_BASE_URL } from "@/lib/scryfall/http";
+import { ART_EXCLUSION_SUFFIX } from "@/lib/scryfall/query-converter";
 
 export const CARDS_PER_PAGE = 60;
 
@@ -30,12 +31,13 @@ function calculateScryfallPage(ourPage: number): { scryfallPage: number; offset:
  * Final touch-ups before the request. The pipeline owns the `prefer:` prefix (added to
  * generated queries in finalize, left alone for raw Scryfall input), so it is NOT forced here.
  */
-function buildScryfallQuery(query: string): string {
+export function buildScryfallQuery(query: string): string {
   const trimmed = query.trim();
   const lower = trimmed.toLowerCase();
   // Double-faced searches pick up art-series cards; exclude them unless the query addresses art.
-  if (lower.includes("is:dfc") && !lower.includes("is:art") && !lower.includes("t:art")) {
-    return `${trimmed} -is:art`;
+  // A whole term only: t:artifact, set:arth and art:artifact all contain "t:art".
+  if (lower.includes("is:dfc") && !lower.includes("is:art") && !/(?:^|[\s(-])(?:t|type):art(?![\w-])/.test(lower)) {
+    return `${trimmed}${ART_EXCLUSION_SUFFIX}`;
   }
   return trimmed;
 }

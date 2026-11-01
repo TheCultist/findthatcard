@@ -2,10 +2,13 @@ import { TaggerTagContext, extractArtKeywords } from "@/lib/tagger/context";
 import { SCRYFALL_FORMATS, stripRedundantTypesForCommanderEligible } from "@/lib/scryfall/formats";
 import { escapeRegex } from "@/lib/utils/text";
 
-const MAX_SCRYFALL_QUERY_LENGTH = 1200;
+// Scryfall keeps only the first 1024 characters of q and silently drops the rest, closing
+// parentheses included (measured live 2026-11-01).
+const MAX_SCRYFALL_QUERY_LENGTH = 1024;
 export const PREFER_BEST_PREFIX = "prefer:best "; // 12 characters
+export const ART_EXCLUSION_SUFFIX = " -is:art"; // 8 characters, added at request time
 export const EFFECTIVE_MAX_QUERY_LENGTH =
-  MAX_SCRYFALL_QUERY_LENGTH - PREFER_BEST_PREFIX.length; // 1188 characters
+  MAX_SCRYFALL_QUERY_LENGTH - PREFER_BEST_PREFIX.length - ART_EXCLUSION_SUFFIX.length; // 1004 characters
 const FORMAT_NAMES = SCRYFALL_FORMATS;
 
 function normalizeFormatFunctionTags(query: string): string {

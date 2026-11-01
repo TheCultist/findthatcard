@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { TaggerTagContext } from "@/lib/tagger/context";
+import { buildScryfallQuery } from "@/lib/scryfall/client";
 import {
   HATE_MAGNET_FUNCTION_TAGS,
   balanceScryfallQuery,
@@ -338,6 +339,29 @@ function runTruncateTests() {
   return passed;
 }
 
+function runBuildScryfallQueryTests() {
+  let passed = 0;
+  try {
+    for (const query of ["is:dfc t:artifact", "is:dfc set:arth", "is:dfc art:artifact"]) {
+      assert.equal(buildScryfallQuery(query), `${query} -is:art`, query);
+    }
+    console.log("[PASS] build query: terms that merely contain t:art keep the exclusion");
+    passed += 1;
+
+    for (const query of ["is:dfc t:art", "is:dfc -t:art", "(t:art or t:land) is:dfc", "IS:DFC TYPE:ART", "is:dfc is:art"]) {
+      assert.equal(buildScryfallQuery(query), query, query);
+    }
+    assert.equal(buildScryfallQuery("t:artifact"), "t:artifact");
+    console.log("[PASS] build query: a real art term or a non-DFC search adds nothing");
+    passed += 1;
+  } catch (error) {
+    console.error("[FAIL] build query tests");
+    console.error(error);
+    throw error;
+  }
+  return passed;
+}
+
 function runCommanderFormatCoverageTests() {
   let passed = 0;
   try {
@@ -379,6 +403,7 @@ function run() {
     runIsQueryTests() +
     runHateMagnetTagHelperTests() +
     runTruncateTests() +
+    runBuildScryfallQueryTests() +
     runCommanderFormatCoverageTests();
   console.log(`query-converter tests passed (${passed} total)`);
 }
