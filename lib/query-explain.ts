@@ -1,15 +1,19 @@
 /**
- * Plain-English reading of a Scryfall query for the /explain page: one summary sentence and the
- * syntax problems worth showing. Runs in the browser; makes no AI or Scryfall call.
+ * Plain-English reading of a Scryfall query for the /explain page: one summary sentence, every
+ * part of the query with its explanation, and the syntax problems worth showing, attached to the
+ * part that causes them. Runs in the browser; makes no AI or Scryfall call.
  */
 
 import {
   COLOR_NAMES,
   FIELD_ALIASES,
   FORMAT_NAMES,
+  getTokenMetadata,
   IS_FLAG_NAMES,
   OP_WORDS,
   RARITY_NAMES,
+  tokenizeQuery,
+  type TokenMetadata,
 } from "@/lib/query-tokens";
 import {
   isScryfallField,
@@ -24,11 +28,25 @@ export type ExplainWarning = {
   /** "error": Scryfall refuses the query. "warning": it still runs, maybe not as written. */
   severity: "error" | "warning";
   message: string;
+  /** Index in the query where the problem starts. */
+  start: number;
+};
+
+/** One chip of the query, explained. */
+export type QueryPart = TokenMetadata & {
+  /** How many groups this part sits inside. */
+  depth: number;
+  /** False when an earlier part already gave this same explanation. */
+  firstMention: boolean;
+  warnings: ExplainWarning[];
 };
 
 export type QueryExplanation = {
   /** One sentence; empty when the query has nothing to describe. */
   summary: string;
+  /** In query order. */
+  parts: QueryPart[];
+  /** Every problem, errors first; each also sits on the part that causes it. */
   warnings: ExplainWarning[];
 };
 
@@ -187,14 +205,17 @@ function listAll(parts: string[]): string {
   return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
 }
 
+const isIgnored = (term: QueryTerm) =>
+  term.raw === "!" || (term.field !== undefined && !isScryfallField(term.field));
+
 const isModifier = (node: QueryNode) => node.type === "term" && canonical(node.term) in MODIFIERS;
 
 /** Sentence fragment for one node; `text` already holds every child's fragment. */
 function describeNode(node: QueryNode, text: Map<QueryNode, string>): string {
   switch (node.type) {
     case "term":
-      // A lone `!` is ignored by Scryfall (measured live).
-      return isModifier(node) || node.term.raw === "!" ? "" : describeTerm(node.term);
+      // Scryfall ignores a lone `!` and unknown fields (measured live), so the sentence does too.
+      return isModifier(node) || isIgnored(node.term) ? "" : describeTerm(node.term);
     case "stray":
       return "";
     case "group": {
@@ -233,27 +254,48 @@ function fieldWarnings(root: QueryNode | null): ExplainWarning[] {
     if (node.type !== "term" || node.term.field === undefined) return [];
     const { term } = node;
     if (!isScryfallField(term.field!)) {
-      return [{ severity: "warning", message: `Unknown filter "${term.field}" in ${term.raw}. Scryfall ignores it.` }];
+      return [{ severity: "warning", message: `Unknown filter "${term.field}". Scryfall ignores it.`, start: node.start }];
     }
     if (!term.value) {
-      return [{ severity: "warning", message: `${term.raw} has no value, so Scryfall may not read it the way you expect.` }];
+      return [{ severity: "warning", message: "This has no value, so Scryfall may not read it the way you expect.", start: node.start }];
     }
     return [];
   });
 }
 
-/** Summary and warnings for a query. Never throws; errors come first. */
+function explainParts(query: string, warnings: ExplainWarning[]): QueryPart[] {
+  const seen = new Set<string>();
+  let depth = 0;
+  const parts = tokenizeQuery(query).map((token): QueryPart => {
+    if (token.raw === ")") depth = Math.max(0, depth - 1);
+    const metadata = getTokenMetadata(token, "");
+    const part = { ...metadata, depth, firstMention: !seen.has(metadata.description), warnings: [] };
+    seen.add(metadata.description);
+    if (token.type === "group" && token.raw !== ")") depth += 1;
+    return part;
+  });
+  // Every problem starts at a token, so the last part starting at or before it is its part.
+  for (const warning of warnings) {
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (parts[i].start <= warning.start) {
+        parts[i].warnings.push(warning);
+        break;
+      }
+    }
+  }
+  return parts;
+}
+
+/** Summary, parts and warnings for a query. Never throws. */
 export function explainQuery(query: string): QueryExplanation {
   const parsed = parseQuery(query);
-  const problems = parsed.problems.map(({ code, message }): ExplainWarning => {
+  const problems = parsed.problems.map(({ code, message, start }): ExplainWarning => {
     const effect = PROBLEM_EFFECTS[code];
     return effect === "error"
-      ? { severity: "error", message: `${message}. Scryfall rejects this query.` }
-      : { severity: "warning", message: `${message}. ${effect}` };
+      ? { severity: "error", message: `${message}. Scryfall rejects this query.`, start }
+      : { severity: "warning", message: `${message}. ${effect}`, start };
   });
-  const warnings = [...problems, ...fieldWarnings(parsed.root)];
-  return {
-    summary: summarize(parsed.root),
-    warnings: [...warnings.filter((w) => w.severity === "error"), ...warnings.filter((w) => w.severity === "warning")],
-  };
+  const found = [...problems, ...fieldWarnings(parsed.root)];
+  const warnings = [...found.filter((w) => w.severity === "error"), ...found.filter((w) => w.severity === "warning")];
+  return { summary: summarize(parsed.root), parts: explainParts(query, warnings), warnings };
 }

@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import QueryTokenPreview from "@/app/components/QueryTokenPreview";
-import { explainQuery } from "@/lib/query-explain";
+import { getTokenClassName, isSetToken, useSetNames } from "@/app/components/QueryTokenPreview";
+import { explainQuery, type ExplainWarning } from "@/lib/query-explain";
 
 const EXAMPLES = [
   't:creature (o:"draw a card" or kw:flying) -c:r',
@@ -16,6 +16,16 @@ const EXAMPLES = [
 const linkClass =
   "rounded-lg border border-border bg-surface-muted px-4 py-2 text-sm text-foreground transition-colors duration-200 hover:border-accent/50 hover:bg-accent-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
+const WARNING_STYLES: Record<ExplainWarning["severity"], { label: string; className: string }> = {
+  error: { label: "Error", className: "text-red-600 dark:text-red-400" },
+  warning: { label: "Warning", className: "text-amber-700 dark:text-amber-400" },
+};
+
+/** Deep groups stop indenting so a phone keeps room for the text. */
+const MAX_INDENT = 4;
+
+const countOf = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
 type QueryExplainerProps = {
   initialQuery: string;
   maxLength: number;
@@ -23,8 +33,14 @@ type QueryExplainerProps = {
 
 export default function QueryExplainer({ initialQuery, maxLength }: QueryExplainerProps) {
   const [query, setQuery] = useState(initialQuery);
-  const { summary, warnings } = useMemo(() => explainQuery(query), [query]);
+  const { summary, parts, warnings } = useMemo(() => explainQuery(query), [query]);
+  const setNameOf = useSetNames(parts);
   const trimmed = query.trim();
+  const errors = warnings.filter((warning) => warning.severity === "error").length;
+  const problemCount = [
+    errors > 0 && countOf(errors, "error"),
+    warnings.length > errors && countOf(warnings.length - errors, "warning"),
+  ].filter(Boolean);
 
   return (
     <div className="space-y-6">
@@ -63,34 +79,48 @@ export default function QueryExplainer({ initialQuery, maxLength }: QueryExplain
 
       {trimmed && (
         <>
-          <section aria-label="Query parts" className="rounded-xl border border-border bg-surface-muted px-4 py-3">
-            <h2 className="text-xs uppercase tracking-wide text-muted">What each part does</h2>
-            <p className="mt-1 text-xs text-muted-soft">Hover or tap a part to read about it.</p>
-            <div className="mt-3">
-              <QueryTokenPreview scryfallQuery={query} sourceQuery={query} variant="inline" />
-            </div>
-          </section>
-
-          {summary && (
+          {(summary || warnings.length > 0) && (
             <section aria-label="Summary" className="rounded-xl border border-border bg-surface-muted px-4 py-3">
               <h2 className="text-xs uppercase tracking-wide text-muted">In plain English</h2>
-              <p className="mt-2 text-foreground">{summary}</p>
+              {summary && <p className="mt-2 text-foreground">{summary}</p>}
+              <p aria-live="polite" className="mt-2 text-sm text-muted">
+                {problemCount.length > 0 && `${problemCount.join(" and ")} marked below.`}
+              </p>
             </section>
           )}
 
-          {warnings.length > 0 && (
-            <section aria-label="Syntax problems" aria-live="polite" className="rounded-xl border border-border bg-surface-muted px-4 py-3">
-              <h2 className="text-xs uppercase tracking-wide text-muted">Syntax problems</h2>
-              <ul className="mt-2 space-y-2 text-sm text-foreground">
-                {warnings.map((warning, index) => (
-                  <li key={`${warning.message}-${index}`}>
-                    <span className="font-semibold">{warning.severity === "error" ? "Error: " : "Warning: "}</span>
-                    {warning.message}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          <section aria-label="Part by part">
+            <h2 className="text-xs uppercase tracking-wide text-muted">Part by part</h2>
+            <ol className="mt-1 divide-y divide-border">
+              {parts.map((part, index) => (
+                <li
+                  key={`${part.start}-${index}`}
+                  style={{ paddingLeft: `${Math.min(part.depth, MAX_INDENT) * 0.75}rem` }}
+                  className="py-3 sm:grid sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)] sm:gap-4"
+                >
+                  <div>
+                    <code
+                      className={`inline-block max-w-full break-all px-1.5 py-1 font-mono text-xs leading-tight sm:px-2 sm:text-sm ${getTokenClassName(part)}`}
+                    >
+                      {part.raw}
+                    </code>
+                  </div>
+                  <div className="mt-2 text-sm sm:mt-0">
+                    <div className="font-semibold text-foreground">{part.title}</div>
+                    {part.firstMention && <p className="mt-1 text-muted">{part.description}</p>}
+                    {isSetToken(part) && <p className="mt-1 text-muted">Set name: {setNameOf(part)}</p>}
+                    {part.firstMention && part.tip && <p className="mt-1 text-muted-soft">Tip: {part.tip}</p>}
+                    {part.warnings.map((warning) => (
+                      <p key={warning.message} className={`mt-1 ${WARNING_STYLES[warning.severity].className}`}>
+                        <span className="font-semibold">{WARNING_STYLES[warning.severity].label}: </span>
+                        {warning.message}
+                      </p>
+                    ))}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          </section>
 
           <div className="flex flex-wrap gap-2">
             <Link href={`/search?q=${encodeURIComponent(trimmed)}`} className={linkClass}>

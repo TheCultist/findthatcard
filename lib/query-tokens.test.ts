@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import seo from "@/data/seo-queries.json";
 import { getColorSemanticSelectors, getPreferSelector, getTokenMetadata, tokenizeQuery } from "@/lib/query-tokens";
+import { SCRYFALL_FIELDS } from "@/lib/scryfall/query-ast";
 
 let passed = 0;
 function check(name: string, cond: boolean, detail?: string): void {
@@ -137,12 +138,22 @@ function chipsCoverQuery(q: string): boolean {
   check("chips: unmatched and unclosed parens still show", chips("a) (b") === "text:a | group:) | group:( | text:b");
   check("chips: dangling or still shows", chips("a or") === "text:a | logical:or");
   check("chips: unterminated quote is one chip", chips('o:"draw t:creature') === 'field:o:"draw t:creature');
+  for (const q of [...seo.pages.map((p) => p.scryfallQuery), `  a  OR  (b and -(c) ) ) or`, `t:a (o:"x y" or`, `or or a`]) {
+    const misplaced = tokenizeQuery(q).find((t) => q.slice(t.start, t.start + t.raw.length) !== t.raw);
+    assert.equal(misplaced, undefined, `chip position in ${q}`);
+  }
+  check("chips: every chip knows where it sits in the query", true);
   check("chips: empty and whitespace-only queries give no chips", tokenizeQuery("").length === 0 && tokenizeQuery("   ").length === 0);
   check("chips: 3000 nested parens do not throw", tokenizeQuery("(".repeat(3000) + "a" + ")".repeat(3000)).length === 6001);
 
   check("chips: no-break space separates terms", chips("t:creature\u00a0o:draw") === "field:t:creature | field:o:draw", chips("t:creature\u00a0o:draw"));
   check("chips: em space / ideographic space separate terms", chips("t:creature\u2003o:draw\u3000c:r") === "field:t:creature | field:o:draw | field:c:r");
   const title = (q: string) => getTokenMetadata(tokenizeQuery(q)[0], "").title;
+  const description = (q: string) => getTokenMetadata(tokenizeQuery(q)[0], "").description;
+  check("exact name reads as one card", title('!"Lightning Bolt"') === "Exact card: Lightning Bolt", title('!"Lightning Bolt"'));
+  check("plain word explains the name search", description("dragon").includes("card names"));
+  const undescribed = [...SCRYFALL_FIELDS].filter((f) => !["lore", "spellbook", "illustrations"].includes(f) && description(`${f}:x`).startsWith("A Scryfall filter field"));
+  check("every documented field has its own description", undescribed.length === 0, undescribed.join(" "));
   check("chip titles: quoted oracle text shown once-quoted", title('o:"draw a card"') === 'Oracle text: "draw a card"', title('o:"draw a card"'));
   check("chip titles: negated quoted oracle text", title('-o:"x"') === 'Oracle text excludes "x"');
   check("chip titles: single-quoted value", title("o:'x'") === 'Oracle text: "x"');

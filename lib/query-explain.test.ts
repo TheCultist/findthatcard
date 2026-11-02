@@ -47,8 +47,10 @@ summary("-not:foil", "Cards that are available in foil.");
 summary("r>=rare", "Cards that have rarity at least rare.");
 summary("a:avon", "Cards that were illustrated by avon.");
 summary("game:paper", "Cards that are available in paper.");
-summary("foo:bar", "Cards that match foo:bar.");
-summary("-foo:bar", "Cards that do not match foo:bar.");
+summary("foo:bar", "");
+summary("-foo:bar t:a", "Cards that are of type a.");
+summary("lore:1", "Cards that match lore:1.");
+summary("-lore:1", "Cards that do not match lore:1.");
 summary("t:", "Cards that match t:.");
 summary("t:goblin c:r", "Cards that are of type goblin and are red.");
 summary("t:goblin c:r mv<=2", "Cards that are of type goblin, are red, and have mana value at most 2.");
@@ -84,6 +86,42 @@ check(
   explainQuery("t:creature (kw:flying or").warnings.some((w) => w.message.includes("closing parenthesis"))
 );
 check("3000 nested groups do not overflow", explainQuery(`${"(".repeat(3000)}t:a${")".repeat(3000)}`).summary === "Cards that are of type a.");
+
+// Parts: one per chip, in order, each carrying its own problems.
+{
+  const parts = (query: string) => explainQuery(query).parts;
+  const raws = (query: string) => parts(query).map((p) => p.raw).join(" ");
+  const flagged = (query: string) => parts(query).filter((p) => p.warnings.length > 0).map((p) => p.raw).join(" ");
+
+  check("parts follow the query", raws('t:creature (o:"a b" or kw:flying) -c:r') === 't:creature ( o:"a b" or kw:flying ) -c:r', raws('t:creature (o:"a b" or kw:flying) -c:r'));
+  check("empty query has no parts", parts("  ").length === 0);
+  check("regex stays one part", parts("o:/(?<!this )creature[^.]*die/ t:creature").length === 2);
+  check("parts explain themselves", parts("t:creature")[0].title === "Type: Creature" && parts("t:creature")[0].description.length > 0);
+
+  const depths = parts("a (b (c) d) e").map((p) => p.depth).join("");
+  check("depth follows the groups", depths === "001121100", depths);
+  check("-( opens a group too", parts("-(a) b").map((p) => p.depth).join("") === "0100", parts("-(a) b").map((p) => p.depth).join(""));
+  check("an unmatched ) stays at the top", parts("a ) b").map((p) => p.depth).join("") === "000");
+
+  const repeat = parts("t:a t:b or c:r or c:g");
+  check("a repeated explanation shows once", repeat.map((p) => p.firstMention).join() === "true,false,true,true,false,false", repeat.map((p) => p.firstMention).join());
+
+  check("unclosed group sits on its (", flagged("t:creature (kw:flying") === "(", flagged("t:creature (kw:flying"));
+  check("unclosed negated group sits on its -(", flagged("t:a -(c:r") === "-(", flagged("t:a -(c:r"));
+  check("unmatched ) sits on the )", flagged("t:creature )") === ")", flagged("t:creature )"));
+  check("dangling or sits on the or", flagged("t:goblin or") === "or", flagged("t:goblin or"));
+  check("exact group sits on the !", flagged("!(t:goblin)") === "!", flagged("!(t:goblin)"));
+  check("unterminated value sits on its term", flagged('t:a o:"draw') === 'o:"draw', flagged('t:a o:"draw'));
+  check("unknown field sits on its term", flagged("t:a foo:bar") === "foo:bar", flagged("t:a foo:bar"));
+  check("empty value sits on its term", flagged("t:a c:") === "c:", flagged("t:a c:"));
+  check("empty group sits on its (", flagged("t:a ()") === "(", flagged("t:a ()"));
+
+  for (const query of ["or t:a (t:b", "a ) ( or", "() or ()", '-( "x', "t:a foo:bar ( or c:", "!(a) )"]) {
+    const { warnings, parts: all } = explainQuery(query);
+    const placed = all.reduce((sum, part) => sum + part.warnings.length, 0);
+    check(`every warning has a part: ${query}`, placed === warnings.length, `${placed} of ${warnings.length}`);
+  }
+}
 
 // Every stored query reads as a sentence and raises no false alarm.
 {

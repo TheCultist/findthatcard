@@ -4,6 +4,8 @@ export type QueryTokenType = "field" | "logical" | "group" | "text";
 
 export type QueryToken = {
   raw: string;
+  /** Index of the first character of `raw` in the query. */
+  start: number;
   type: QueryTokenType;
   field?: string;
   op?: string; // ":", "=", "<", ">", "<=", ">="
@@ -521,6 +523,123 @@ const FIELD_DESCRIPTIONS: Record<
     description:
       "Filters to cards that are new to a specific context: new:art (new artwork), new:frame (new frame type), new:language.",
   },
+  name: {
+    title: "Card Name",
+    description: "Searches card names. Partial words work, and quotes keep a phrase together.",
+    tip: 'For one exact card, put ! in front of the name: !"Lightning Bolt".',
+  },
+  fo: {
+    title: "Full Oracle Text",
+    description: "Searches the full Oracle text, including reminder text, which o: leaves out.",
+  },
+  m: {
+    title: "Mana Cost",
+    description: "Filters by the mana symbols in a card's cost, such as m:2WW or m:{G}{U}.",
+  },
+  devotion: {
+    title: "Devotion",
+    description: "Filters by the mana symbols that count toward devotion to a color, or to two colors with hybrid symbols.",
+  },
+  produces: {
+    title: "Mana Produced",
+    description: "Finds cards that can produce a given type of mana.",
+  },
+  def: {
+    title: "Defense",
+    description: "Filters battles by their defense value.",
+  },
+  has: {
+    title: "Has Feature",
+    description: "Finds cards that have a given feature, such as has:indicator for a color indicator.",
+  },
+  cn: {
+    title: "Collector Number",
+    description: "Filters by the collector number printed on the card.",
+  },
+  st: {
+    title: "Set Type",
+    description: "Filters by the kind of set a card was printed in, such as st:masters or st:commander.",
+  },
+  in: {
+    title: "Ever Printed In",
+    description: "Finds cards that have ever been printed in a given set, rarity, language or game, such as in:rare.",
+  },
+  cube: {
+    title: "Cube",
+    description: "Finds cards that are part of a cube list Scryfall supports, such as cube:legacy.",
+  },
+  sets: {
+    title: "Number of Sets",
+    description: "Compares how many sets a card has been in. sets=1 finds cards from a single set.",
+  },
+  papersets: {
+    title: "Number of Paper Sets",
+    description: "Compares how many paper sets a card has been in.",
+  },
+  prints: {
+    title: "Number of Prints",
+    description: "Compares how many times a card has been printed.",
+  },
+  paperprints: {
+    title: "Number of Paper Prints",
+    description: "Compares how many times a card has been printed on paper.",
+  },
+  usd: {
+    title: "Price (USD)",
+    description: "Compares a card's price in US dollars.",
+  },
+  eur: {
+    title: "Price (EUR)",
+    description: "Compares a card's price in euros.",
+  },
+  tix: {
+    title: "Price (TIX)",
+    description: "Compares a card's price in Magic Online event tickets.",
+  },
+  cheapest: {
+    title: "Cheapest Print",
+    description: "Finds the cheapest print of each card in a currency: usd, eur or tix.",
+  },
+  artists: {
+    title: "Number of Artists",
+    description: "Compares how many artists a card has. artists>1 finds cards with more than one.",
+  },
+  ft: {
+    title: "Flavor Text",
+    description: "Searches the words in a card's flavor text.",
+  },
+  wm: {
+    title: "Watermark",
+    description: "Filters by the watermark printed on the card.",
+  },
+  lang: {
+    title: "Language",
+    description: "Filters by the language a card was printed in.",
+  },
+  border: {
+    title: "Border",
+    description: "Filters by border color, such as border:black or border:borderless.",
+  },
+  frame: {
+    title: "Frame",
+    description: "Filters by card frame, such as frame:2015.",
+  },
+  stamp: {
+    title: "Security Stamp",
+    description: "Filters by the security stamp: oval, acorn, triangle or arena.",
+  },
+  date: {
+    title: "Release Date",
+    description: "Compares a print's release date, such as date>=2015-08-18.",
+  },
+  display: {
+    title: "Results Display",
+    description: "Changes how Scryfall shows results: grid, checklist, full or text. It does not filter cards.",
+  },
+  include: {
+    title: "Include Extras",
+    description: "include:extras reveals every card in the search, including ones Scryfall normally hides.",
+  },
   strategy: {
     title: "Strategy",
     description:
@@ -909,6 +1028,16 @@ export const FIELD_ALIASES: Record<string, string> = {
   kw: "kw",
   keyword: "kw",
   keywords: "kw",
+  fulloracle: "fo",
+  mana: "m",
+  defense: "def",
+  number: "cn",
+  collector: "cn",
+  "set-type": "st",
+  flavor: "ft",
+  flavour: "ft",
+  watermark: "wm",
+  language: "lang",
   s: "set",
   set: "set",
   e: "set",
@@ -1062,22 +1191,25 @@ export const tokenizeQuery = (value: string): QueryToken[] => {
     const node = item.node;
     switch (node.type) {
       case "term":
-        tokens.push(termToToken(node.term));
+        tokens.push(termToToken(node.term, node.start));
         break;
       case "stray":
-        tokens.push({ raw: node.raw, type: node.reason === "unmatched-close" ? "group" : "logical" });
+        tokens.push({ raw: node.raw, start: node.start, type: node.reason === "unmatched-close" ? "group" : "logical" });
         break;
       case "group":
-        if (node.closed) work.push({ chip: { raw: ")", type: "group" } });
+        if (node.closed) work.push({ chip: { raw: ")", start: node.end - 1, type: "group" } });
         if (node.inner) work.push({ node: node.inner });
-        work.push({ chip: { raw: node.negated ? "-(" : "(", type: "group" } });
+        work.push({ chip: { raw: node.negated ? "-(" : "(", start: node.start, type: "group" } });
         break;
       case "and":
       case "or":
         for (let i = node.operands.length - 1; i >= 0; i--) {
           work.push({ node: node.operands[i] });
           const joiner = node.joiners[i - 1];
-          if (i > 0 && joiner.keyword) work.push({ chip: { raw: joiner.keyword, type: "logical" } });
+          if (i > 0 && joiner.keyword) {
+            const start = node.operands[i - 1].end + joiner.before.length;
+            work.push({ chip: { raw: joiner.keyword, start, type: "logical" } });
+          }
         }
         break;
     }
@@ -1096,11 +1228,12 @@ function displayValue(raw: string): string {
 }
 
 /** Field chips keep `value` exactly as written after the operator (quotes included), as before. */
-function termToToken(term: QueryTerm): QueryToken {
+function termToToken(term: QueryTerm, start: number): QueryToken {
   if (term.field !== undefined && term.operator !== undefined) {
     const prefixLength = (term.negated ? 1 : 0) + term.field.length + term.operator.length;
     return {
       raw: term.raw,
+      start,
       type: "field",
       field: term.field.toLowerCase(),
       op: term.operator,
@@ -1108,7 +1241,7 @@ function termToToken(term: QueryTerm): QueryToken {
       negated: term.negated,
     };
   }
-  return { raw: term.raw, type: "text", negated: term.negated };
+  return { raw: term.raw, start, type: "text", negated: term.negated };
 }
 
 // ---------------------------------------------------------------------------
@@ -1257,10 +1390,20 @@ export const getTokenMetadata = (token: QueryToken, sourceQuery: string): TokenM
     };
   }
 
+  const term = parseTerm(token.raw);
+  if (term.exact) {
+    return {
+      ...token,
+      title: token.negated ? `Excluding card: ${term.value}` : `Exact card: ${term.value}`,
+      description: "The ! in front means this exact card name, not any name containing these words.",
+      reason: buildReason(token, sourceQuery),
+    };
+  }
+
   return {
     ...token,
     title: token.negated ? `Excluding "${displayValue(token.raw)}"` : "Search term",
-    description: "A direct search term included in the Scryfall query.",
+    description: "With no field in front, Scryfall looks for this text in card names.",
     reason: buildReason(token, sourceQuery),
   };
 };

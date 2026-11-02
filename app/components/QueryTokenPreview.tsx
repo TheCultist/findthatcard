@@ -17,68 +17,13 @@ const normalizeSetCode = (value?: string) => {
   return value.replace(/^"|"$/g, "").toLowerCase();
 };
 
-/* Token styling: light mode = light bg + dark text (WCAG 4.5:1), dark mode = dark bg + light text */
-const getTokenClassName = (token: TokenMetadata) => {
-  const base =
-    "border border-solid rounded";
-  if (token.type === "group") {
-    return `${base} bg-surface-muted border-border text-muted`;
-  }
-  /* Field + logical: accent theme, mode-aware contrast */
-  return `${base} bg-accent-muted border-accent/40 text-accent dark:bg-accent-muted-dark dark:border-accent/50 dark:text-accent`;
-};
+export const isSetToken = (token: TokenMetadata) =>
+  token.type === "field" && Boolean(token.field) && SET_FIELDS.has(token.field!.toLowerCase());
 
-export default function QueryTokenPreview({
-  scryfallQuery,
-  sourceQuery,
-  variant = "panel",
-  className = "",
-}: QueryTokenPreviewProps) {
+/** Loads set names from /api/sets once a set filter appears; returns a token → name lookup. */
+export function useSetNames(tokens: TokenMetadata[]) {
   const [setNames, setSetNames] = useState<Record<string, string>>({});
-  const [activeTooltip, setActiveTooltip] = useState<number | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (activeTooltip === null) return;
-
-    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setActiveTooltip(null);
-      }
-    };
-    document.addEventListener("touchstart", handleOutsideClick);
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => {
-      document.removeEventListener("touchstart", handleOutsideClick);
-      document.removeEventListener("mousedown", handleOutsideClick);
-    };
-  }, [activeTooltip]);
-  const tokenMetadata = useMemo(
-    () =>
-      scryfallQuery
-        ? tokenizeQuery(scryfallQuery).map((token) => getTokenMetadata(token, sourceQuery))
-        : [],
-    [scryfallQuery, sourceQuery]
-  );
-
-  const setCodes = useMemo(() => {
-    const codes = new Set<string>();
-    for (const token of tokenMetadata) {
-      if (token.type !== "field") {
-        continue;
-      }
-      const field = token.field?.toLowerCase();
-      if (!field || !SET_FIELDS.has(field)) {
-        continue;
-      }
-      const code = normalizeSetCode(token.value);
-      if (code) {
-        codes.add(code);
-      }
-    }
-    return Array.from(codes);
-  }, [tokenMetadata]);
-  const hasSetCodes = setCodes.length > 0;
+  const hasSetCodes = tokens.some((token) => isSetToken(token) && normalizeSetCode(token.value));
 
   useEffect(() => {
     if (!hasSetCodes) {
@@ -112,6 +57,54 @@ export default function QueryTokenPreview({
     };
   }, [hasSetCodes]);
 
+  return (token: TokenMetadata) => setNames[normalizeSetCode(token.value)] || "Unknown set";
+}
+
+/* Token styling: light mode = light bg + dark text (WCAG 4.5:1), dark mode = dark bg + light text */
+export const getTokenClassName = (token: TokenMetadata) => {
+  const base =
+    "border border-solid rounded";
+  if (token.type === "group") {
+    return `${base} bg-surface-muted border-border text-muted`;
+  }
+  /* Field + logical: accent theme, mode-aware contrast */
+  return `${base} bg-accent-muted border-accent/40 text-accent dark:bg-accent-muted-dark dark:border-accent/50 dark:text-accent`;
+};
+
+export default function QueryTokenPreview({
+  scryfallQuery,
+  sourceQuery,
+  variant = "panel",
+  className = "",
+}: QueryTokenPreviewProps) {
+  const [activeTooltip, setActiveTooltip] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (activeTooltip === null) return;
+
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setActiveTooltip(null);
+      }
+    };
+    document.addEventListener("touchstart", handleOutsideClick);
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => {
+      document.removeEventListener("touchstart", handleOutsideClick);
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [activeTooltip]);
+  const tokenMetadata = useMemo(
+    () =>
+      scryfallQuery
+        ? tokenizeQuery(scryfallQuery).map((token) => getTokenMetadata(token, sourceQuery))
+        : [],
+    [scryfallQuery, sourceQuery]
+  );
+
+  const setNameOf = useSetNames(tokenMetadata);
+
   const isEmpty = tokenMetadata.length === 0;
 
   const handleTokenTap = (index: number, e: React.MouseEvent) => {
@@ -143,16 +136,12 @@ export default function QueryTokenPreview({
             }`}>
               <div className="text-sm font-semibold text-foreground">{token.title}</div>
               <div className="mt-2 text-muted">{token.description}</div>
-              {token.type === "field" &&
-                token.field &&
-                SET_FIELDS.has(token.field.toLowerCase()) && (
-                  <div className="mt-3 text-muted-soft">
-                    <span className="font-semibold text-foreground">Set name</span>
-                    <div className="mt-1">
-                      {setNames[normalizeSetCode(token.value)] || "Unknown set"}
-                    </div>
-                  </div>
-                )}
+              {isSetToken(token) && (
+                <div className="mt-3 text-muted-soft">
+                  <span className="font-semibold text-foreground">Set name</span>
+                  <div className="mt-1">{setNameOf(token)}</div>
+                </div>
+              )}
               {token.tip && (
                 <div className="mt-3 text-muted-soft">
                   <span className="font-semibold text-foreground">Tip</span>
