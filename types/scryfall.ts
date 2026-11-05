@@ -81,6 +81,8 @@ export interface ScryfallError {
 export interface SearchRequest {
   naturalQuery: string;
   page?: number;
+  /** Result order; omitted means Scryfall's default (name, ascending). Unusable values are ignored. */
+  sort?: { by?: unknown; dir?: unknown };
 }
 
 export interface SearchResponse {

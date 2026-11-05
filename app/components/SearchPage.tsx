@@ -9,6 +9,9 @@ import {
   PaintBrushIcon,
   QueueListIcon,
   ChevronDownIcon,
+  XMarkIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
 } from "@heroicons/react/24/outline";
 import { SearchResponse, ErrorResponse } from "@/types/scryfall";
 import { getRandomExamples } from "@/lib/example-queries";
@@ -21,7 +24,26 @@ import { formatErrorMessage } from "@/lib/utils/errors";
 import CardDetailPanel from "@/app/components/CardDetailPanel";
 import ThemeToggle from "@/app/components/ThemeToggle";
 import BugReportButton from "@/app/components/BugReportButton";
-import { getQueryFromSlug, isSimpleQuery, slugifyQuery } from "@/lib/search-slug";
+import { getQueryFromSlug } from "@/lib/search-slug";
+import { buildSearchUrl, parsePage, searchFromUrl } from "@/lib/search-url";
+import {
+  SORT_KEYS,
+  SORT_LABELS,
+  normalizeSort,
+  sortFromParams,
+  sortKeyOf,
+  type SearchSort,
+  type SortDir,
+  type SortKey,
+} from "@/lib/search-sort";
+import {
+  RECENT_SEARCHES_KEY,
+  addRecentSearch,
+  getBrowserStorage,
+  loadRecentSearches,
+  removeRecentSearch,
+  saveRecentSearches,
+} from "@/lib/recent-searches";
 
 type SearchOptions = {
   updateUrl?: boolean;
@@ -36,37 +58,6 @@ type SearchOptions = {
    * pagination re-sends the generated Scryfall query but keeps the user's words.
    */
   urlQuery?: string;
-};
-
-/** `?page=N` in the URL; anything missing or invalid means page 1. */
-const parsePage = (value: string | null) => {
-  const page = Number.parseInt(value ?? "", 10);
-  return page > 1 ? page : 1;
-};
-
-const buildSearchUrl = (searchQuery: string, page = 1) => {
-  const trimmed = searchQuery.trim();
-  if (!trimmed) {
-    return "/search";
-  }
-
-  if (isSimpleQuery(trimmed)) {
-    const slug = slugifyQuery(trimmed);
-    if (slug) {
-      return `/search/${slug}${page > 1 ? `?page=${page}` : ""}`;
-    }
-  }
-
-  return `/search?q=${encodeURIComponent(trimmed)}${page > 1 ? `&page=${page}` : ""}`;
-};
-
-/** What the URL-driven effect will read back from a URL produced by buildSearchUrl. */
-const searchFromUrl = (url: string) => {
-  const { pathname, searchParams } = new URL(url, "https://findthatcard.invalid");
-  const query = pathname.startsWith("/search/")
-    ? getQueryFromSlug(pathname.slice("/search/".length))
-    : searchParams.get("q") ?? "";
-  return { query: query.trim(), page: parsePage(searchParams.get("page")) };
 };
 
 function cavernHoldBanner(key: string) {
@@ -101,8 +92,22 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams<{ slug?: string | string[] }>();
-  /** The query/page the URL effect last handled (or that we pushed and ran ourselves). */
-  const lastUrlSearchRef = useRef({ query: initial?.query ?? "", page: 1 });
+  /** The query/page/sort the URL effect last handled (or that we pushed and ran ourselves). */
+  const lastUrlSearchRef = useRef({
+    query: initial?.query ?? "",
+    page: 1,
+    sort: initial ? "" : sortKeyOf(sortFromParams(searchParams)),
+  });
+  /**
+   * The sort every search uses. Read through a ref inside handleSearch: making it a dependency would
+   * change handleSearch on every sort change and re-run the URL effect before router.push had updated
+   * the URL, firing a duplicate unsorted search.
+   */
+  const sortRef = useRef<SearchSort | null>(initial ? null : sortFromParams(searchParams));
+  const recentRowRef = useRef<HTMLDivElement | null>(null);
+  const recentSearchesRef = useRef<string[]>([]);
+  /** False once a write failed (e.g. some private modes): the list then lives in memory for this page view. */
+  const storageWorksRef = useRef(true);
   /** Monotonic id of the most recent /api/search call; older responses are dropped. */
   const searchSeqRef = useRef(0);
   /** Aborts the in-flight /api/search request when a newer search starts. */
@@ -125,6 +130,18 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
   const [isEditingQuery, setIsEditingQuery] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [faqExpandedIndex, setFaqExpandedIndex] = useState<number | null>(null);
+  const [sort, setSort] = useState<SearchSort | null>(sortRef.current);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  /** Applies a change to the stored list. Reads storage first so two open tabs don't overwrite each other. */
+  const updateRecentSearches = useCallback((change: (list: string[]) => string[]) => {
+    const storage = getBrowserStorage();
+    const base = storageWorksRef.current && storage ? loadRecentSearches(storage) : recentSearchesRef.current;
+    const next = change(base);
+    storageWorksRef.current = saveRecentSearches(storage, next);
+    recentSearchesRef.current = next;
+    setRecentSearches(next);
+  }, []);
 
   const getQueryFromUrl = useCallback(() => {
     const paramQuery = searchParams.get("q");
@@ -157,14 +174,17 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
       searchAbortRef.current = controller;
 
       try {
+        const sort = sortRef.current;
         if (options.updateUrl ?? true) {
-          const nextUrl = buildSearchUrl(options.urlQuery ?? searchQuery, page);
-          const next = searchFromUrl(nextUrl);
+          const nextUrl = buildSearchUrl(options.urlQuery ?? searchQuery, page, sort);
+          const parsed = searchFromUrl(nextUrl);
+          const next = { query: parsed.query, page: parsed.page, sort: sortKeyOf(parsed.sort) };
           const current = {
             query: getQueryFromUrl().trim(),
             page: parsePage(searchParams.get("page")),
+            sort: sortKeyOf(sortFromParams(searchParams)),
           };
-          if (next.query !== current.query || next.page !== current.page) {
+          if (next.query !== current.query || next.page !== current.page || next.sort !== current.sort) {
             // We run this search ourselves; stop the URL effect from firing a duplicate.
             lastUrlSearchRef.current = next;
             await Promise.resolve(router.push(nextUrl, { scroll: false })).catch((e) => {
@@ -190,7 +210,7 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ naturalQuery: searchQuery, page }),
+            body: JSON.stringify(sort ? { naturalQuery: searchQuery, page, sort } : { naturalQuery: searchQuery, page }),
             signal: controller.signal,
           });
 
@@ -211,6 +231,9 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
           setPageInput(String(data.page));
           if (isNewQuery) {
             setEditableQuery(data.scryfallQuery);
+            // Only searches that ran: failures returned above, paging and re-sorting keep results.
+            const typed = (options.urlQuery ?? searchQuery).trim();
+            updateRecentSearches((list) => addRecentSearch(list, typed));
           }
         } catch (err) {
           if (isStale()) return;
@@ -230,11 +253,27 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
         setLoading(false);
       }
     },
-    [getQueryFromUrl, router, searchParams]
+    [getQueryFromUrl, router, searchParams, updateRecentSearches]
   );
 
   useEffect(() => {
     setExampleQueries(getRandomExamples(4));
+  }, []);
+
+  // Read after mount (the server has no localStorage, so rendering it eagerly would mismatch on
+  // hydration) and follow changes made in other tabs.
+  useEffect(() => {
+    const load = () => {
+      const list = loadRecentSearches(getBrowserStorage());
+      recentSearchesRef.current = list;
+      setRecentSearches(list);
+    };
+    load();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === RECENT_SEARCHES_KEY) load();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   useEffect(() => {
@@ -244,14 +283,18 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
   useEffect(() => {
     const urlQuery = getQueryFromUrl().trim();
     const urlPage = parsePage(searchParams.get("page"));
+    const urlSort = sortFromParams(searchParams);
+    const urlSortKey = sortKeyOf(urlSort);
     const last = lastUrlSearchRef.current;
-    if (!urlQuery || (urlQuery === last.query && urlPage === last.page)) {
+    if (!urlQuery || (urlQuery === last.query && urlPage === last.page && urlSortKey === last.sort)) {
       return;
     }
-    // Same query, different page (back/forward through pagination): keep the grid
+    // Same query, different page or order (back/forward): keep the grid
     // and the query bar instead of starting over.
     const pageOnly = urlQuery === last.query;
-    lastUrlSearchRef.current = { query: urlQuery, page: urlPage };
+    lastUrlSearchRef.current = { query: urlQuery, page: urlPage, sort: urlSortKey };
+    sortRef.current = urlSort;
+    setSort(urlSort);
     setQuery(urlQuery);
     setCurrentPage(urlPage);
     setPageInput(String(urlPage));
@@ -433,6 +476,64 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
     handleSearch(chipQuery, 1);
   };
 
+  /** Re-runs the current search in a new order, from page 1. The sort then sticks for new searches. */
+  const handleSortChange = (by: SortKey, dir: SortDir) => {
+    const next = normalizeSort({ by, dir });
+    if (sortKeyOf(next) === sortKeyOf(sortRef.current)) return;
+    sortRef.current = next;
+    setSort(next);
+    const searchQuery = editableQuery || query;
+    if (!searchQuery.trim()) return;
+    setCurrentPage(1);
+    setPageInput("1");
+    handleSearch(searchQuery, 1, { keepResults: true, urlQuery: sourceQuery || query });
+  };
+
+  /** The enabled buttons of the Recent row, in visual order. */
+  const recentControls = () =>
+    Array.from(recentRowRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? []);
+
+  /** Puts focus back somewhere sensible after a control in the Recent row disappears. */
+  const focusRecentControl = (index: number) => {
+    requestAnimationFrame(() => {
+      const controls = recentControls();
+      const target = controls.length ? controls[Math.min(Math.max(index, 0), controls.length - 1)] : null;
+      (target ?? document.getElementById("search-query"))?.focus();
+    });
+  };
+
+  const forgetSearch = (recent: string, removeButton: HTMLButtonElement) => {
+    // The next chip's text button takes this × button's place once the chip is gone.
+    const index = recentControls().indexOf(removeButton) - 1;
+    updateRecentSearches((list) => removeRecentSearch(list, recent));
+    if (document.activeElement === removeButton) focusRecentControl(index);
+  };
+
+  const clearRecentSearches = () => {
+    updateRecentSearches(() => []);
+    requestAnimationFrame(() => document.getElementById("search-query")?.focus());
+  };
+
+  /** Arrow keys move between the row's controls (wrapping); Home/End jump to the ends. Tab works as usual. */
+  const handleRecentKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+    const controls = recentControls();
+    const current = controls.indexOf(document.activeElement as HTMLButtonElement);
+    if (current === -1 || controls.length === 0) return;
+    e.preventDefault();
+    const target =
+      e.key === "Home"
+        ? 0
+        : e.key === "End"
+          ? controls.length - 1
+          : (current + (e.key === "ArrowRight" ? 1 : -1) + controls.length) % controls.length;
+    controls[target].focus();
+    controls[target].scrollIntoView({ block: "nearest", inline: "nearest" });
+  };
+
+  const focusRing =
+    "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface";
+
   return (
     <main className="min-h-screen bg-background px-3 py-6 sm:px-6 sm:py-10 lg:px-8">
       <div className="mx-auto max-w-7xl">
@@ -503,6 +604,55 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
                     {example}
                   </button>
                 ))}
+              </div>
+            )}
+
+            {recentSearches.length > 0 && (
+              <div
+                ref={recentRowRef}
+                onKeyDown={handleRecentKeyDown}
+                role="toolbar"
+                aria-orientation="horizontal"
+                aria-label="Recent searches"
+                className="mt-3 -mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide sm:mx-0 sm:mt-4 sm:flex-wrap sm:justify-center sm:px-0"
+              >
+                <span className="flex-shrink-0 text-xs font-medium uppercase tracking-wide text-muted-soft">
+                  Recent
+                </span>
+                {recentSearches.map((recent) => (
+                  <span
+                    key={recent}
+                    className="flex min-h-[44px] flex-shrink-0 items-center rounded-full border border-dashed border-border-muted bg-surface-muted pl-3 pr-0.5 text-sm sm:min-h-0"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleChipClick(recent)}
+                      disabled={loading}
+                      title={recent}
+                      className={`max-w-[14rem] cursor-pointer truncate rounded-full py-2 text-left font-medium text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:max-w-[18rem] sm:py-1 ${focusRing}`}
+                    >
+                      {recent}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => forgetSearch(recent, e.currentTarget)}
+                      disabled={loading}
+                      aria-label={`Remove "${recent}" from recent searches`}
+                      title="Remove"
+                      className={`ml-1 flex min-h-[44px] min-w-[44px] flex-shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-soft transition-colors hover:bg-accent-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-8 sm:min-h-0 sm:w-8 sm:min-w-0 ${focusRing}`}
+                    >
+                      <XMarkIcon className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </span>
+                ))}
+                <button
+                  type="button"
+                  onClick={clearRecentSearches}
+                  disabled={loading}
+                  className={`min-h-[44px] min-w-[44px] flex-shrink-0 cursor-pointer rounded-full px-3 text-xs font-medium text-muted-soft underline-offset-2 transition-colors hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:min-w-0 sm:py-1.5 ${focusRing}`}
+                >
+                  Clear all
+                </button>
               </div>
             )}
           </div>
@@ -855,6 +1005,40 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
                   </span>
                 )}
               </div>
+              {results.total > 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <label htmlFor="sort-select" className="text-muted-soft">
+                    Sort by
+                  </label>
+                  <select
+                    id="sort-select"
+                    value={sort?.by ?? "name"}
+                    disabled={loading}
+                    onChange={(e) => handleSortChange(e.target.value as SortKey, sort?.dir ?? "asc")}
+                    className="rounded-lg border border-border bg-surface px-3 py-1 text-sm font-medium text-foreground transition-colors hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {SORT_KEYS.map((key) => (
+                      <option key={key} value={key}>
+                        {SORT_LABELS[key]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleSortChange(sort?.by ?? "name", sort?.dir === "desc" ? "asc" : "desc")}
+                    aria-label={sort?.dir === "desc" ? "Descending order (switch to ascending)" : "Ascending order (switch to descending)"}
+                    title={sort?.dir === "desc" ? "Descending" : "Ascending"}
+                    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-surface text-foreground transition-colors hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {sort?.dir === "desc" ? (
+                      <ArrowDownIcon className="h-4 w-4" aria-hidden="true" />
+                    ) : (
+                      <ArrowUpIcon className="h-4 w-4" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
             {results.incomplete && (

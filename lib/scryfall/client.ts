@@ -1,6 +1,7 @@
 import { ScryfallError, ScryfallSearchResponse } from "@/types/scryfall";
 import { scryfallFetch, SCRYFALL_BASE_URL } from "@/lib/scryfall/http";
 import { ART_EXCLUSION_SUFFIX } from "@/lib/scryfall/query-converter";
+import type { SearchSort } from "@/lib/search-sort";
 
 export const CARDS_PER_PAGE = 60;
 
@@ -46,18 +47,30 @@ export function buildScryfallQuery(query: string): string {
  * Executes Scryfall search
  * May fetch multiple Scryfall pages if needed to get 60 cards. `incomplete` means the second of
  * them failed, so the page is short by however many cards it would have added.
+ *
+ * `sort` goes to Scryfall as `order` + `dir` on every page request, so Scryfall orders the whole
+ * result set and our page N is page N of that list. Without a sort nothing is added.
  */
 export async function searchScryfall(
   query: string,
-  page: number = 1
+  page: number = 1,
+  sort: SearchSort | null = null
 ): Promise<{ response: ScryfallSearchResponse; offset: number; incomplete: boolean }> {
   const { scryfallPage, offset } = calculateScryfallPage(page);
   const queryWithPrefer = buildScryfallQuery(query);
 
-  const url = new URL(`${SCRYFALL_BASE_URL}/cards/search`);
-  url.searchParams.set("q", queryWithPrefer);
-  url.searchParams.set("unique", "cards");
-  url.searchParams.set("page", scryfallPage.toString());
+  const searchUrl = (upstreamPage: number) => {
+    const u = new URL(`${SCRYFALL_BASE_URL}/cards/search`);
+    u.searchParams.set("q", queryWithPrefer);
+    u.searchParams.set("unique", "cards");
+    u.searchParams.set("page", upstreamPage.toString());
+    if (sort) {
+      u.searchParams.set("order", sort.by);
+      u.searchParams.set("dir", sort.dir);
+    }
+    return u;
+  };
+  const url = searchUrl(scryfallPage);
 
   console.log(
     `[Scryfall] Executing search with query: "${queryWithPrefer}" (our page ${page} -> Scryfall page ${scryfallPage}, offset ${offset})`
@@ -98,10 +111,7 @@ export async function searchScryfall(
 
     const cardsAvailable = data.data.length - offset;
     if (cardsAvailable < CARDS_PER_PAGE && data.has_more) {
-      const nextPageUrl = new URL(`${SCRYFALL_BASE_URL}/cards/search`);
-      nextPageUrl.searchParams.set("q", queryWithPrefer);
-      nextPageUrl.searchParams.set("unique", "cards");
-      nextPageUrl.searchParams.set("page", (scryfallPage + 1).toString());
+      const nextPageUrl = searchUrl(scryfallPage + 1);
 
       try {
         const nextResponse = await scryfallFetch(nextPageUrl.toString());

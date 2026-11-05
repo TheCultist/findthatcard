@@ -32,7 +32,7 @@ export default function PrivacyPage() {
           <h1 className="font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
             Privacy Policy
           </h1>
-          <p className="mt-2 text-sm text-muted">Last updated: October 5, 2026</p>
+          <p className="mt-2 text-sm text-muted">Last updated: November 5, 2026</p>
         </div>
 
         {/* Content */}
@@ -71,12 +71,19 @@ export default function PrivacyPage() {
           <section>
             <h2 className="font-display text-2xl font-semibold text-foreground mb-3">Stored in Your Browser</h2>
             <p className="text-sm leading-relaxed">
-              We use your browser&apos;s local storage (not cookies) for two settings, which never leave your device:
+              We use your browser&apos;s local storage (not cookies) for the following, which never leave your device:
             </p>
             <ul className="list-disc list-inside mt-3 space-y-2 text-sm">
               <li>Your light/dark theme preference</li>
               <li>Your choice in the analytics banner (accept or reject)</li>
+              <li>
+                Your recent searches (the last 8 that ran), shown under the search box so you can run them again.
+                You can remove any of them, or clear the whole list, from the search page.
+              </li>
             </ul>
+            <p className="text-sm leading-relaxed mt-3">
+              If your browser blocks local storage, the site still works; these settings just aren&apos;t remembered.
+            </p>
           </section>
 
           <section>
@@ -153,7 +160,7 @@ export default function PrivacyPage() {
               <li>Ask what data we hold about you (normally none beyond any bug report you sent)</li>
               <li>Ask us to delete a bug report you sent</li>
               <li>Opt out of analytics with the banner&apos;s &quot;Reject&quot; button</li>
-              <li>Remove the settings stored on your device by clearing this site&apos;s data in your browser</li>
+              <li>Remove the settings stored on your device by clearing this site&apos;s data in your browser (recent searches can also be cleared with &quot;Clear all&quot; on the search page)</li>
             </ul>
           </section>
 

@@ -515,6 +515,63 @@ async function run() {
     pass("a failed same-day lookup degrades to step 1's printing with a warning");
   }
 
+  // ---- Sorting ---------------------------------------------------------------------------------
+
+  {
+    // Our page 3 starts at card 120 of Scryfall's first 175-card page, so it needs Scryfall page 2 too.
+    fake.reset();
+    await searchResultsPage("t:creature", 3, { by: "cmc", dir: "desc" });
+    const pageFetches = searchRequests(fake).filter((r) => r.q === "t:creature");
+    assert.deepEqual(
+      pageFetches.map((r) => [r.page, r.order, r.dir]),
+      [["1", "cmc", "desc"], ["2", "cmc", "desc"]],
+      "every upstream page request carries the sort"
+    );
+    pass("a sorted search sends order + dir on every Scryfall page it fetches");
+  }
+
+  {
+    /** Scryfall's own full ordered list, as oracle ids. */
+    const upstreamOrder = async (q: string, order: string, dir: string) => {
+      fake.reset();
+      const ids: string[] = [];
+      for (let page = 1; ; page++) {
+        const url = `${fake.baseUrl}/cards/search?q=${encodeURIComponent(q)}&unique=cards&page=${page}&order=${order}&dir=${dir}`;
+        const body = (await (await scryfallFetch(url)).json()) as { has_more: boolean; data: Array<{ oracle_id: string }> };
+        ids.push(...body.data.map((c) => c.oracle_id));
+        if (!body.has_more) return ids;
+      }
+    };
+    /** Every app page, as the user would page through them. */
+    const walk = async (q: string, sort: { by: "cmc"; dir: "asc" | "desc" }) => {
+      const ids: string[] = [];
+      let total = 0;
+      let excluded = 0;
+      for (let page = 1; ; ) {
+        fake.reset();
+        const result = await searchResultsPage(q, page, sort);
+        ids.push(...result.cards.map((c) => c.oracle_id as string));
+        total = result.total;
+        excluded += result.excluded;
+        if (!result.has_more) return { ids, total, excluded };
+        page = result.page + 1;
+      }
+    };
+
+    for (const dir of ["asc", "desc"] as const) {
+      const expected = await upstreamOrder("t:creature", "cmc", dir);
+      const first = await walk("t:creature", { by: "cmc", dir });
+      const second = await walk("t:creature", { by: "cmc", dir });
+      const shown = new Set(first.ids);
+      assert.equal(shown.size, first.ids.length, `${dir}: no card shown twice`);
+      // Compared by oracle id: the app swaps an Alchemy printing for its paper one in the same position.
+      assert.deepEqual(first.ids, expected.filter((id) => shown.has(id)), `${dir}: pages follow Scryfall's order exactly`);
+      assert.equal(first.ids.length, first.total - first.excluded, `${dir}: every card is shown except the hidden ones`);
+      assert.deepEqual(second.ids, first.ids, `${dir}: a second walk gives the same order`);
+    }
+    pass("cards tied on the sort key keep one order across pages and walks, none skipped or repeated");
+  }
+
   // ---- Rate limits ---------------------------------------------------------------------------
 
   {

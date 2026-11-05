@@ -16,6 +16,8 @@ A Magic: The Gathering card search tool that converts natural language queries i
   - Function tags: `function:`, `otag:`, `oracletag:` (e.g., `function:removal`, `function:card-advantage`)
 - **Similar Card Search**: Find cards similar to a named card, including art-alike search via Tagger data
 - **Pagination**: 60 cards per page with Previous/Next and jump-to-page controls
+- **Sorting**: Order results by name, mana value, price (USD) or release date, ascending or descending; Scryfall sorts the whole result set and the order is kept in the URL
+- **Recent Searches**: The last 8 searches are shown under the search box (stored only in the browser), with remove, clear-all and arrow-key navigation
 - **Card Detail Panel**: Tap any card to open a full detail sheet with legalities, keywords, and buy links
 - **Buy Links**: CardTrader and TCGPlayer affiliate buttons per card, with 404-fallback handling
 - **Example Query Chips**: 350+ example queries shown as random chips on each load

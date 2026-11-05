@@ -6,7 +6,7 @@
  * test. It serves the cards in ./fixtures.ts.
  *
  * Supported:
- *   GET /cards/search?q=…&page=N&unique=cards|prints&order=name|released&dir=asc|desc
+ *   GET /cards/search?q=…&page=N&unique=cards|prints&order=name|released|cmc|usd&dir=asc|desc
  *     q supports implicit AND, "or" (binds looser than AND), parentheses, "-" negation of a
  *     term or a group, and double-quoted values. Unbalanced parentheses → 400, like Scryfall
  *     (error wording approximate) — which is what happens when the 1024-char cut lands inside
@@ -327,6 +327,29 @@ function compareReleased(a: FixtureCard, b: FixtureCard): number {
   );
 }
 
+const usdPrice = (c: FixtureCard): number | null => {
+  const raw = c.prices?.usd;
+  return raw == null ? null : Number(raw);
+};
+
+/**
+ * order=cmc|usd: the direction flips only the value; ties always run by name A→Z, and cards with no
+ * value (no USD price) come last in both directions. ASSUMPTION: the real API wasn't checked for
+ * either detail offline.
+ */
+function compareByValue(value: (c: FixtureCard) => number | null, direction: 1 | -1) {
+  return (a: FixtureCard, b: FixtureCard): number => {
+    const va = value(a);
+    const vb = value(b);
+    if (va === null || vb === null) {
+      if (va !== vb) return va === null ? 1 : -1;
+    } else if (va !== vb) {
+      return (va - vb) * direction;
+    }
+    return a.name.localeCompare(b.name);
+  };
+}
+
 /** One printing per oracle_id: the first in fixture order, or the oldest/newest under prefer:. */
 function uniqueByOracle(cards: FixtureCard[], prefer: string | undefined): FixtureCard[] {
   // prefer:oldest takes the oldest date but, like the real API, not necessarily the printing that
@@ -427,9 +450,13 @@ export async function startFakeScryfall(options: FakeScryfallOptions = {}): Prom
 
     let matched = cards.filter((c) => evaluate(c, expr));
     if (unique !== "prints") matched = uniqueByOracle(matched, tokens.findLast((t) => t.key === "prefer")?.value.toLowerCase());
-    if (order === "released") matched.sort(compareReleased);
-    else if (order === "name") matched.sort((a, b) => a.name.localeCompare(b.name));
-    if (dir === "desc") matched.reverse();
+    if (order === "cmc" || order === "usd") {
+      matched.sort(compareByValue(order === "cmc" ? (c) => c.cmc : usdPrice, dir === "desc" ? -1 : 1));
+    } else {
+      if (order === "released") matched.sort(compareReleased);
+      else if (order === "name") matched.sort((a, b) => a.name.localeCompare(b.name));
+      if (dir === "desc") matched.reverse();
+    }
 
     if (matched.length === 0) return `${send(res, 404, errorBody(404, "not_found", NOT_FOUND_DETAILS))} no matches`;
     const start = (page - 1) * SCRYFALL_PAGE_SIZE;

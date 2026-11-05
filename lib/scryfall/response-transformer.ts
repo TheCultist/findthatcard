@@ -2,6 +2,7 @@ import { SearchResponse, CardResult, ScryfallCard } from "@/types/scryfall";
 import { getTcgPlayerLink } from "@/lib/tcgplayer/links";
 import { CARDS_PER_PAGE, searchScryfall } from "@/lib/scryfall/client";
 import { scryfallFetch, SCRYFALL_BASE_URL } from "@/lib/scryfall/http";
+import type { SearchSort } from "@/lib/search-sort";
 
 type CardSearchResponse = {
   data?: ScryfallCard[];
@@ -325,10 +326,14 @@ export async function transformScryfallResponse(
  * One page of results as the app shows it. A page whose cards were all hidden is skipped so Next
  * doesn't land on nothing; page numbers still map to Scryfall's list, so skipping loses no card.
  */
-export async function searchResultsPage(scryfallQuery: string, page: number): Promise<SearchResponse> {
+export async function searchResultsPage(
+  scryfallQuery: string,
+  page: number,
+  sort: SearchSort | null = null
+): Promise<SearchResponse> {
   let excludedBefore = 0;
   for (let target = page; ; target++) {
-    const { response, offset, incomplete } = await searchScryfall(scryfallQuery, target);
+    const { response, offset, incomplete } = await searchScryfall(scryfallQuery, target, sort);
     const result = await transformScryfallResponse(scryfallQuery, target, offset, response, incomplete);
     const keepGoing =
       result.cards.length === 0 && result.has_more && !result.incomplete && target - page < MAX_SKIPPED_PAGES;
