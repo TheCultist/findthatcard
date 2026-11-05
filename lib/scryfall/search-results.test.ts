@@ -45,6 +45,20 @@ async function run() {
   const searchRequests = (f: FakeScryfall) =>
     f.requests.filter((r) => r.path === "/cards/search").map((r) => r.params);
   const names = (r: { cards: Array<{ name: string }> }) => r.cards.map((c) => c.name);
+  /**
+   * Records when the app hands each request to fetch(). Pacing is checked on these send times, not on
+   * arrival at the fake: the fake shares this process's event loop, so arrival times carry its jitter.
+   */
+  const recordSends = () => {
+    const realFetch = globalThis.fetch;
+    const sends: number[] = [];
+    globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      sends.push(Date.now());
+      return realFetch(input, init);
+    }) as typeof fetch;
+    return { sends, restore: () => void (globalThis.fetch = realFetch) };
+  };
+  const gapsOf = (times: number[]) => times.slice(1).map((t, i) => t - times[i]);
 
   let checks = 0;
   const pass = (label: string) => {
@@ -427,7 +441,13 @@ async function run() {
   // ---- Batched lookups -----------------------------------------------------------------------
 
   {
-    const result = await search("t:sorcery");
+    const sent = recordSends();
+    let result;
+    try {
+      result = await search("t:sorcery");
+    } finally {
+      sent.restore();
+    }
     assert.deepEqual([result.total, result.cards.length], [fixtures.DIGITAL_COUNT, 60]);
     assert.deepEqual(
       result.cards.map((c) => c.id).sort(),
@@ -440,8 +460,9 @@ async function run() {
     const step2 = lookups.filter((l) => l.unique === "prints");
     assert.deepEqual([step1.length, step2.length], [4, 5], "60 digital cards → 4 oldest-date requests + 5 same-day requests, not 60–120");
     assert.equal(fake.requests.length, 10);
-    const gaps = fake.requests.slice(1).map((r, i) => r.at - fake.requests[i].at);
-    assert.ok(gaps.every((g) => g >= 480), `search-class requests are ≥500 ms apart (2/s): ${gaps.join(", ")} ms`);
+    const gaps = gapsOf(sent.sends);
+    assert.equal(sent.sends.length, 10);
+    assert.ok(gaps.every((g) => g >= 500), `search-class requests are sent ≥500 ms apart (2/s): ${gaps.join(", ")} ms`);
     for (const l of lookups) assert.ok(l.q.length < 1024, `lookup q stays under Scryfall's cut (${l.q.length} chars)`);
     for (const l of step1) assert.match(l.q, /^prefer:oldest \((oracle_id:[0-9a-f-]+( or )?)+\) -is:alchemy -is:digital -is:rebalanced$/);
     for (const l of step2) assert.match(l.q, /^prefer:best \((\(date=\d{4}-\d\d-\d\d oracle_id:[0-9a-f-]+\)( or )?)+\) -is:alchemy -is:digital -is:rebalanced$/);
@@ -576,11 +597,38 @@ async function run() {
 
   {
     fake.reset();
-    const id = fixtures.lightningBolt.id;
-    for (let i = 0; i < 4; i++) assert.equal((await scryfallFetch(`${fake.baseUrl}/cards/${id}`)).status, 200);
-    const gaps = fake.requests.slice(1).map((r, i) => r.at - fake.requests[i].at);
-    assert.ok(gaps.every((g) => g >= 95 && g < 400), `other routes only need 100 ms (10/s): ${gaps.join(", ")} ms`);
+    const url = `${fake.baseUrl}/cards/${fixtures.lightningBolt.id}`;
+    const sent = recordSends();
+    try {
+      for (let i = 0; i < 4; i++) assert.equal((await scryfallFetch(url)).status, 200);
+    } finally {
+      sent.restore();
+    }
+    const gaps = gapsOf(sent.sends);
+    // The upper bound tells 100 ms pacing apart from 500 ms; only a >300 ms event-loop stall could trip it.
+    assert.ok(gaps.every((g) => g >= 100 && g < 400), `other routes only need 100 ms (10/s): ${gaps.join(", ")} ms`);
     pass("pacing is per endpoint class: 2/s for search, 10/s for the rest");
+  }
+
+  {
+    // Requests queued together, then a blocked event loop: their timers all fire late, at once. Each
+    // must still go out ≥100 ms after the previous one actually did, or real Scryfall sees a burst.
+    fake.reset();
+    const url = `${fake.baseUrl}/cards/${fixtures.lightningBolt.id}`;
+    const sent = recordSends();
+    try {
+      const queued = Array.from({ length: 4 }, () => scryfallFetch(url));
+      const until = Date.now() + 250;
+      while (Date.now() < until) {
+        // busy-wait: simulates a long synchronous task (GC, heavy render) on the server
+      }
+      for (const response of await Promise.all(queued)) assert.equal(response.status, 200);
+    } finally {
+      sent.restore();
+    }
+    const gaps = gapsOf(sent.sends);
+    assert.ok(gaps.every((g) => g >= 100), `a late timer must not shrink the next gap: ${gaps.join(", ")} ms`);
+    pass("pacing holds after an event-loop stall (spacing counts from the previous actual send)");
   }
 
   {

@@ -34,15 +34,39 @@ function isScryfallApi(url: string): boolean {
 let lockedUntil = 0;
 let nextSlot = 0;
 let nextSearchSlot = 0;
-/** Reserves the next slot: every request is ≥100 ms after the previous one, and a search-class request is also ≥500 ms after the previous search-class one. */
-function waitForSlot(searchClass: boolean): Promise<void> {
+let lastSentAt = -Infinity;
+let lastSearchSentAt = -Infinity;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Waits for this request's turn: every request is ≥100 ms after the previous one, and a search-class
+ * request is also ≥500 ms after the previous search-class one.
+ *
+ * Slots are reserved up front so concurrent callers queue in order. A timer can fire late, though
+ * (busy event loop, GC), and then the previous request went out later than its slot; so after the
+ * slot, the spacing is also waited out from when the previous request was actually sent.
+ */
+async function waitForSlot(searchClass: boolean): Promise<void> {
   const now = Date.now();
   let at = Math.max(now, nextSlot);
   if (searchClass) at = Math.max(at, nextSearchSlot);
   nextSlot = at + MIN_SPACING_MS;
   if (searchClass) nextSearchSlot = at + SEARCH_SPACING_MS;
-  const wait = at - now;
-  return wait > 0 ? new Promise((resolve) => setTimeout(resolve, wait)) : Promise.resolve();
+  if (at > now) await sleep(at - now);
+  for (;;) {
+    let ready = lastSentAt + MIN_SPACING_MS;
+    if (searchClass) ready = Math.max(ready, lastSearchSentAt + SEARCH_SPACING_MS);
+    const wait = ready - Date.now();
+    if (wait <= 0) return;
+    await sleep(wait);
+  }
+}
+
+/** Called right after handing a request to fetch(), so any timestamp taken inside fetch is ≤ this mark. */
+function markSent(searchClass: boolean): void {
+  lastSentAt = Date.now();
+  if (searchClass) lastSearchSentAt = lastSentAt;
 }
 
 /** What the API would answer during a lockout, without sending it another request. */
@@ -76,7 +100,9 @@ export async function scryfallFetch(url: string, init: RequestInit = {}): Promis
     if (scryfallApi && Date.now() < lockedUntil) return lockedOutResponse();
     const timeout = AbortSignal.timeout(TIMEOUT_MS);
     const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
-    const response = await fetch(url, { ...init, headers, signal });
+    const pending = fetch(url, { ...init, headers, signal });
+    markSent(searchClass);
+    const response = await pending;
     if (response.status !== 429) return response;
     const retryAfterMs = Number(response.headers.get("Retry-After")) * 1000;
     if (attempt === 0 && retryAfterMs > 0 && retryAfterMs <= MAX_RETRY_WAIT_MS) {
