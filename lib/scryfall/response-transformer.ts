@@ -329,11 +329,12 @@ export async function transformScryfallResponse(
 export async function searchResultsPage(
   scryfallQuery: string,
   page: number,
-  sort: SearchSort | null = null
+  sort: SearchSort | null = null,
+  prefer?: string
 ): Promise<SearchResponse> {
   let excludedBefore = 0;
   for (let target = page; ; target++) {
-    const { response, offset, incomplete } = await searchScryfall(scryfallQuery, target, sort);
+    const { response, offset, incomplete } = await searchScryfall(scryfallQuery, target, sort, prefer);
     const result = await transformScryfallResponse(scryfallQuery, target, offset, response, incomplete);
     const keepGoing =
       result.cards.length === 0 && result.has_more && !result.incomplete && target - page < MAX_SKIPPED_PAGES;

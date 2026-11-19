@@ -2,6 +2,7 @@ import { ScryfallError, ScryfallSearchResponse } from "@/types/scryfall";
 import { scryfallFetch, SCRYFALL_BASE_URL } from "@/lib/scryfall/http";
 import { ART_EXCLUSION_SUFFIX } from "@/lib/scryfall/query-converter";
 import type { SearchSort } from "@/lib/search-sort";
+import { applyPrefer, DEFAULT_PREFER } from "@/lib/search-prefer";
 
 export const CARDS_PER_PAGE = 60;
 
@@ -29,8 +30,8 @@ function calculateScryfallPage(ourPage: number): { scryfallPage: number; offset:
 }
 
 /**
- * Final touch-ups before the request. The pipeline owns the `prefer:` prefix (added to
- * generated queries in finalize, left alone for raw Scryfall input), so it is NOT forced here.
+ * Final touch-ups before the request. The Printings choice (`prefer:`) is added by searchScryfall,
+ * not here: it is a request option like the sort, never part of the query text.
  */
 export function buildScryfallQuery(query: string): string {
   const trimmed = query.trim();
@@ -50,14 +51,16 @@ export function buildScryfallQuery(query: string): string {
  *
  * `sort` goes to Scryfall as `order` + `dir` on every page request, so Scryfall orders the whole
  * result set and our page N is page N of that list. Without a sort nothing is added.
+ * `prefer` goes in front of `q` (see lib/search-prefer), so a prefer: typed in the query still wins.
  */
 export async function searchScryfall(
   query: string,
   page: number = 1,
-  sort: SearchSort | null = null
+  sort: SearchSort | null = null,
+  prefer: string = DEFAULT_PREFER
 ): Promise<{ response: ScryfallSearchResponse; offset: number; incomplete: boolean }> {
   const { scryfallPage, offset } = calculateScryfallPage(page);
-  const queryWithPrefer = buildScryfallQuery(query);
+  const queryWithPrefer = applyPrefer(buildScryfallQuery(query), prefer);
 
   const searchUrl = (upstreamPage: number) => {
     const u = new URL(`${SCRYFALL_BASE_URL}/cards/search`);

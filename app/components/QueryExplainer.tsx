@@ -2,8 +2,15 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { getTokenClassName, isSetToken, useSetNames } from "@/app/components/QueryTokenPreview";
+import {
+  CatalogValuePicker,
+  getTokenClassName,
+  isSetToken,
+  QueryVariantMenu,
+  useSetNames,
+} from "@/app/components/QueryTokenPreview";
 import { explainQuery, type ExplainWarning } from "@/lib/query-explain";
+import { catalogKindOf, getTokenVariants } from "@/lib/query-variants";
 
 const EXAMPLES = [
   't:creature (o:"draw a card" or kw:flying) -c:r',
@@ -116,6 +123,30 @@ export default function QueryExplainer({ initialQuery, maxLength }: QueryExplain
                         {warning.message}
                       </p>
                     ))}
+                    {(() => {
+                      const groups = getTokenVariants(part, query);
+                      const catalogKind = catalogKindOf(part);
+                      if (groups.length === 0 && !catalogKind) return null;
+                      const count = groups.reduce((n, g) => n + g.variants.length, 0);
+                      return (
+                        <details className="mt-2 rounded-lg border border-border bg-surface-muted/60 px-3 py-2">
+                          <summary className="cursor-pointer text-sm text-accent">
+                            Other ways to write this{count > 0 ? ` (${count})` : ""}
+                          </summary>
+                          {groups.length > 0 && <QueryVariantMenu groups={groups} onPick={setQuery} className="mt-2" />}
+                          {catalogKind && (
+                            <div className="mt-2">
+                              <div className="text-[0.65rem] font-semibold uppercase tracking-wide text-muted-soft">
+                                Values from the catalog
+                              </div>
+                              <div className="mt-1">
+                                <CatalogValuePicker key={query} token={part} query={query} onPick={setQuery} />
+                              </div>
+                            </div>
+                          )}
+                        </details>
+                      );
+                    })()}
                   </div>
                 </li>
               ))}

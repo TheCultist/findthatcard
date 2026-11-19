@@ -12,6 +12,7 @@ import {
   XMarkIcon,
   ArrowUpIcon,
   ArrowDownIcon,
+  PencilSquareIcon,
 } from "@heroicons/react/24/outline";
 import { SearchResponse, ErrorResponse } from "@/types/scryfall";
 import { getRandomExamples } from "@/lib/example-queries";
@@ -19,13 +20,24 @@ import { getRandomProTip } from "@/lib/pro-tips";
 import { fetchSymbolData } from "@/lib/scryfall/symbols";
 import CardCard from "@/app/components/CardCard";
 import QueryTokenPreview from "@/app/components/QueryTokenPreview";
-import { getColorSemanticSelectors, getPreferSelector } from "@/lib/query-tokens";
+import { getColorSemanticSelectors } from "@/lib/query-tokens";
+import { applyPrefer, DEFAULT_PREFER, PREFER_OPTIONS, preferFromParams } from "@/lib/search-prefer";
 import { formatErrorMessage } from "@/lib/utils/errors";
 import CardDetailPanel from "@/app/components/CardDetailPanel";
 import ThemeToggle from "@/app/components/ThemeToggle";
 import BugReportButton from "@/app/components/BugReportButton";
 import { getQueryFromSlug } from "@/lib/search-slug";
 import { buildSearchUrl, parsePage, searchFromUrl } from "@/lib/search-url";
+import {
+  canRunEdited,
+  editStash,
+  provenanceForEditedRun,
+  provenanceForFreshRun,
+  queryChanged as provenanceQueryChanged,
+  resultsUrlQuery,
+  type EditStash,
+  type Provenance,
+} from "@/lib/search-provenance";
 import {
   SORT_KEYS,
   SORT_LABELS,
@@ -58,6 +70,11 @@ type SearchOptions = {
    * pagination re-sends the generated Scryfall query but keeps the user's words.
    */
   urlQuery?: string;
+  /**
+   * Where this run's results come from. Set when running the edited chip row (or restoring one),
+   * which keeps the natural-language source; a fresh top-box run owns the provenance itself.
+   */
+  provenance?: Provenance;
 };
 
 function cavernHoldBanner(key: string) {
@@ -92,11 +109,12 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const params = useParams<{ slug?: string | string[] }>();
-  /** The query/page/sort the URL effect last handled (or that we pushed and ran ourselves). */
+  /** The query/page/sort/printings the URL effect last handled (or that we pushed and ran ourselves). */
   const lastUrlSearchRef = useRef({
     query: initial?.query ?? "",
     page: 1,
     sort: initial ? "" : sortKeyOf(sortFromParams(searchParams)),
+    prefer: initial ? DEFAULT_PREFER : preferFromParams(searchParams),
   });
   /**
    * The sort every search uses. Read through a ref inside handleSearch: making it a dependency would
@@ -104,6 +122,8 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
    * the URL, firing a duplicate unsorted search.
    */
   const sortRef = useRef<SearchSort | null>(initial ? null : sortFromParams(searchParams));
+  /** The Printings choice every search uses; a ref for the same reason as sortRef. */
+  const preferRef = useRef<string>(initial ? DEFAULT_PREFER : preferFromParams(searchParams));
   const recentRowRef = useRef<HTMLDivElement | null>(null);
   const recentSearchesRef = useRef<string[]>([]);
   /** False once a write failed (e.g. some private modes): the list then lives in memory for this page view. */
@@ -126,11 +146,22 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
   const [pageInput, setPageInput] = useState("1");
   const [exampleQueries, setExampleQueries] = useState<string[]>([]);
   const [proTip, setProTip] = useState("");
-  const [sourceQuery, setSourceQuery] = useState(initial?.query ?? "");
+  const [provenance, setProvenance] = useState<Provenance>(provenanceForFreshRun(initial?.query ?? ""));
+  /** Chip edits a top-box search replaced; "Restore my edited query" brings them back. */
+  const [restorable, setRestorable] = useState<EditStash | null>(null);
   const [isEditingQuery, setIsEditingQuery] = useState(false);
+  /**
+   * The Scryfall query text of the last search that actually ran, and whether it failed. The
+   * Search button compares the edited text against it: same text and no failure means nothing to run.
+   */
+  const [lastRun, setLastRun] = useState<{ query: string; failed: boolean }>({
+    query: initial?.result.scryfallQuery ?? "",
+    failed: false,
+  });
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [faqExpandedIndex, setFaqExpandedIndex] = useState<number | null>(null);
   const [sort, setSort] = useState<SearchSort | null>(sortRef.current);
+  const [prefer, setPrefer] = useState(preferRef.current);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
   /** Applies a change to the stored list. Reads storage first so two open tabs don't overwrite each other. */
@@ -175,16 +206,23 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
 
       try {
         const sort = sortRef.current;
+        const prefer = preferRef.current;
         if (options.updateUrl ?? true) {
-          const nextUrl = buildSearchUrl(options.urlQuery ?? searchQuery, page, sort);
+          const nextUrl = buildSearchUrl(options.urlQuery ?? searchQuery, page, sort, prefer);
           const parsed = searchFromUrl(nextUrl);
-          const next = { query: parsed.query, page: parsed.page, sort: sortKeyOf(parsed.sort) };
+          const next = { query: parsed.query, page: parsed.page, sort: sortKeyOf(parsed.sort), prefer: parsed.prefer };
           const current = {
             query: getQueryFromUrl().trim(),
             page: parsePage(searchParams.get("page")),
             sort: sortKeyOf(sortFromParams(searchParams)),
+            prefer: preferFromParams(searchParams),
           };
-          if (next.query !== current.query || next.page !== current.page || next.sort !== current.sort) {
+          if (
+            next.query !== current.query ||
+            next.page !== current.page ||
+            next.sort !== current.sort ||
+            next.prefer !== current.prefer
+          ) {
             // We run this search ourselves; stop the URL effect from firing a duplicate.
             lastUrlSearchRef.current = next;
             await Promise.resolve(router.push(nextUrl, { scroll: false })).catch((e) => {
@@ -201,7 +239,7 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
         if (isNewQuery) {
           setResults(null);
           setEditableQuery("");
-          setSourceQuery(searchQuery);
+          setProvenance(options.provenance ?? provenanceForFreshRun(searchQuery));
         }
 
         try {
@@ -210,7 +248,12 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(sort ? { naturalQuery: searchQuery, page, sort } : { naturalQuery: searchQuery, page }),
+            body: JSON.stringify({
+              naturalQuery: searchQuery,
+              page,
+              ...(sort && { sort }),
+              ...(prefer !== DEFAULT_PREFER && { prefer }),
+            }),
             signal: controller.signal,
           });
 
@@ -223,12 +266,14 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
             if (errorData.scryfallQuery && isNewQuery) {
               setEditableQuery(errorData.scryfallQuery);
             }
+            setLastRun((prev) => ({ query: isNewQuery ? errorData.scryfallQuery ?? "" : prev.query, failed: true }));
             return;
           }
 
           setResults(data as SearchResponse);
           setCurrentPage(data.page);
           setPageInput(String(data.page));
+          setLastRun((prev) => ({ query: isNewQuery ? data.scryfallQuery : prev.query, failed: false }));
           if (isNewQuery) {
             setEditableQuery(data.scryfallQuery);
             // Only searches that ran: failures returned above, paging and re-sorting keep results.
@@ -242,6 +287,7 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
               ? "Failed to connect to the server. Please try again."
               : formatErrorMessage(err);
           setError(message);
+          setLastRun((prev) => ({ ...prev, failed: true }));
           console.error("Search error:", err);
         } finally {
           if (!isStale()) setLoading(false);
@@ -285,16 +331,22 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
     const urlPage = parsePage(searchParams.get("page"));
     const urlSort = sortFromParams(searchParams);
     const urlSortKey = sortKeyOf(urlSort);
+    const urlPrefer = preferFromParams(searchParams);
     const last = lastUrlSearchRef.current;
-    if (!urlQuery || (urlQuery === last.query && urlPage === last.page && urlSortKey === last.sort)) {
+    if (
+      !urlQuery ||
+      (urlQuery === last.query && urlPage === last.page && urlSortKey === last.sort && urlPrefer === last.prefer)
+    ) {
       return;
     }
-    // Same query, different page or order (back/forward): keep the grid
+    // Same query, different page, order or printings (back/forward): keep the grid
     // and the query bar instead of starting over.
     const pageOnly = urlQuery === last.query;
-    lastUrlSearchRef.current = { query: urlQuery, page: urlPage, sort: urlSortKey };
+    lastUrlSearchRef.current = { query: urlQuery, page: urlPage, sort: urlSortKey, prefer: urlPrefer };
     sortRef.current = urlSort;
     setSort(urlSort);
+    preferRef.current = urlPrefer;
+    setPrefer(urlPrefer);
     setQuery(urlQuery);
     setCurrentPage(urlPage);
     setPageInput(String(urlPage));
@@ -320,15 +372,32 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
     }
   }, [editableQuery, isEditingQuery]);
 
+  /** True while the edited query differs from the one whose results are on screen. */
+  const queryChanged = provenanceQueryChanged(editableQuery, lastRun.query);
+  /** The Search button and Enter run only something new, or a retry after a failure. */
+  const canRunEditableQuery = !loading && canRunEdited(editableQuery, lastRun);
+
   const handleEditableQuerySearch = () => {
-    if (!editableQuery.trim()) {
+    if (!canRunEditableQuery) {
       return;
     }
+    setRestorable(null);
     setCurrentPage(1);
     setPageInput("1");
     // A normal search of the edited Scryfall string: it lands in the URL (raw
-    // Scryfall syntax skips the AI), so refresh/share reproduce it.
-    handleSearch(editableQuery, 1);
+    // Scryfall syntax skips the AI), so refresh/share reproduce it. The natural-language
+    // source survives as provenance, shown as "Refined from".
+    handleSearch(editableQuery, 1, { provenance: provenanceForEditedRun(provenance, editableQuery) });
+  };
+
+  /** Brings back the chip edits the last top-box search replaced, and runs them again. */
+  const handleRestoreEditedQuery = () => {
+    if (!restorable || loading) return;
+    setRestorable(null);
+    setEditableQuery(restorable.editableQuery);
+    setCurrentPage(1);
+    setPageInput("1");
+    handleSearch(restorable.editableQuery, 1, { provenance: restorable.provenance });
   };
 
   const handleEditableQueryFocus = () => {
@@ -339,11 +408,20 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
     setIsEditingQuery(false);
   };
 
-  const handleTokenOverlayClick = () => {
+  /** The small Edit button: shows the raw query text and puts the cursor in it. */
+  const handleEditQueryClick = () => {
     setIsEditingQuery(true);
     requestAnimationFrame(() => {
-      editableInputRef.current?.focus();
+      const el = editableInputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
     });
+  };
+
+  /** A variant picked from a chip's menu only edits the text; Search or Enter runs it. */
+  const handleChipVariantPick = (nextQuery: string) => {
+    setEditableQuery(nextQuery);
   };
 
   /** Returns whether the page change was actually started. */
@@ -351,11 +429,12 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
     if (!results || newPage < 1 || (newPage > currentPage && !results.has_more)) {
       return false;
     }
-    const searchQuery = editableQuery || query;
+    // Page with the query that produced the grid: pending chip edits must not run by paging.
+    const searchQuery = lastRun.query || editableQuery || query;
     if (!searchQuery) {
       return false;
     }
-    handleSearch(searchQuery, newPage, { keepResults: true, urlQuery: sourceQuery || query });
+    handleSearch(searchQuery, newPage, { keepResults: true, urlQuery: resultsUrlQuery(provenance, lastRun, query) });
     return true;
   };
 
@@ -464,12 +543,16 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!query.trim()) return;
+    // A fresh AI translation is about to replace the chip row; keep the edits restorable.
+    setRestorable(editStash(editableQuery, lastRun, provenance));
     setCurrentPage(1);
     setPageInput("1");
     handleSearch(query, 1);
   };
 
   const handleChipClick = (chipQuery: string) => {
+    setRestorable(editStash(editableQuery, lastRun, provenance));
     setQuery(chipQuery);
     setCurrentPage(1);
     setPageInput("1");
@@ -482,11 +565,23 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
     if (sortKeyOf(next) === sortKeyOf(sortRef.current)) return;
     sortRef.current = next;
     setSort(next);
-    const searchQuery = editableQuery || query;
+    const searchQuery = lastRun.query || editableQuery || query;
     if (!searchQuery.trim()) return;
     setCurrentPage(1);
     setPageInput("1");
-    handleSearch(searchQuery, 1, { keepResults: true, urlQuery: sourceQuery || query });
+    handleSearch(searchQuery, 1, { keepResults: true, urlQuery: resultsUrlQuery(provenance, lastRun, query) });
+  };
+
+  /** Re-runs the current search with other printings, from page 1. The choice then sticks for new searches. */
+  const handlePreferChange = (next: string) => {
+    if (next === preferRef.current) return;
+    preferRef.current = next;
+    setPrefer(next);
+    const searchQuery = lastRun.query || editableQuery || query;
+    if (!searchQuery.trim()) return;
+    setCurrentPage(1);
+    setPageInput("1");
+    handleSearch(searchQuery, 1, { keepResults: true, urlQuery: resultsUrlQuery(provenance, lastRun, query) });
   };
 
   /** The enabled buttons of the Recent row, in visual order. */
@@ -591,6 +686,25 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
                 </button>
               </div>
             </form>
+
+            {!loading && restorable && (
+              <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border bg-surface-muted px-3 py-2 text-sm">
+                <span className="text-muted">This search replaced your edited query.</span>
+                <button
+                  type="button"
+                  onClick={handleRestoreEditedQuery}
+                  className="font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                >
+                  Restore my edited query
+                </button>
+              </div>
+            )}
+            {!loading && !restorable && results && provenance.refinedFrom && (
+              <p className="mt-3 text-sm text-muted">
+                Refined from: <span className="italic">“{provenance.refinedFrom}”</span> — the query below is what
+                actually ran.
+              </p>
+            )}
 
             {exampleQueries.length > 0 && (
               <div className="mt-4 -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-hide sm:mx-0 sm:mt-6 sm:flex-wrap sm:justify-center sm:px-0">
@@ -832,7 +946,7 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
           </section>
         )}
 
-        {(editableQuery || sourceQuery || results) && !loading && (
+        {(editableQuery || provenance.sourceQuery || results) && !loading && (
           <div id="query-display" className="relative z-50 mb-6">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex flex-1 items-center gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2.5 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 sm:px-4 sm:py-2.5">
@@ -864,30 +978,47 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
                     placeholder="Edit Scryfall query..."
                   />
                   {!isEditingQuery && (
-                    <div
-                      className="cursor-text text-accent"
-                      onClick={handleTokenOverlayClick}
-                    >
+                    <div className="text-accent">
                       <QueryTokenPreview
                         scryfallQuery={editableQuery}
-                        sourceQuery={sourceQuery || query}
+                        sourceQuery={provenance.sourceQuery || query}
                         variant="inline"
                         className="gap-1.5"
+                        onQueryChange={handleChipVariantPick}
                       />
                     </div>
                   )}
                 </div>
+                {!isEditingQuery && (
+                  <button
+                    type="button"
+                    onClick={handleEditQueryClick}
+                    disabled={loading}
+                    aria-label="Edit the query as text"
+                    title="Edit the query as text"
+                    className="shrink-0 rounded-md p-1 text-muted transition-colors hover:bg-accent-muted/40 hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
+                  </button>
+                )}
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={handleEditableQuerySearch}
-                  disabled={loading || !editableQuery.trim()}
+                  disabled={!canRunEditableQuery}
+                  title={
+                    canRunEditableQuery
+                      ? "Run this query"
+                      : editableQuery.trim()
+                        ? "These results already match this query"
+                        : "Enter a query first"
+                  }
                   className="flex-1 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none sm:py-2 sm:text-base"
                 >
                   Search
                 </button>
                 <a
-                  href={`https://scryfall.com/search?q=${encodeURIComponent(editableQuery)}`}
+                  href={`https://scryfall.com/search?q=${encodeURIComponent(applyPrefer(editableQuery, prefer))}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex flex-1 cursor-pointer items-center justify-center rounded-lg border border-border bg-surface-muted px-4 py-2.5 text-center text-sm text-foreground transition-colors duration-200 hover:border-accent/50 hover:bg-accent-muted/30 sm:flex-none sm:py-2 sm:text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -903,6 +1034,11 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
                 </Link>
               </div>
             </div>
+            {queryChanged && results && !loading && (
+              <p role="status" className="mt-2 text-xs text-amber-700 dark:text-amber-400">
+                The results below are from the previous query. Press Search or Enter to run this one.
+              </p>
+            )}
             {getColorSemanticSelectors(editableQuery).map((selector) => (
               <div
                 key={selector.field}
@@ -915,12 +1051,7 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
                   <button
                     key={option.clause}
                     disabled={option.current}
-                    onClick={() => {
-                      setEditableQuery(option.query);
-                      setCurrentPage(1);
-                      setPageInput("1");
-                      handleSearch(option.query, 1);
-                    }}
+                    onClick={() => handleChipVariantPick(option.query)}
                     className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-sm font-medium transition-colors ${
                       option.current
                         ? "cursor-default border-accent bg-accent-muted text-accent"
@@ -932,43 +1063,28 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
                 ))}
               </div>
             ))}
-            {(() => {
-              const prefer = getPreferSelector(editableQuery);
-              const groups = [...new Set(prefer.options.map((o) => o.group))];
-              return (
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
-                  <label htmlFor="prefer-select" className="text-muted-soft">
-                    Printings:
-                  </label>
-                  <select
-                    id="prefer-select"
-                    value={prefer.current}
-                    disabled={loading}
-                    onChange={(e) => {
-                      const next = prefer.options.find((o) => o.value === e.target.value);
-                      if (!next || next.current) return;
-                      setEditableQuery(next.query);
-                      setCurrentPage(1);
-                      setPageInput("1");
-                      handleSearch(next.query, 1);
-                    }}
-                    className="rounded-lg border border-border bg-surface-muted px-3 py-1 text-sm font-medium text-foreground transition-colors hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {groups.map((group) => (
-                      <optgroup key={group} label={group}>
-                        {prefer.options
-                          .filter((o) => o.group === group)
-                          .map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                      </optgroup>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
+              <label htmlFor="prefer-select" className="text-muted-soft">
+                Printings:
+              </label>
+              <select
+                id="prefer-select"
+                value={prefer}
+                disabled={loading}
+                onChange={(e) => handlePreferChange(e.target.value)}
+                className="rounded-lg border border-border bg-surface-muted px-3 py-1 text-sm font-medium text-foreground transition-colors hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {[...new Set(PREFER_OPTIONS.map((o) => o.group))].map((group) => (
+                  <optgroup key={group} label={group}>
+                    {PREFER_OPTIONS.filter((o) => o.group === group).map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
                     ))}
-                  </select>
-                </div>
-              );
-            })()}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
           </div>
         )}
 
@@ -1229,7 +1345,7 @@ export default function SearchPage({ initial }: SearchPageProps = {}) {
         />
       )}
 
-      <BugReportButton userQuery={sourceQuery} scryfallQuery={editableQuery} />
+      <BugReportButton userQuery={provenance.sourceQuery} scryfallQuery={editableQuery} />
     </main>
   );
 }

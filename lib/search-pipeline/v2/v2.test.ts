@@ -11,7 +11,8 @@
 import assert from "node:assert/strict";
 import { ensureCatalogIndex } from "@/lib/scryfall/catalog-index";
 import { buildScryfallQuery } from "@/lib/scryfall/client";
-import { balanceScryfallQuery, PREFER_BEST_PREFIX } from "@/lib/scryfall/query-converter";
+import { balanceScryfallQuery } from "@/lib/scryfall/query-converter";
+import { applyPrefer } from "@/lib/search-prefer";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
 import { splitCompoundQuery } from "@/lib/search-pipeline/compound";
 import { finalizeQuery, removeInvalidTagsFromQuery } from "@/lib/search-pipeline/phase3/finalizeQuery";
@@ -603,14 +604,14 @@ async function main(): Promise<void> {
     );
   }
 
-  // 7. Direct Scryfall syntax is detected by the pre-pass and passed through as typed:
-  //    prefer:best is a default for generated queries only, never forced onto raw input.
+  // 7. Direct Scryfall syntax is detected by the pre-pass and passed through as typed. prefer: is a
+  //    request option (lib/search-prefer), never written into a query: a typed one is kept as is.
   {
     const pp = runPrePass('name:"Lightning Bolt" game:paper');
     check("pre-pass flags direct scryfall", pp.direct === true);
 
     const bare = (await finalizeQuery(buildDirectIR("t:artifact cmc=1 game:paper"))).queryForScryfall;
-    check("direct query: prefer:best not re-added", bare === "t:artifact cmc=1 game:paper", bare);
+    check("direct query: no prefer: added", bare === "t:artifact cmc=1 game:paper", bare);
 
     const kept = (await finalizeQuery(buildDirectIR("prefer:best t:artifact game:paper"))).queryForScryfall;
     check("direct query: user's prefer:best kept", kept === "prefer:best t:artifact game:paper", kept);
@@ -620,7 +621,7 @@ async function main(): Promise<void> {
 
     const generated = await buildIRFromExtraction(baseExtraction({ typesAll: ["artifact"] }), "artifacts");
     const gen = (await finalizeQuery(generated)).queryForScryfall;
-    check("generated query: prefer:best still added", /^prefer:best /.test(gen), gen);
+    check("generated query: no prefer: in the text", !/prefer:/.test(gen), gen);
   }
 
   // 8. Empty extraction still yields a non-empty IR (safety net) so Phase 3 never gets nothing.
@@ -637,13 +638,14 @@ async function main(): Promise<void> {
   {
     const phrases = (branch: string) =>
       Array.from({ length: 40 }, (_, i) => `o:"${branch}${i}"`).join(" or ");
-    const fullLength = (query: string) => buildScryfallQuery(`is:dfc ${query}`).length - "is:dfc ".length;
+    // Worst case: the longest Printings prefix plus the -is:art suffix.
+    const fullLength = (query: string) =>
+      applyPrefer(buildScryfallQuery(`is:dfc ${query}`), "notuniversesbeyond").length - "is:dfc ".length;
 
     const compound = combineCompoundBranches(["a", "b", "c"].map(phrases));
-    const compoundQ = `${PREFER_BEST_PREFIX}${compound}`;
-    check("compound over the limit is cut to fit", fullLength(compoundQ) <= 1024, String(fullLength(compoundQ)));
+    check("compound over the limit is cut to fit", fullLength(compound) <= 1024, String(fullLength(compound)));
     check("compound keeps its closing paren and game filter", /\)\) game:paper$/.test(compound), compound);
-    check("compound stays balanced", balanceScryfallQuery(compoundQ) === compoundQ, compoundQ);
+    check("compound stays balanced", balanceScryfallQuery(compound) === compound, compound);
 
     const ir = await buildIRFromExtraction(baseExtraction({ typesAll: ["creature"] }), "long query");
     ir.mustClauses.push({ value: `(${phrases("long")} or ${phrases("longer")})`, source: "phase1:direct" });

@@ -4,7 +4,6 @@ import { getCatalog } from "@/lib/scryfall/catalogs";
 import {
   EFFECTIVE_MAX_QUERY_LENGTH,
   OPPONENT_BURN_DAMAGE_FUNCTION_TAGS,
-  PREFER_BEST_PREFIX,
   balanceScryfallQuery,
   finalizeScryfallQuery,
   lookupArchetypeTags,
@@ -559,11 +558,6 @@ function normalizeIdentityScopeInOrChains(query: string): string {
   return `(${updated}) ${normalizedIds[0]}`.replace(/\s{2,}/g, " ").trim();
 }
 
-function prependPreferBest(value: string): string {
-  if (/^prefer:best\s+/i.test(value)) return value;
-  return `${PREFER_BEST_PREFIX}${value}`.trim();
-}
-
 /**
  * Drops the clauses that carry an invalid Tagger tag — `function:storm`, `-otag:"storm"`, … — and
  * nothing else: quoted and regex values are never edited, and the tree is simplified afterwards so
@@ -682,8 +676,9 @@ class RegexClauseMask {
 
 export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result> {
   const baseQuery = assembleQueryFromIR(ir);
-  // `prefer:best` is a default we add to generated queries. Raw Scryfall syntax is the
-  // user's own: keep it exactly as typed, whether they kept, removed, or swapped the prefer:.
+  // The Printings choice (`prefer:`) is added at request time, never to the query text: a stray
+  // prefer:best in a generated query would override it. Raw Scryfall syntax is the user's own:
+  // keep it exactly as typed, prefer: included.
   const isDirect = ir.intent === "direct-scryfall";
   const queryWithoutPrefer = isDirect ? baseQuery : stripPreferBestPrefix(baseQuery);
   // Archetype-resolved Phase 2 fragments are injected here, not in assembleQueryFromIR,
@@ -813,9 +808,8 @@ export async function finalizeQuery(ir: SearchPipelineIR): Promise<Phase3Result>
     query = truncateScryfallQuery(balanceScryfallQuery(query), EFFECTIVE_MAX_QUERY_LENGTH);
   }
 
-  const queryForScryfall = isDirect ? query : prependPreferBest(query);
   return {
-    queryForScryfall,
+    queryForScryfall: query,
     queryForLogs: query,
     removedInvalidTags: invalidTags.map((entry) => `${entry.type}:${entry.tag}`),
   };

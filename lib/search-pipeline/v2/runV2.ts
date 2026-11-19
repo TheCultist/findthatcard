@@ -14,7 +14,6 @@ import { ensureCatalogIndex } from "@/lib/scryfall/catalog-index";
 import {
   EFFECTIVE_MAX_QUERY_LENGTH,
   isScryfallQuery,
-  PREFER_BEST_PREFIX,
   truncateScryfallQuery,
 } from "@/lib/scryfall/query-converter";
 import { assembleQueryFromIR } from "@/lib/search-pipeline/assembleQuery";
@@ -32,7 +31,6 @@ const extractionCache = new LruCache<SearchPipelineResult>();
 const inFlight = new Map<string, Promise<SearchPipelineResult>>();
 
 const GAME_FILTER_RE = /\s*\bgame:\w+\b/gi;
-const PREFER_BEST_RE = /^prefer:best\s+/i;
 
 const NAMED_CARD_INTENTS = new Set(["similar-cards", "art-like-cards", "synergy-with-card"]);
 
@@ -166,14 +164,12 @@ async function runCompound(
 
   const strippedBranches = phase3Results.map((p3) =>
     p3.queryForScryfall
-      .replace(PREFER_BEST_RE, "")
       .replace(GAME_FILTER_RE, "")
       .replace(/\s{2,}/g, " ")
       .trim()
   );
 
-  const compound = combineCompoundBranches(strippedBranches);
-  const queryForScryfall = `${PREFER_BEST_PREFIX}${compound}`.trim();
+  const queryForScryfall = combineCompoundBranches(strippedBranches);
 
   logSummary(originalQuery, {
     "compound branches": branches.join(" | "),
@@ -182,7 +178,7 @@ async function runCompound(
 
   return {
     queryForScryfall,
-    queryForLogs: compound,
+    queryForLogs: queryForScryfall,
     debug: { ...emptyDebug(), aiBatchCalls: branches.length },
   };
 }

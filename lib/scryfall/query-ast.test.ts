@@ -275,7 +275,7 @@ term("", plain(""));
   });
   check("no SEO word is unterminated or has trailing text", malformed.length === 0, malformed[0]?.raw);
   const fields = new Set(allWords.map((t) => parseTerm(t.raw).field).filter(Boolean));
-  check("SEO fields include t/o/id/function/prefer", ["t", "o", "id", "function", "prefer"].every((f) => fields.has(f)), [...fields].join(","));
+  check("SEO fields include t/o/id/function", ["t", "o", "id", "function"].every((f) => fields.has(f)), [...fields].join(","));
   const plainWords = new Set(allWords.map((t) => parseTerm(t.raw)).filter((p) => !p.field).map((p) => p.value.toLowerCase()));
   check("SEO plain words are only or/and", [...plainWords].every((w) => w === "or" || w === "and"), [...plainWords].join(","));
 

@@ -1,12 +1,12 @@
 /**
- * query-tokens self-check (no network): tokenizeQuery chips and the color/prefer selectors.
+ * query-tokens self-check (no network): tokenizeQuery chips and the color selectors.
  *
  * Run: tsx lib/query-tokens.test.ts
  */
 
 import assert from "node:assert/strict";
 import seo from "@/data/seo-queries.json";
-import { getColorSemanticSelectors, getPreferSelector, getTokenMetadata, tokenizeQuery } from "@/lib/query-tokens";
+import { getColorSemanticSelectors, getTokenMetadata, tokenizeQuery } from "@/lib/query-tokens";
 import { SCRYFALL_FIELDS } from "@/lib/scryfall/query-ast";
 
 let passed = 0;
@@ -64,37 +64,6 @@ function check(name: string, cond: boolean, detail?: string): void {
   check("both fields detected", both.length === 2);
   check("negated ignored", getColorSemanticSelectors("-c:r t:creature").length === 0);
   check("no color → no selector", getColorSemanticSelectors("t:creature o:draw").length === 0);
-}
-
-// Printing preference selector: replaces in place, prepends when absent, "" removes, aliases canonicalized.
-{
-  const withBest = getPreferSelector("prefer:best t:artifact game:paper");
-  check("prefer current = best", withBest.current === "best");
-  const cheap = withBest.options.find((o) => o.value === "eur-low")!;
-  check("prefer replaced in place", cheap.query === "prefer:eur-low t:artifact game:paper", cheap.query);
-  const none = withBest.options.find((o) => o.value === "")!;
-  check("prefer removable", none.query === "t:artifact game:paper", none.query);
-
-  const absent = getPreferSelector("t:artifact game:paper");
-  check("no prefer → current empty", absent.current === "" && absent.options.find((o) => o.current)?.value === "");
-  const oldest = absent.options.find((o) => o.value === "oldest")!;
-  check("prefer prepended when absent", oldest.query === "prefer:oldest t:artifact game:paper", oldest.query);
-
-  const mid = getPreferSelector("t:artifact prefer:ub game:paper");
-  check("prefer alias canonicalized", mid.current === "universesbeyond");
-  const newest = mid.options.find((o) => o.value === "newest")!;
-  check("mid-query prefer replaced", newest.query === "t:artifact prefer:newest game:paper", newest.query);
-
-  const unknown = getPreferSelector("prefer:foo t:artifact");
-  check("unknown prefer surfaced as option", unknown.options.some((o) => o.value === "foo" && o.current));
-
-  // Scryfall applies the last prefer: token; the selector must read that one and collapse the rest.
-  const dup = getPreferSelector("prefer:best t:artifact game:paper prefer:usd-low");
-  check("duplicate prefer → last wins", dup.current === "usd-low");
-  const dupOldest = dup.options.find((o) => o.value === "oldest")!;
-  check("duplicate prefer collapsed to one", dupOldest.query === "t:artifact game:paper prefer:oldest", dupOldest.query);
-  const dupNone = dup.options.find((o) => o.value === "")!;
-  check("duplicate prefer all removed", dupNone.query === "t:artifact game:paper", dupNone.query);
 }
 
 // ---------------------------------------------------------------------------------------------

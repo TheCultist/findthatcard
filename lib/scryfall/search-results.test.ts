@@ -70,7 +70,7 @@ async function run() {
 
   {
     const result = await search("t:fixture");
-    assert.deepEqual(searchRequests(fake), [{ q: "t:fixture", unique: "cards", page: "1" }]);
+    assert.deepEqual(searchRequests(fake), [{ q: "prefer:best t:fixture", unique: "cards", page: "1" }]);
     for (const r of fake.requests) {
       assert.equal(r.headers["user-agent"], "find-that-card/1.0 (+https://findthatcard.net)");
       assert.equal(r.headers["accept"], "application/json");
@@ -81,12 +81,23 @@ async function run() {
   }
 
   {
+    fake.reset();
+    await searchResultsPage("t:fixture", 1, null, "oldest");
+    assert.equal(searchRequests(fake)[0].q, "prefer:oldest t:fixture");
+    fake.reset();
+    const result = await searchResultsPage("t:fixture", 1, null, "none");
+    assert.equal(searchRequests(fake)[0].q, "t:fixture");
+    assert.equal(result.scryfallQuery, "t:fixture", "the Printings choice never shows up in the query text");
+    pass("the Printings choice goes in front of q at request time (best by default, none adds nothing)");
+  }
+
+  {
     await search("is:dfc t:creature");
-    assert.equal(searchRequests(fake)[0].q, "is:dfc t:creature -is:art", "art-series excluded for DFC searches");
+    assert.equal(searchRequests(fake)[0].q, "prefer:best is:dfc t:creature -is:art", "art-series excluded for DFC searches");
     await search("is:dfc t:artifact");
-    assert.equal(searchRequests(fake)[0].q, "is:dfc t:artifact -is:art", "'t:artifact' is not 't:art'");
+    assert.equal(searchRequests(fake)[0].q, "prefer:best is:dfc t:artifact -is:art", "'t:artifact' is not 't:art'");
     await search("is:dfc t:art");
-    assert.equal(searchRequests(fake)[0].q, "is:dfc t:art", "a query that addresses art keeps it");
+    assert.equal(searchRequests(fake)[0].q, "prefer:best is:dfc t:art", "a query that addresses art keeps it");
     pass("is:dfc appends -is:art unless the query addresses art");
   }
 
@@ -213,7 +224,9 @@ async function run() {
     const long = `${head}-t:fixture`;
     assert.ok(long.length > SCRYFALL_MAX_QUERY_CHARS, `query is ${long.length} chars`);
     assert.equal((await search("t:creature game:paper -t:fixture")).total, 5, "same filters under the limit");
-    const result = await search(long);
+    // No Printings prefix, so the 1024-character cut lands exactly where this test puts it.
+    fake.reset();
+    const result = await searchResultsPage(long, 1, null, "none");
     assert.equal(searchRequests(fake)[0].q, long, "the app sends the whole query");
     assert.equal(result.total, 205, "pinned: the cut drops '-t:fixture', so the 200 fixture creatures come back too");
     pass("pinned: queries over 1024 chars are silently truncated upstream");
@@ -542,7 +555,7 @@ async function run() {
     // Our page 3 starts at card 120 of Scryfall's first 175-card page, so it needs Scryfall page 2 too.
     fake.reset();
     await searchResultsPage("t:creature", 3, { by: "cmc", dir: "desc" });
-    const pageFetches = searchRequests(fake).filter((r) => r.q === "t:creature");
+    const pageFetches = searchRequests(fake).filter((r) => r.q === "prefer:best t:creature");
     assert.deepEqual(
       pageFetches.map((r) => [r.page, r.order, r.dir]),
       [["1", "cmc", "desc"], ["2", "cmc", "desc"]],

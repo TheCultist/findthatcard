@@ -1,5 +1,5 @@
 /**
- * Search URL and sort parsing self-checks (pure, no network).
+ * Search URL, sort and printings parsing self-checks (pure, no network).
  *
  * Run: tsx lib/search-url.test.ts
  */
@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { buildSearchUrl, parsePage, searchFromUrl } from "@/lib/search-url";
 import { normalizeSort, parseSortInput, sortKeyOf } from "@/lib/search-sort";
+import { applyPrefer, parsePreferInput } from "@/lib/search-prefer";
 
 let checks = 0;
 const pass = (label: string) => {
@@ -30,16 +31,20 @@ assert.equal(
 assert.equal(buildSearchUrl("t:creature", 1, { by: "name", dir: "asc" }), "/search?q=t%3Acreature", "default sort left out");
 pass("a non-default sort is added as sort + dir; name ascending is left out");
 
-for (const [query, page, sort] of [
-  ["white creatures", 1, null],
-  ["white creatures", 4, { by: "released", dir: "desc" }],
-  ["t:creature c:r", 2, { by: "cmc", dir: "asc" }],
-  ["o:\"draw a card\"", 1, { by: "name", dir: "desc" }],
+assert.equal(buildSearchUrl("t:creature", 1, null, "best"), "/search?q=t%3Acreature", "default printings left out");
+assert.equal(buildSearchUrl("white creatures", 2, null, "usd-low"), "/search/white-creatures?page=2&prefer=usd-low");
+pass("a non-default Printings choice is added as prefer; best is left out");
+
+for (const [query, page, sort, prefer] of [
+  ["white creatures", 1, null, "best"],
+  ["white creatures", 4, { by: "released", dir: "desc" }, "oldest"],
+  ["t:creature c:r", 2, { by: "cmc", dir: "asc" }, "none"],
+  ["o:\"draw a card\"", 1, { by: "name", dir: "desc" }, "best"],
 ] as const) {
-  const back = searchFromUrl(buildSearchUrl(query, page, sort));
-  assert.deepEqual(back, { query, page, sort });
+  const back = searchFromUrl(buildSearchUrl(query, page, sort, prefer));
+  assert.deepEqual(back, { query, page, sort, prefer });
 }
-pass("query, page and sort round-trip through the URL");
+pass("query, page, sort and printings round-trip through the URL");
 
 assert.equal(parseSortInput("cmc", undefined)?.dir, "asc");
 assert.equal(parseSortInput("power", "desc"), null, "unknown key");
@@ -49,7 +54,16 @@ assert.deepEqual(parseSortInput("usd", "sideways"), { by: "usd", dir: "asc" }, "
 assert.equal(searchFromUrl("/search/white-creatures?sort=banana").sort, null);
 assert.equal(parsePage("0"), 1);
 assert.equal(parsePage("abc"), 1);
-pass("unusable sort or page values mean the default, never an error");
+assert.equal(searchFromUrl("/search/white-creatures?prefer=banana").prefer, "best");
+assert.equal(parsePreferInput(undefined), "best");
+assert.equal(parsePreferInput(42), "best");
+assert.equal(parsePreferInput("UB"), "universesbeyond", "alias, any case");
+pass("unusable sort, page or printings values mean the default, never an error");
+
+assert.equal(applyPrefer("t:creature", "best"), "prefer:best t:creature");
+assert.equal(applyPrefer("t:creature", "none"), "t:creature");
+assert.equal(applyPrefer("prefer:oldest t:creature", "best"), "prefer:best prefer:oldest t:creature", "typed prefer: comes last, so it wins");
+pass("the Printings choice goes in front of the query, none adds nothing");
 
 assert.equal(normalizeSort({ by: "name", dir: "asc" }), null);
 assert.equal(sortKeyOf(null), "");

@@ -9,7 +9,8 @@ A Magic: The Gathering card search tool that converts natural language queries i
 - **Natural Language Search**: Describe what you're looking for in plain English
 - **AI Extraction Pipeline**: One schema-constrained AI call extracts colors, formats, types, keywords, stats, tags, and strategies, then deterministic guardrails validate the result against live Scryfall/Tagger catalogs
 - **Direct Scryfall Query Support**: Enter Scryfall queries directly (e.g., `t:creature c:r`) — the app detects and passes them through without conversion
-- **Editable Query Field**: View and edit the generated Scryfall query as tokenized chips or raw text
+- **Editable Query Field**: View the generated Scryfall query as tokenized chips; click a chip to switch its operator, value or field (numbers, colors, rarity, formats, is/not flags, platform, sort options), turn an `or` into an `and`, exclude or remove any term, pick type/keyword/set values from the cached catalogs (multi-select becomes an OR group), or use the Edit button to change the raw text. Edits only change the text: Search (or Enter) runs them, stays disabled while the text matches the last run, and a cue marks results from the previous query
+- **Query Provenance**: After an edited query runs, a “Refined from” note keeps the original natural-language request visible; submitting a new natural-language search over chip edits offers one-click “Restore my edited query”
 - **Query Explainer**: `/explain` shows what each part of a Scryfall query does, reads it in plain English, and flags broken syntax
 - **Scryfall Tagger Support**: Native support for art and function tags from [Scryfall Tagger](https://tagger.scryfall.com)
   - Art tags: `art:`, `atag:`, `arttag:` (e.g., `art:dragon`, `art:"black cat"`)
@@ -205,6 +206,8 @@ findthatcard/
 │   ├── search-slug.ts              # /search/<slug> ↔ query
 │   ├── mtg-keywords.ts             # Keyword cache + reminder text
 │   ├── query-tokens.ts             # Query chips and tooltips for QueryTokenPreview
+│   ├── query-variants.ts           # Chip menus: other operators/values/fields for a term, with the rewritten query
+│   ├── search-provenance.ts        # Search-button gating, Refined-from provenance, the restore stash, paging URLs
 │   ├── query-explain.ts            # Plain-English summary and warnings for /explain
 │   ├── example-queries.ts          # Example query strings
 │   └── cache-paths.ts              # /tmp on serverless, ./data locally

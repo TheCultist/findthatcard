@@ -83,6 +83,8 @@ export interface SearchRequest {
   page?: number;
   /** Result order; omitted means Scryfall's default (name, ascending). Unusable values are ignored. */
   sort?: { by?: unknown; dir?: unknown };
+  /** Printings choice (lib/search-prefer); omitted or unusable means prefer:best. */
+  prefer?: unknown;
 }
 
 export interface SearchResponse {

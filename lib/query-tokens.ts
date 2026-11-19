@@ -1,4 +1,5 @@
 import { parseQuery, parseTerm, type QueryNode, type QueryTerm } from "@/lib/scryfall/query-ast";
+import { PREFER_ALIASES, PREFER_OPTIONS } from "@/lib/search-prefer";
 
 export type QueryTokenType = "field" | "logical" | "group" | "text";
 
@@ -185,83 +186,7 @@ export function getColorSemanticSelectors(query: string): ColorSemanticSelector[
   return selectors;
 }
 
-// ---------------------------------------------------------------------------
-// Printing preference selector (prefer: clause)
-// ---------------------------------------------------------------------------
-
-export type PreferOption = {
-  /** Scryfall prefer: value; "" means no prefer: clause (Scryfall's own default). */
-  value: string;
-  label: string;
-  group: "Default" | "Age" | "Price" | "Style";
-};
-
-export const PREFER_OPTIONS: ReadonlyArray<PreferOption> = [
-  { value: "best", label: "Best printing (default)", group: "Default" },
-  { value: "", label: "No preference (Scryfall default)", group: "Default" },
-  { value: "oldest", label: "Oldest printing", group: "Age" },
-  { value: "newest", label: "Newest printing", group: "Age" },
-  { value: "usd-low", label: "Cheapest (USD)", group: "Price" },
-  { value: "usd-high", label: "Most expensive (USD)", group: "Price" },
-  { value: "eur-low", label: "Cheapest (EUR)", group: "Price" },
-  { value: "eur-high", label: "Most expensive (EUR)", group: "Price" },
-  { value: "tix-low", label: "Cheapest (MTGO tix)", group: "Price" },
-  { value: "tix-high", label: "Most expensive (MTGO tix)", group: "Price" },
-  { value: "promo", label: "Promo printings", group: "Style" },
-  { value: "default", label: "Default Magic frame", group: "Style" },
-  { value: "atypical", label: "Atypical frames", group: "Style" },
-  { value: "universesbeyond", label: "Universes Beyond", group: "Style" },
-  { value: "notuniversesbeyond", label: "Not Universes Beyond", group: "Style" },
-];
-
-const PREFER_ALIASES: Record<string, string> = {
-  ub: "universesbeyond",
-  notub: "notuniversesbeyond",
-};
-
-/** Un-negated prefer: tokens anywhere in the query. */
-const PREFER_TOKEN_RE = /(?<![\w-])prefer:([\w-]+)/gi;
-
-export type PreferSelectorOption = PreferOption & { query: string; current: boolean };
-
-export type PreferSelector = {
-  /** Canonical current value ("" when the query has no prefer: clause). */
-  current: string;
-  options: PreferSelectorOption[];
-};
-
-/**
- * Reads the query's prefer: clause and offers every alternative with the full
- * rewritten query. Replaces the existing clause in place, or prepends one; the
- * "" option removes it. Aliases (prefer:ub) are recognized as their long form.
- */
-export function getPreferSelector(query: string): PreferSelector {
-  // Scryfall honours the LAST prefer: token when several are present, so that is the
-  // effective one; rewriting drops the others so the query ends up with exactly one.
-  const last = [...query.matchAll(PREFER_TOKEN_RE)].at(-1);
-  const raw = last?.[1].toLowerCase() ?? "";
-  const current = PREFER_ALIASES[raw] ?? raw;
-
-  const rewrite = (value: string): string => {
-    const token = value ? `prefer:${value}` : "";
-    const next = last
-      ? query.replace(PREFER_TOKEN_RE, (m, _v, offset: number) => (offset === last.index ? token : ""))
-      : token
-        ? `${token} ${query}`
-        : query;
-    return next.replace(/\s{2,}/g, " ").trim();
-  };
-
-  const options: PreferOption[] = PREFER_OPTIONS.some((o) => o.value === current)
-    ? [...PREFER_OPTIONS]
-    : [...PREFER_OPTIONS, { value: current, label: `prefer:${current}`, group: "Default" }];
-
-  return {
-    current,
-    options: options.map((o) => ({ ...o, query: rewrite(o.value), current: o.value === current })),
-  };
-}
-
+/** Label for a prefer: chip the user typed into the query. */
 const preferLabel = (value: string): string => {
   const canonical = PREFER_ALIASES[value.toLowerCase()] ?? value.toLowerCase();
   return PREFER_OPTIONS.find((o) => o.value === canonical)?.label ?? value;
@@ -482,7 +407,7 @@ const FIELD_DESCRIPTIONS: Record<
     description:
       "Chooses which printing represents a card that appears in multiple sets. prefer:best picks the highest-quality printing; " +
       "other values pick by age, price, or frame style.",
-    tip: "prefer:best is added automatically. Use the Printings selector below the query to change it.",
+    tip: "The Printings selector below the query sets this for every search (Best printing by default). A prefer: typed here overrides it.",
   },
   order: {
     title: "Sort Order",

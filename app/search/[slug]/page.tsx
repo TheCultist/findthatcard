@@ -21,9 +21,10 @@ export default async function SearchSlugPage({ params, searchParams }: SearchSlu
   const { slug } = await params;
   const query = (await searchParams) ?? {};
   // Pre-built SEO pages arrive with their first page of cards in the HTML; others search client-side.
-  // The cached HTML is page 1 in the default order, so a link with a sort or a page searches
-  // client-side instead of flashing the wrong cards first. The canonical stays the bare slug.
-  const wantsDefaultView = query.sort === undefined && query.page === undefined;
+  // The cached HTML is page 1 in the default order and printings, so a link with a sort, a
+  // printings choice or a page searches client-side instead of flashing the wrong cards first.
+  // The canonical stays the bare slug.
+  const wantsDefaultView = query.sort === undefined && query.prefer === undefined && query.page === undefined;
   const initial = wantsDefaultView ? (await getSeoPageResult(slug)) ?? undefined : undefined;
   return <SearchPage initial={initial} />;
 }

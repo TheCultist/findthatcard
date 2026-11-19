@@ -8,6 +8,7 @@ import { runSearchPipeline } from "@/lib/search-pipeline/runSearchPipeline";
 import { getActiveProvider } from "@/lib/ai-client";
 import { clientIp, createRateLimiter } from "@/lib/utils/rate-limit";
 import { parseSortInput } from "@/lib/search-sort";
+import { parsePreferInput } from "@/lib/search-prefer";
 
 // AI extraction (≤20s, one retry) + Scryfall (10s timeout) fit; a hung call can't run forever.
 export const maxDuration = 60;
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
     // Lenient on purpose: a bad sort (hand-edited link, old client) searches unsorted instead of failing.
     const rawSort = body.sort && typeof body.sort === "object" ? body.sort : {};
     const sort = parseSortInput(rawSort.by, rawSort.dir);
+    const prefer = parsePreferInput(body.prefer);
 
     // Raw Scryfall syntax never reaches the AI, so it works without a key.
     const provider = getActiveProvider();
@@ -88,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-      return NextResponse.json<SearchResponse>(await searchResultsPage(scryfallQuery, page, sort));
+      return NextResponse.json<SearchResponse>(await searchResultsPage(scryfallQuery, page, sort, prefer));
     } catch (scryfallError) {
       console.error("Scryfall search error:", scryfallError);
       const errorMessage = formatErrorMessage(scryfallError);
